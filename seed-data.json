@@ -1,0 +1,93 @@
+{
+  "barbearias": {
+    "barbearia-do-joao": {
+      "info": {
+        "nome": "Barbearia do João",
+        "slug": "barbearia-do-joao",
+        "endereco": "Copacabana, RJ",
+        "telefone": "5521987654321",
+        "logo": "",
+        "horarioFuncionamento": {
+          "segunda": { "ativo": true, "inicio": "09:00", "fim": "20:00" },
+          "terca":   { "ativo": true, "inicio": "09:00", "fim": "20:00" },
+          "quarta":  { "ativo": true, "inicio": "09:00", "fim": "20:00" },
+          "quinta":  { "ativo": true, "inicio": "09:00", "fim": "20:00" },
+          "sexta":   { "ativo": true, "inicio": "09:00", "fim": "21:00" },
+          "sabado":  { "ativo": true, "inicio": "08:00", "fim": "18:00" },
+          "domingo": { "ativo": false, "inicio": "00:00", "fim": "00:00" }
+        },
+        "plano": "trial",
+        "trialFim": "2026-06-28T23:59:59.000Z",
+        "criadoEm": "2026-05-29T00:00:00.000Z"
+      },
+      "servicos": {
+        "srv_001": {
+          "nome": "Corte Masculino",
+          "duracaoMin": 30,
+          "preco": 40,
+          "emoji": "✂️",
+          "ativo": true,
+          "ordem": 1
+        },
+        "srv_002": {
+          "nome": "Barba completa",
+          "duracaoMin": 25,
+          "preco": 35,
+          "emoji": "🪒",
+          "ativo": true,
+          "ordem": 2
+        },
+        "srv_003": {
+          "nome": "Sobrancelha",
+          "duracaoMin": 15,
+          "preco": 20,
+          "emoji": "💆",
+          "ativo": true,
+          "ordem": 3
+        },
+        "srv_004": {
+          "nome": "Corte + Pigmentação",
+          "duracaoMin": 45,
+          "preco": 65,
+          "emoji": "💈",
+          "ativo": true,
+          "ordem": 4
+        }
+      },
+      "profissionais": {
+        "prof_001": {
+          "nome": "João Vieira",
+          "especialidade": "Clássico",
+          "comissao": 50,
+          "ativo": true,
+          "horarioTrabalho": {
+            "segunda": { "ativo": true, "inicio": "09:00", "fim": "18:00" },
+            "terca":   { "ativo": true, "inicio": "09:00", "fim": "18:00" },
+            "quarta":  { "ativo": true, "inicio": "09:00", "fim": "18:00" },
+            "quinta":  { "ativo": true, "inicio": "09:00", "fim": "18:00" },
+            "sexta":   { "ativo": true, "inicio": "09:00", "fim": "20:00" },
+            "sabado":  { "ativo": true, "inicio": "08:00", "fim": "16:00" },
+            "domingo": { "ativo": false }
+          }
+        },
+        "prof_002": {
+          "nome": "Rafael Moreira",
+          "especialidade": "Moderno",
+          "comissao": 50,
+          "ativo": true,
+          "horarioTrabalho": {
+            "segunda": { "ativo": true, "inicio": "12:00", "fim": "20:00" },
+            "terca":   { "ativo": true, "inicio": "12:00", "fim": "20:00" },
+            "quarta":  { "ativo": true, "inicio": "12:00", "fim": "20:00" },
+            "quinta":  { "ativo": true, "inicio": "12:00", "fim": "20:00" },
+            "sexta":   { "ativo": true, "inicio": "12:00", "fim": "21:00" },
+            "sabado":  { "ativo": true, "inicio": "10:00", "fim": "18:00" },
+            "domingo": { "ativo": false }
+          }
+        }
+      },
+      "clientes": {},
+      "agendamentos": {}
+    }
+  }
+}

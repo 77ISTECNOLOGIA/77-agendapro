@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0a0a0a">
+  <title>77 AgendaPro</title>
+  <meta name="description" content="Agende seu horário de forma rápida e prática">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;500;600;700;800&family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="css/style.css">
+
+  <!-- Favicon -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2222%22 fill=%22%23d4ff3a%22/><text x=%2250%22 y=%2268%22 font-family=%22sans-serif%22 font-weight=%22800%22 font-size=%2248%22 text-anchor=%22middle%22 fill=%22%230a0a0a%22>77</text></svg>">
+</head>
+<body>
+
+  <!-- ============ TELA DE CARREGAMENTO ============ -->
+  <div id="loading" class="loading-overlay">
+    <div class="loading-content">
+      <div class="logo-mark loading-logo">77</div>
+      <div class="loading-text">Carregando...</div>
+    </div>
+  </div>
+
+  <!-- ============ ERRO: BARBEARIA NÃO ENCONTRADA ============ -->
+  <div id="erro-barbearia" class="hidden tela-cheia">
+    <div class="erro-content">
+      <div class="erro-icone">🔍</div>
+      <h1 class="erro-titulo">Barbearia não encontrada</h1>
+      <p class="erro-msg">Verifique o link e tente novamente. Se o problema persistir, entre em contato com o estabelecimento.</p>
+    </div>
+  </div>
+
+  <!-- ============ APP PRINCIPAL ============ -->
+  <div id="app" class="hidden app-container">
+
+    <!-- HEADER FIXO -->
+    <header class="app-header">
+      <div class="header-content">
+        <div class="mini-logo">77</div>
+        <div class="header-info">
+          <div class="barbearia-nome" id="header-nome">—</div>
+          <div class="barbearia-end" id="header-passo">—</div>
+        </div>
+      </div>
+    </header>
+
+    <!-- ============ TELA 1: IDENTIFICAÇÃO ============ -->
+    <section id="tela-1" class="tela ativa">
+      <div class="tela-body">
+        <div class="tela-rotulo">Bem-vindo</div>
+        <h1 class="tela-h1">Vamos agendar seu horário</h1>
+        <p class="tela-sub">Digite seu WhatsApp pra começar. Se você já é cliente, vamos te reconhecer automaticamente.</p>
+
+        <form id="form-identificacao" novalidate>
+          <div class="input-grupo">
+            <label class="input-label" for="input-whatsapp">SEU WHATSAPP</label>
+            <input
+              type="tel"
+              id="input-whatsapp"
+              class="input"
+              placeholder="(21) 98765-4321"
+              autocomplete="tel"
+              required
+            >
+            <div class="input-erro" id="erro-whatsapp"></div>
+          </div>
+
+          <div class="input-grupo" id="grupo-nome">
+            <label class="input-label" for="input-nome">SEU NOME</label>
+            <input
+              type="text"
+              id="input-nome"
+              class="input"
+              placeholder="Como você quer ser chamado?"
+              autocomplete="name"
+              required
+            >
+            <div class="input-erro" id="erro-nome"></div>
+          </div>
+
+          <div id="cliente-reconhecido" class="cliente-reconhecido hidden">
+            <span class="check-mini">✓</span>
+            <span>Bem-vindo de volta, <strong id="nome-reconhecido">—</strong>!</span>
+          </div>
+        </form>
+      </div>
+      <div class="tela-footer">
+        <button id="btn-continuar-1" class="btn" type="button">Continuar →</button>
+      </div>
+    </section>
+
+    <!-- ============ TELA 2: SERVIÇOS ============ -->
+    <section id="tela-2" class="tela">
+      <div class="tela-body">
+        <div class="tela-rotulo">Etapa 1 de 3</div>
+        <h1 class="tela-h1">Qual serviço?</h1>
+        <p class="tela-sub">Você pode escolher mais de um.</p>
+
+        <div id="lista-servicos" class="lista-servicos">
+          <!-- Serviços renderizados dinamicamente -->
+        </div>
+      </div>
+      <div class="tela-footer">
+        <div class="total-linha" id="resumo-servicos">
+          <span>Nenhum serviço selecionado</span>
+        </div>
+        <div class="total-linha principal">
+          <span>Total</span>
+          <span class="valor" id="total-valor">R$ 0</span>
+        </div>
+        <div class="botoes-row">
+          <button id="btn-voltar-2" class="btn btn-outline" type="button">← Voltar</button>
+          <button id="btn-continuar-2" class="btn" type="button" disabled>Profissional →</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ TELA 3: PROFISSIONAL + HORÁRIO ============ -->
+    <section id="tela-3" class="tela">
+      <div class="tela-body">
+        <div class="tela-rotulo">Etapa 2 de 3</div>
+        <h1 class="tela-h1">Com quem e quando?</h1>
+
+        <div class="subsecao-titulo">PROFISSIONAL</div>
+        <div id="grid-profissionais" class="profs-grid">
+          <!-- Profissionais renderizados dinamicamente -->
+        </div>
+
+        <div class="subsecao-titulo">DATA</div>
+        <div id="seletor-data" class="seletor-data">
+          <!-- Botões de data renderizados dinamicamente -->
+        </div>
+
+        <div class="subsecao-titulo">HORÁRIO DISPONÍVEL</div>
+        <div id="grid-horarios" class="horarios-grid">
+          <div class="horario-placeholder">Selecione um profissional e data</div>
+        </div>
+      </div>
+      <div class="tela-footer">
+        <div class="botoes-row">
+          <button id="btn-voltar-3" class="btn btn-outline" type="button">← Voltar</button>
+          <button id="btn-continuar-3" class="btn" type="button" disabled>Revisar →</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ TELA 4: CONFIRMAÇÃO ============ -->
+    <section id="tela-4" class="tela">
+      <div class="tela-body">
+        <div class="tela-rotulo">Etapa 3 de 3</div>
+        <h1 class="tela-h1">Confirma o agendamento?</h1>
+        <p class="tela-sub">Revise os detalhes abaixo antes de confirmar.</p>
+
+        <div id="resumo-final" class="resumo-card">
+          <!-- Resumo renderizado dinamicamente -->
+        </div>
+
+        <div class="aviso-wpp">
+          <span class="aviso-icone">💬</span>
+          <span>Você receberá um lembrete no WhatsApp antes do horário.</span>
+        </div>
+      </div>
+      <div class="tela-footer">
+        <div class="botoes-row">
+          <button id="btn-voltar-4" class="btn btn-outline" type="button">← Voltar</button>
+          <button id="btn-confirmar" class="btn" type="button">Confirmar ✓</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ TELA 5: SUCESSO ============ -->
+    <section id="tela-5" class="tela">
+      <div class="tela-body" style="padding-top: 40px;">
+        <div class="confirm-icone">✓</div>
+        <div class="confirm-titulo">Agendado!</div>
+        <div class="confirm-sub" id="confirm-sub-msg">Seu horário está confirmado.</div>
+
+        <div id="resumo-sucesso" class="resumo-card">
+          <!-- Resumo final renderizado dinamicamente -->
+        </div>
+
+        <button id="btn-novo" class="btn" type="button">Fazer novo agendamento</button>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- ============ TOAST DE NOTIFICAÇÃO ============ -->
+  <div id="toast" class="toast hidden">
+    <span id="toast-msg"></span>
+  </div>
+
+  <!-- Firebase SDK -->
+  <script type="module" src="js/firebase-config.js"></script>
+  <script type="module" src="js/app.js"></script>
+
+</body>
+</html>
