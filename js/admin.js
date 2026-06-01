@@ -388,6 +388,11 @@ function renderizarDashboard() {
 
   // Lista hoje
   $('#hoje-count').textContent = `${agsHoje.length} agendamento${agsHoje.length !== 1 ? 's' : ''}`;
+
+  // Botão "Enviar lembretes do dia" — Solução Híbrida 2.0
+  const pendentesLembrete = confirmados.filter(a => !a.lembreteEnviado);
+  renderizarBotaoLembretesEmLote(pendentesLembrete);
+
   if (agsHoje.length === 0) {
     $('#lista-hoje').innerHTML = '<div class="vazio-msg">Nenhum agendamento hoje</div>';
   } else {
@@ -399,15 +404,131 @@ function renderizarDashboard() {
   }
 }
 
+function renderizarBotaoLembretesEmLote(pendentes) {
+  // Remove botão antigo se existir
+  const antigo = document.getElementById('btn-lembretes-lote-container');
+  if (antigo) antigo.remove();
+
+  if (pendentes.length === 0) return;
+
+  const cardHeader = document.querySelector('#view-dashboard .lista-agendamentos').previousElementSibling;
+  const container = document.createElement('div');
+  container.id = 'btn-lembretes-lote-container';
+  container.style.cssText = 'margin: 12px 0; padding: 14px; background: rgba(212, 255, 58, 0.08); border: 1px solid rgba(212, 255, 58, 0.3); border-radius: 12px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;';
+  container.innerHTML = `
+    <div style="flex:1; min-width: 200px;">
+      <div style="font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 14px; color: var(--accent); margin-bottom: 2px;">
+        💬 ${pendentes.length} cliente${pendentes.length !== 1 ? 's' : ''} sem lembrete
+      </div>
+      <div style="font-size: 12px; color: var(--text-dim);">Envie agora pra reduzir faltas no dia</div>
+    </div>
+    <button id="btn-enviar-lembretes" class="btn-acao">Enviar lembretes</button>
+  `;
+  cardHeader.parentNode.insertBefore(container, cardHeader.nextSibling);
+
+  document.getElementById('btn-enviar-lembretes').addEventListener('click', () => abrirModalLembretes(pendentes));
+}
+
+function abrirModalLembretes(pendentes) {
+  const ordenados = [...pendentes].sort((a, b) => horaParaMinutos(a.horario) - horaParaMinutos(b.horario));
+
+  const corpo = `
+    <p style="color: var(--text-dim); font-size: 13px; margin-bottom: 16px; line-height: 1.5;">
+      Clique em cada cliente pra abrir o WhatsApp com a mensagem pronta. Após enviar, marque como "lembrado" pra não duplicar.
+    </p>
+    <div style="display: flex; flex-direction: column; gap: 8px;">
+      ${ordenados.map(a => `
+        <div class="lembrete-item" data-id="${a.id}" style="background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px; display: flex; gap: 12px; align-items: center;">
+          <div style="font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; color: var(--accent); min-width: 50px;">${a.horario}</div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-weight: 600; font-size: 14px; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${a.clienteNome}</div>
+            <div style="font-size: 11px; color: var(--text-muted);">${(a.servicos || []).map(s => s.nome).join(' + ')}</div>
+          </div>
+          <button class="btn-mini" data-acao="lembrar" style="background: rgba(74, 222, 128, 0.1); border-color: rgba(74, 222, 128, 0.3); color: var(--success);">💬 Enviar</button>
+        </div>
+      `).join('')}
+    </div>
+    <div style="margin-top: 16px; padding: 12px; background: var(--surface-2); border-radius: 10px; font-size: 12px; color: var(--text-dim);">
+      💡 <strong>Dica:</strong> Use o botão "Abrir todos" para enviar em sequência. Cada WhatsApp abre em uma nova aba.
+    </div>
+  `;
+  const rodape = `
+    <button class="btn-acao-secundario" id="modal-cancel">Fechar</button>
+    <button class="btn-acao" id="btn-abrir-todos">Abrir todos em sequência</button>
+  `;
+  abrirModal(`Lembretes pendentes (${ordenados.length})`, corpo, rodape);
+
+  document.getElementById('modal-cancel').addEventListener('click', fecharModal);
+
+  // Eventos individuais
+  document.querySelectorAll('.lembrete-item button[data-acao="lembrar"]').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const item = e.target.closest('.lembrete-item');
+      const id = item.dataset.id;
+      const ag = state.agendamentos[id];
+      if (!ag) return;
+
+      // Abre WhatsApp
+      enviarLembreteWhatsapp(ag);
+
+      // Marca como lembrado no banco
+      await marcarLembreteEnviado(id);
+
+      // Atualiza visual
+      item.style.opacity = '0.5';
+      btn.textContent = '✓ Enviado';
+      btn.disabled = true;
+    });
+  });
+
+  // Abrir todos em sequência (com delay pra não bloquear o navegador)
+  document.getElementById('btn-abrir-todos').addEventListener('click', async () => {
+    if (!confirm(`Vamos abrir ${ordenados.length} abas do WhatsApp. Continuar?`)) return;
+
+    for (let i = 0; i < ordenados.length; i++) {
+      const ag = ordenados[i];
+      enviarLembreteWhatsapp(ag);
+      await marcarLembreteEnviado(ag.id);
+
+      // Atualiza visual
+      const item = document.querySelector(`.lembrete-item[data-id="${ag.id}"]`);
+      if (item) {
+        item.style.opacity = '0.5';
+        const btn = item.querySelector('button[data-acao="lembrar"]');
+        if (btn) { btn.textContent = '✓ Enviado'; btn.disabled = true; }
+      }
+
+      // Pequeno delay entre cada (evita popup blocker)
+      if (i < ordenados.length - 1) await new Promise(r => setTimeout(r, 400));
+    }
+
+    toast(`${ordenados.length} lembretes abertos!`, 'sucesso');
+  });
+}
+
+async function marcarLembreteEnviado(agendamentoId) {
+  try {
+    await update(ref(db, `barbearias/${state.barbeariaId}/agendamentos/${agendamentoId}`), {
+      lembreteEnviado: true,
+      lembreteEnviadoEm: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('Erro ao marcar lembrete:', err);
+  }
+}
+
 function renderizarCardAgendamento(a) {
   const statusClass = a.status === 'concluido' ? 'concluido' : a.status === 'cancelado' ? 'cancelado' : '';
   const statusLabel = { confirmado: 'Confirmado', concluido: 'Concluído', cancelado: 'Cancelado' }[a.status];
   const statusCor = { confirmado: 'confirmado', concluido: 'concluido', cancelado: 'cancelado' }[a.status];
+  const lembreteBadge = (a.status === 'confirmado' && a.lembreteEnviado)
+    ? '<span title="Lembrete enviado" style="color: var(--success); font-size: 11px; margin-right: 4px;">💬✓</span>'
+    : '';
   return `
     <div class="agendamento-card ${statusClass}" data-id="${a.id}">
       <div class="agendamento-hora">${a.horario}</div>
       <div class="agendamento-info">
-        <div class="agendamento-cliente">${a.clienteNome}</div>
+        <div class="agendamento-cliente">${lembreteBadge}${a.clienteNome}</div>
         <div class="agendamento-detalhes">
           ${a.profissionalNome} • ${(a.servicos || []).map(s => s.nome).join(' + ')}
         </div>
@@ -469,6 +590,9 @@ function abrirDetalhesAgendamento(id) {
   const fimMin = horaParaMinutos(a.horario) + a.duracaoMin;
   const data = chaveParaData(a.dataChave);
   const dataStr = formatarDataLonga(data);
+  const lembreteStr = a.lembreteEnviado
+    ? '<span style="color: var(--success);">✓ Lembrete enviado</span>'
+    : '<span style="color: var(--warning);">Não enviado</span>';
 
   const corpo = `
     <div class="det-resumo">
@@ -480,10 +604,11 @@ function abrirDetalhesAgendamento(id) {
       <div class="det-linha"><span class="label">Serviços</span><span class="valor">${(a.servicos || []).map(s => s.nome).join(' + ')}</span></div>
       <div class="det-linha"><span class="label">Total</span><span class="valor" style="color:var(--accent);font-family:'Bricolage Grotesque';font-weight:700;font-size:16px;">${formatarMoeda(a.valorTotal)}</span></div>
       <div class="det-linha"><span class="label">Status</span><span class="valor"><span class="agendamento-status status-${a.status}">${a.status}</span></span></div>
+      ${a.status === 'confirmado' ? `<div class="det-linha"><span class="label">Lembrete</span><span class="valor">${lembreteStr}</span></div>` : ''}
     </div>
     <div class="det-acoes">
       ${a.status === 'confirmado' ? `<button class="btn-concluir" id="acao-concluir">✓ Marcar como concluído</button>` : ''}
-      ${a.status === 'confirmado' ? `<button class="btn-whatsapp" id="acao-whatsapp">💬 Enviar lembrete no WhatsApp</button>` : ''}
+      ${a.status === 'confirmado' ? `<button class="btn-whatsapp" id="acao-whatsapp">💬 ${a.lembreteEnviado ? 'Reenviar' : 'Enviar'} lembrete no WhatsApp</button>` : ''}
       ${a.status !== 'cancelado' && a.status !== 'concluido' ? `<button class="btn-cancelar" id="acao-cancelar">✕ Cancelar agendamento</button>` : ''}
     </div>
   `;
@@ -492,7 +617,7 @@ function abrirDetalhesAgendamento(id) {
 
   if (a.status === 'confirmado') {
     $('#acao-concluir').addEventListener('click', () => concluirAgendamento(id));
-    $('#acao-whatsapp').addEventListener('click', () => enviarLembreteWhatsapp(a));
+    $('#acao-whatsapp').addEventListener('click', () => enviarLembreteWhatsapp({ ...a, id }));
     $('#acao-cancelar').addEventListener('click', () => cancelarAgendamento(id));
   }
 }
@@ -539,6 +664,11 @@ function enviarLembreteWhatsapp(a) {
   );
   const url = `https://wa.me/${a.clienteWhatsapp}?text=${msg}`;
   window.open(url, '_blank');
+
+  // Marca lembrete como enviado se ainda não tiver sido (e se vier do modal de detalhes)
+  if (a.id && !a.lembreteEnviado) {
+    marcarLembreteEnviado(a.id);
+  }
 }
 
 // ========================================

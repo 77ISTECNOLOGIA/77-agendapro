@@ -690,7 +690,7 @@ function renderizarTelaSucesso(agendamentoId) {
   const dataStr = `${diasSemana[data.getDay()]}, ${formatarData(data)}`;
   const fimMin = horaParaMinutos(state.horarioSelecionado) + duracao;
 
-  $('#confirm-sub-msg').innerHTML = `<strong>${state.cliente.nome.split(' ')[0]}</strong>, seu horário está confirmado. Você receberá um lembrete no WhatsApp.`;
+  $('#confirm-sub-msg').innerHTML = `<strong>${state.cliente.nome.split(' ')[0]}</strong>, seu horário está confirmado.`;
 
   $('#resumo-sucesso').innerHTML = `
     <div class="resumo-linha"><span class="label">Barbearia</span><span class="valor">${state.barbearia.nome}</span></div>
@@ -700,6 +700,59 @@ function renderizarTelaSucesso(agendamentoId) {
     <div class="resumo-linha"><span class="label">Serviços</span><span class="valor">${servicos.map(s => s.nome).join(' + ')}</span></div>
     <div class="resumo-linha destaque"><span class="label">Total</span><span class="valor">${formatarMoeda(total)}</span></div>
   `;
+
+  // Botão "Adicionar à agenda" — Solução Híbrida 2.0
+  renderizarBotaoAgenda(data, fimMin, prof, servicos);
+}
+
+function renderizarBotaoAgenda(data, fimMin, prof, servicos) {
+  // Gera link universal de Google Calendar (funciona no Android e iPhone também)
+  const titulo = encodeURIComponent(`${servicos.map(s => s.nome).join(' + ')} — ${state.barbearia.nome}`);
+  const detalhes = encodeURIComponent(
+    `Agendamento na ${state.barbearia.nome}\n` +
+    `Profissional: ${prof.nome}\n` +
+    `Serviços: ${servicos.map(s => s.nome).join(' + ')}\n` +
+    `Valor: ${formatarMoeda(servicos.reduce((s, sv) => s + sv.preco, 0))}\n\n` +
+    `Telefone: ${state.barbearia.telefone || ''}`
+  );
+  const local = encodeURIComponent(state.barbearia.endereco || state.barbearia.nome);
+
+  // Formata datas no padrão Google Calendar: YYYYMMDDTHHMMSS
+  const dataInicio = new Date(data);
+  const [hI, mI] = state.horarioSelecionado.split(':').map(Number);
+  dataInicio.setHours(hI, mI, 0, 0);
+  const dataFim = new Date(dataInicio);
+  dataFim.setMinutes(dataFim.getMinutes() + (fimMin - horaParaMinutos(state.horarioSelecionado)));
+
+  const fmt = (d) => {
+    const ano = d.getFullYear();
+    const mes = String(d.getMonth() + 1).padStart(2, '0');
+    const dia = String(d.getDate()).padStart(2, '0');
+    const h = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    return `${ano}${mes}${dia}T${h}${min}00`;
+  };
+
+  const datas = `${fmt(dataInicio)}/${fmt(dataFim)}`;
+  const linkGoogle = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${titulo}&dates=${datas}&details=${detalhes}&location=${local}`;
+
+  // Insere botão antes do botão "Fazer novo agendamento"
+  const btnNovo = $('#btn-novo');
+  // Remove botão antigo se existir (caso o cliente faça outro agendamento)
+  const btnAgendaAntigo = $('#btn-add-agenda');
+  if (btnAgendaAntigo) btnAgendaAntigo.remove();
+
+  const btnAgenda = document.createElement('button');
+  btnAgenda.id = 'btn-add-agenda';
+  btnAgenda.className = 'btn btn-outline';
+  btnAgenda.style.marginBottom = '10px';
+  btnAgenda.innerHTML = '📅 Adicionar à minha agenda';
+  btnAgenda.addEventListener('click', () => {
+    window.open(linkGoogle, '_blank');
+    toast('Abrindo sua agenda...', 'sucesso');
+  });
+
+  btnNovo.parentNode.insertBefore(btnAgenda, btnNovo);
 }
 
 function resetarFluxo() {
