@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0a0a0a">
+  <title>77 AgendaPro — Cadastre seu negócio</title>
+  <meta name="description" content="Cadastre seu negócio grátis no 77 AgendaPro">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;500;600;700;800&family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2222%22 fill=%22%23d4ff3a%22/><text x=%2250%22 y=%2268%22 font-family=%22sans-serif%22 font-weight=%22800%22 font-size=%2248%22 text-anchor=%22middle%22 fill=%22%230a0a0a%22>77</text></svg>">
+
+  <style>
+    body { background: #050505; padding: 20px 0; min-height: 100vh; }
+    .wrap { max-width: 500px; margin: 0 auto; padding: 20px; }
+
+    .cad-header { text-align: center; margin-bottom: 32px; }
+    .cad-header .logo-mark { width: 64px; height: 64px; margin: 0 auto 16px; font-size: 26px; }
+    .cad-titulo { font-family: 'Bricolage Grotesque', sans-serif; font-size: 32px; font-weight: 700; letter-spacing: -0.03em; margin-bottom: 8px; }
+    .cad-titulo .accent { color: var(--accent); }
+    .cad-sub { color: var(--text-dim); font-size: 15px; line-height: 1.5; }
+
+    .cad-card { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 28px 24px; }
+
+    /* Seletor de tipo */
+    .tipo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+    .tipo-btn {
+      background: var(--surface-2); border: 1.5px solid var(--border); border-radius: 12px;
+      padding: 14px 10px; text-align: center; cursor: pointer; transition: all 0.2s;
+    }
+    .tipo-btn:hover { border-color: var(--border-light); }
+    .tipo-btn.selecionado { border-color: var(--accent); background: rgba(212, 255, 58, 0.08); }
+    .tipo-btn .tipo-emoji { font-size: 28px; margin-bottom: 6px; }
+    .tipo-btn .tipo-label { font-size: 12px; font-weight: 600; color: var(--text); }
+    .tipo-btn .tipo-sub { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+
+    .secao-titulo { font-family: 'Bricolage Grotesque', sans-serif; font-size: 13px; font-weight: 700; color: var(--accent); letter-spacing: 0.08em; text-transform: uppercase; margin: 20px 0 14px; padding-top: 16px; border-top: 1px solid var(--border); }
+
+    .slug-preview { font-size: 11px; color: var(--text-muted); margin-top: 6px; font-family: 'SF Mono', monospace; }
+    .slug-preview .accent { color: var(--accent); }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 480px) { .form-row { grid-template-columns: 1fr; } .tipo-grid { grid-template-columns: 1fr 1fr; } }
+
+    .beneficios { list-style: none; padding: 0; margin: 0 0 20px; }
+    .beneficios li { padding: 7px 0; font-size: 13px; color: var(--text-dim); display: flex; gap: 10px; align-items: flex-start; }
+    .beneficios li::before { content: '✓'; color: var(--accent); font-weight: 700; flex-shrink: 0; }
+
+    .sucesso-box { text-align: center; padding: 20px; }
+    .link-login { text-align: center; margin-top: 20px; font-size: 13px; color: var(--text-dim); }
+    .link-login a { color: var(--accent); text-decoration: none; font-weight: 500; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- HEADER -->
+  <header class="cad-header">
+    <div class="logo-mark">77</div>
+    <h1 class="cad-titulo">77 <span class="accent">AgendaPro</span></h1>
+    <p class="cad-sub">Agenda online + dashboard financeiro<br>pra qualquer profissional de beleza.</p>
+  </header>
+
+  <!-- FORMULÁRIO -->
+  <div id="tela-form" class="cad-card">
+    <h2 style="font-family:'Bricolage Grotesque',sans-serif;font-size:18px;font-weight:700;margin-bottom:8px;">Comece grátis por 30 dias</h2>
+    <p style="color:var(--text-dim);font-size:13px;margin-bottom:18px;">Sem cartão. Sem fidelidade. Cancele quando quiser.</p>
+
+    <ul class="beneficios">
+      <li>Clientes agendam sozinhos pelo link ou QR Code</li>
+      <li>Lembrete automático pelo WhatsApp — fim do no-show</li>
+      <li>Faturamento do dia em tempo real no celular</li>
+      <li>Funciona pra barbearia, salão, estética e mais</li>
+    </ul>
+
+    <form id="form-cad" novalidate>
+
+      <!-- TIPO DE NEGÓCIO -->
+      <div class="input-label" style="margin-bottom:10px;">QUAL É O SEU NEGÓCIO? *</div>
+      <div class="tipo-grid" id="tipo-grid">
+        <div class="tipo-btn selecionado" data-tipo="barbearia">
+          <div class="tipo-emoji">💈</div>
+          <div class="tipo-label">Barbearia</div>
+          <div class="tipo-sub">Corte, barba, etc</div>
+        </div>
+        <div class="tipo-btn" data-tipo="salao">
+          <div class="tipo-emoji">💇</div>
+          <div class="tipo-label">Salão de Beleza</div>
+          <div class="tipo-sub">Cabelo, coloração, etc</div>
+        </div>
+        <div class="tipo-btn" data-tipo="estetica">
+          <div class="tipo-emoji">✨</div>
+          <div class="tipo-label">Estética / Studio</div>
+          <div class="tipo-sub">Cílios, sobrancelha, etc</div>
+        </div>
+        <div class="tipo-btn" data-tipo="nails">
+          <div class="tipo-emoji">💅</div>
+          <div class="tipo-label">Nail Designer</div>
+          <div class="tipo-sub">Unhas, gel, acrílico</div>
+        </div>
+      </div>
+
+      <!-- DADOS DO NEGÓCIO -->
+      <div class="secao-titulo">Seu negócio</div>
+
+      <div class="input-grupo">
+        <label class="input-label" for="nome-neg">NOME DO ESTABELECIMENTO *</label>
+        <input type="text" id="nome-neg" class="input" placeholder="Ex: Studio da Carla" required>
+      </div>
+
+      <div class="input-grupo">
+        <label class="input-label" for="slug">LINK DO SEU NEGÓCIO *</label>
+        <input type="text" id="slug" class="input" placeholder="studio-da-carla" required>
+        <div class="slug-preview">
+          Seu link: 77-agendapro.vercel.app/<span class="accent" id="slug-preview">meu-negocio</span>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="input-grupo">
+          <label class="input-label" for="cidade">CIDADE</label>
+          <input type="text" id="cidade" class="input" placeholder="Rio de Janeiro" value="Rio de Janeiro">
+        </div>
+        <div class="input-grupo">
+          <label class="input-label" for="bairro">BAIRRO</label>
+          <input type="text" id="bairro" class="input" placeholder="Copacabana">
+        </div>
+      </div>
+
+      <div class="input-grupo">
+        <label class="input-label" for="telefone">WHATSAPP DO NEGÓCIO *</label>
+        <input type="tel" id="telefone" class="input" placeholder="(21) 99999-9999" required>
+      </div>
+
+      <!-- DADOS DE ACESSO -->
+      <div class="secao-titulo">Seus dados de acesso</div>
+
+      <div class="input-grupo">
+        <label class="input-label" for="nome-resp">SEU NOME *</label>
+        <input type="text" id="nome-resp" class="input" placeholder="Carla Silva" required>
+      </div>
+
+      <div class="input-grupo">
+        <label class="input-label" for="email">EMAIL *</label>
+        <input type="email" id="email" class="input" placeholder="carla@email.com" autocomplete="email" required>
+        <small style="display:block;margin-top:6px;font-size:11px;color:var(--text-muted);">Você vai usar esse email pra entrar no painel.</small>
+      </div>
+
+      <div class="input-grupo">
+        <label class="input-label" for="senha">SENHA *</label>
+        <input type="password" id="senha" class="input" placeholder="Mínimo 6 caracteres" autocomplete="new-password" required>
+      </div>
+
+      <div id="erro-cad" class="login-erro hidden"></div>
+
+      <button type="submit" id="btn-cad" class="btn" style="margin-top:8px;">Criar conta grátis →</button>
+
+      <p style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:14px;line-height:1.5;">
+        Ao se cadastrar, você concorda em receber comunicações da 77 IS.<br>
+        Seu cadastro será analisado e ativado em até 24h.
+      </p>
+    </form>
+
+    <div class="link-login">Já tem conta? <a href="/admin">Entrar no painel</a></div>
+  </div>
+
+  <!-- SUCESSO -->
+  <div id="tela-sucesso" class="cad-card hidden">
+    <div class="sucesso-box">
+      <div style="width:72px;height:72px;border-radius:50%;background:var(--accent);margin:0 auto 20px;display:flex;align-items:center;justify-content:center;font-size:36px;color:#0a0a0a;">✓</div>
+      <h2 style="font-family:'Bricolage Grotesque',sans-serif;font-size:24px;font-weight:700;margin-bottom:10px;">Cadastro recebido!</h2>
+      <p style="color:var(--text-dim);font-size:14px;line-height:1.5;margin-bottom:24px;">
+        <strong id="nome-sucesso">Seu negócio</strong> foi cadastrado e está aguardando aprovação.
+      </p>
+      <div style="background:var(--surface-2);border-radius:12px;padding:16px;text-align:left;font-size:13px;color:var(--text-dim);line-height:1.7;margin-bottom:20px;">
+        <strong style="color:var(--text);">Próximos passos:</strong><br>
+        1. Nossa equipe analisa seu cadastro em até 24h<br>
+        2. Você recebe um WhatsApp confirmando a ativação<br>
+        3. Acesse o painel e configure seu negócio em minutos
+      </div>
+      <a href="/" class="btn btn-outline" style="display:block;text-align:center;text-decoration:none;">Voltar ao início</a>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast" class="toast hidden"><span id="toast-msg"></span></div>
+
+<script type="module" src="js/firebase-config.js"></script>
+<script type="module" src="js/cadastro.js"></script>
+</body>
+</html>

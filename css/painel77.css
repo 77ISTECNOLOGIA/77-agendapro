@@ -1,0 +1,94 @@
+/* ========================================
+   77 IS — Super-Admin CSS
+   ======================================== */
+
+.nav-badge {
+  background: var(--accent); color: #0a0a0a; font-size: 10px; font-weight: 700;
+  padding: 2px 7px; border-radius: 10px; margin-left: auto;
+  font-family: 'Bricolage Grotesque', sans-serif; min-width: 20px; text-align: center; display: none;
+}
+.nav-badge.ativo { display: inline-block; }
+
+/* CARDS DE APROVAÇÃO */
+.aprovacao-card {
+  background: var(--surface); border: 1.5px solid var(--accent);
+  border-radius: var(--radius-xl); padding: 20px; margin-bottom: 12px;
+}
+.aprovacao-card .header-linha {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  margin-bottom: 14px; gap: 12px; flex-wrap: wrap;
+}
+.aprovacao-nome { font-family: 'Bricolage Grotesque', sans-serif; font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+.aprovacao-resp { font-size: 12px; color: var(--text-muted); }
+.aprovacao-tempo { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.aprovacao-detalhes {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px; padding: 14px; background: var(--surface-2);
+  border-radius: var(--radius-md); margin-bottom: 14px;
+}
+.det-mini .label { color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 3px; display: block; }
+.det-mini .valor { color: var(--text); font-weight: 500; word-break: break-word; font-size: 12px; }
+.aprovacao-acoes { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* CARDS DE NEGÓCIO */
+.negocio-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 18px; transition: border-color var(--transition);
+}
+.negocio-card:hover { border-color: var(--border-light); }
+.negocio-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; gap: 10px; }
+.negocio-nome { font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 15px; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.negocio-slug { font-size: 11px; color: var(--text-muted); font-family: 'SF Mono', monospace; }
+.negocio-tipo { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.negocio-stats {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+  padding: 10px 0; margin: 10px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+}
+.stat-mini { text-align: center; }
+.stat-mini-num { font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 18px; }
+.stat-mini-label { font-size: 9px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px; }
+.negocio-acoes { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+
+/* TAGS DE STATUS */
+.tag-status { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 4px 10px; border-radius: 8px; white-space: nowrap; }
+.tag-aguardando_aprovacao { background: rgba(251,191,36,0.15); color: #fbbf24; border: 1px solid rgba(251,191,36,0.3); }
+.tag-trial { background: rgba(212,255,58,0.15); color: var(--accent); border: 1px solid rgba(212,255,58,0.3); }
+.tag-ativa { background: rgba(74,222,128,0.15); color: var(--success); border: 1px solid rgba(74,222,128,0.3); }
+.tag-suspensa { background: rgba(255,68,68,0.15); color: var(--danger); border: 1px solid rgba(255,68,68,0.3); }
+.tag-expirada { background: rgba(115,115,115,0.15); color: var(--text-muted); border: 1px solid var(--border-light); }
+
+/* STATUS GRID */
+.status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; }
+.status-item { background: var(--surface-2); border-radius: var(--radius-md); padding: 14px; text-align: center; }
+.status-item-num { font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 28px; line-height: 1.1; }
+.status-item-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 6px; }
+
+/* VENCIMENTOS / INATIVAS */
+.vencimento-item, .inativa-item {
+  background: var(--surface-2); border-radius: var(--radius-md); padding: 12px;
+  margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; gap: 12px;
+}
+.vencimento-nome, .inativa-nome { font-weight: 600; font-size: 13px; margin-bottom: 2px; }
+.vencimento-detalhes, .inativa-detalhes { font-size: 11px; color: var(--text-muted); }
+.vencimento-dias { background: rgba(251,191,36,0.15); color: #fbbf24; padding: 4px 10px; border-radius: 8px; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 12px; white-space: nowrap; }
+.vencimento-dias.urgente { background: rgba(255,68,68,0.15); color: var(--danger); }
+
+/* ATIVIDADE */
+.lista-atividade { display: flex; flex-direction: column; gap: 6px; }
+.atividade-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 14px; display: flex; gap: 12px; align-items: center; }
+.atividade-icone { width: 38px; height: 38px; background: var(--surface-2); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+.atividade-acao { font-size: 13px; font-weight: 500; margin-bottom: 3px; }
+.atividade-meta { font-size: 11px; color: var(--text-muted); }
+.atividade-tempo { font-size: 11px; color: var(--text-muted); white-space: nowrap; flex-shrink: 0; }
+
+/* MODAL DETALHE */
+.modal-secao { margin-bottom: 18px; }
+.modal-secao h4 { font-family: 'Bricolage Grotesque', sans-serif; font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
+.modal-info-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 13px; border-bottom: 1px solid var(--border); gap: 12px; }
+.modal-info-row:last-child { border: none; }
+.modal-info-row .label { color: var(--text-muted); flex-shrink: 0; }
+.modal-info-row .valor { font-weight: 500; text-align: right; word-break: break-word; }
+
+@media (max-width: 700px) {
+  .aprovacao-detalhes { grid-template-columns: 1fr 1fr; }
+}

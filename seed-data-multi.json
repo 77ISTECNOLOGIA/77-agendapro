@@ -1,0 +1,184 @@
+{
+  "barbearias": {
+    "barbearia-do-joao": {
+      "info": {
+        "nome": "Barbearia do João",
+        "slug": "barbearia-do-joao",
+        "endereco": "Copacabana, RJ",
+        "cidade": "Rio de Janeiro",
+        "bairro": "Copacabana",
+        "telefone": "5521987654321",
+        "tipoNegocio": "barbearia",
+        "status": "ativa",
+        "plano": "mensal",
+        "horarioFuncionamento": {
+          "segunda": { "ativo": true, "inicio": "09:00", "fim": "20:00" },
+          "terca":   { "ativo": true, "inicio": "09:00", "fim": "20:00" },
+          "quarta":  { "ativo": true, "inicio": "09:00", "fim": "20:00" },
+          "quinta":  { "ativo": true, "inicio": "09:00", "fim": "20:00" },
+          "sexta":   { "ativo": true, "inicio": "09:00", "fim": "21:00" },
+          "sabado":  { "ativo": true, "inicio": "08:00", "fim": "18:00" },
+          "domingo": { "ativo": false, "inicio": "00:00", "fim": "00:00" }
+        }
+      },
+      "servicos": {
+        "srv_001": { "nome": "Corte Masculino", "duracaoMin": 30, "preco": 40, "emoji": "✂️", "ativo": true, "ordem": 1 },
+        "srv_002": { "nome": "Barba Completa",  "duracaoMin": 25, "preco": 35, "emoji": "🪒", "ativo": true, "ordem": 2 },
+        "srv_003": { "nome": "Sobrancelha",     "duracaoMin": 15, "preco": 20, "emoji": "💆", "ativo": true, "ordem": 3 },
+        "srv_004": { "nome": "Corte + Pigmentação", "duracaoMin": 45, "preco": 65, "emoji": "💈", "ativo": true, "ordem": 4 }
+      },
+      "profissionais": {
+        "prof_001": {
+          "nome": "João Vieira", "especialidade": "Clássico", "comissao": 50, "ativo": true,
+          "horarioTrabalho": {
+            "segunda": { "ativo": true, "inicio": "09:00", "fim": "18:00" },
+            "terca":   { "ativo": true, "inicio": "09:00", "fim": "18:00" },
+            "quarta":  { "ativo": true, "inicio": "09:00", "fim": "18:00" },
+            "quinta":  { "ativo": true, "inicio": "09:00", "fim": "18:00" },
+            "sexta":   { "ativo": true, "inicio": "09:00", "fim": "20:00" },
+            "sabado":  { "ativo": true, "inicio": "08:00", "fim": "16:00" },
+            "domingo": { "ativo": false }
+          }
+        },
+        "prof_002": {
+          "nome": "Rafael Moreira", "especialidade": "Moderno", "comissao": 50, "ativo": true,
+          "horarioTrabalho": {
+            "segunda": { "ativo": true, "inicio": "12:00", "fim": "20:00" },
+            "terca":   { "ativo": true, "inicio": "12:00", "fim": "20:00" },
+            "quarta":  { "ativo": true, "inicio": "12:00", "fim": "20:00" },
+            "quinta":  { "ativo": true, "inicio": "12:00", "fim": "20:00" },
+            "sexta":   { "ativo": true, "inicio": "12:00", "fim": "21:00" },
+            "sabado":  { "ativo": true, "inicio": "10:00", "fim": "18:00" },
+            "domingo": { "ativo": false }
+          }
+        }
+      },
+      "clientes": {},
+      "agendamentos": {}
+    },
+
+    "salao-da-maria": {
+      "info": {
+        "nome": "Salão da Maria",
+        "slug": "salao-da-maria",
+        "endereco": "Tijuca, RJ",
+        "cidade": "Rio de Janeiro",
+        "bairro": "Tijuca",
+        "telefone": "5521991234567",
+        "tipoNegocio": "salao",
+        "status": "trial",
+        "plano": "trial",
+        "trialFim": "2026-07-15T23:59:59.000Z",
+        "criadoEm": "2026-06-15T00:00:00.000Z",
+        "horarioFuncionamento": {
+          "segunda": { "ativo": true, "inicio": "09:00", "fim": "19:00" },
+          "terca":   { "ativo": true, "inicio": "09:00", "fim": "19:00" },
+          "quarta":  { "ativo": true, "inicio": "09:00", "fim": "19:00" },
+          "quinta":  { "ativo": true, "inicio": "09:00", "fim": "19:00" },
+          "sexta":   { "ativo": true, "inicio": "09:00", "fim": "20:00" },
+          "sabado":  { "ativo": true, "inicio": "08:00", "fim": "17:00" },
+          "domingo": { "ativo": false, "inicio": "00:00", "fim": "00:00" }
+        }
+      },
+      "servicos": {
+        "srv_001": { "nome": "Corte Feminino",       "duracaoMin": 60,  "preco": 80,  "emoji": "✂️", "ativo": true, "ordem": 1 },
+        "srv_002": { "nome": "Escova Progressiva",   "duracaoMin": 120, "preco": 180, "emoji": "💆", "ativo": true, "ordem": 2 },
+        "srv_003": { "nome": "Coloração / Mechas",   "duracaoMin": 150, "preco": 220, "emoji": "🎨", "ativo": true, "ordem": 3 },
+        "srv_004": { "nome": "Hidratação Capilar",   "duracaoMin": 60,  "preco": 90,  "emoji": "💧", "ativo": true, "ordem": 4 },
+        "srv_005": { "nome": "Escova + Penteado",    "duracaoMin": 60,  "preco": 70,  "emoji": "💅", "ativo": true, "ordem": 5 },
+        "srv_006": { "nome": "Manicure + Pedicure",  "duracaoMin": 60,  "preco": 60,  "emoji": "💅", "ativo": true, "ordem": 6 }
+      },
+      "profissionais": {
+        "prof_001": {
+          "nome": "Maria Santos", "especialidade": "Coloração e Mechas", "comissao": 50, "ativo": true,
+          "horarioTrabalho": {
+            "segunda": { "ativo": true, "inicio": "09:00", "fim": "18:00" },
+            "terca":   { "ativo": true, "inicio": "09:00", "fim": "18:00" },
+            "quarta":  { "ativo": true, "inicio": "09:00", "fim": "18:00" },
+            "quinta":  { "ativo": true, "inicio": "09:00", "fim": "18:00" },
+            "sexta":   { "ativo": true, "inicio": "09:00", "fim": "20:00" },
+            "sabado":  { "ativo": true, "inicio": "08:00", "fim": "17:00" },
+            "domingo": { "ativo": false }
+          }
+        },
+        "prof_002": {
+          "nome": "Camila Reis", "especialidade": "Corte e Escova", "comissao": 50, "ativo": true,
+          "horarioTrabalho": {
+            "segunda": { "ativo": true, "inicio": "10:00", "fim": "19:00" },
+            "terca":   { "ativo": true, "inicio": "10:00", "fim": "19:00" },
+            "quarta":  { "ativo": true, "inicio": "10:00", "fim": "19:00" },
+            "quinta":  { "ativo": true, "inicio": "10:00", "fim": "19:00" },
+            "sexta":   { "ativo": true, "inicio": "10:00", "fim": "20:00" },
+            "sabado":  { "ativo": true, "inicio": "09:00", "fim": "17:00" },
+            "domingo": { "ativo": false }
+          }
+        }
+      },
+      "clientes": {},
+      "agendamentos": {}
+    },
+
+    "studio-da-carla": {
+      "info": {
+        "nome": "Studio da Carla",
+        "slug": "studio-da-carla",
+        "endereco": "Barra da Tijuca, RJ",
+        "cidade": "Rio de Janeiro",
+        "bairro": "Barra da Tijuca",
+        "telefone": "5521998765432",
+        "tipoNegocio": "estetica",
+        "status": "trial",
+        "plano": "trial",
+        "trialFim": "2026-07-15T23:59:59.000Z",
+        "criadoEm": "2026-06-15T00:00:00.000Z",
+        "horarioFuncionamento": {
+          "segunda": { "ativo": true, "inicio": "09:00", "fim": "20:00" },
+          "terca":   { "ativo": true, "inicio": "09:00", "fim": "20:00" },
+          "quarta":  { "ativo": true, "inicio": "09:00", "fim": "20:00" },
+          "quinta":  { "ativo": true, "inicio": "09:00", "fim": "20:00" },
+          "sexta":   { "ativo": true, "inicio": "09:00", "fim": "21:00" },
+          "sabado":  { "ativo": true, "inicio": "08:00", "fim": "18:00" },
+          "domingo": { "ativo": false, "inicio": "00:00", "fim": "00:00" }
+        }
+      },
+      "servicos": {
+        "srv_001": { "nome": "Unhas em Gel",              "duracaoMin": 120, "preco": 130, "emoji": "💅", "ativo": true, "ordem": 1 },
+        "srv_002": { "nome": "Unhas de Acrílico",         "duracaoMin": 150, "preco": 150, "emoji": "✨", "ativo": true, "ordem": 2 },
+        "srv_003": { "nome": "Design de Sobrancelha",     "duracaoMin": 45,  "preco": 60,  "emoji": "🪄", "ativo": true, "ordem": 3 },
+        "srv_004": { "nome": "Henna de Sobrancelha",      "duracaoMin": 60,  "preco": 80,  "emoji": "🎨", "ativo": true, "ordem": 4 },
+        "srv_005": { "nome": "Cílios Fio a Fio",          "duracaoMin": 120, "preco": 180, "emoji": "👁️", "ativo": true, "ordem": 5 },
+        "srv_006": { "nome": "Volume Russo (Cílios)",     "duracaoMin": 150, "preco": 220, "emoji": "👁️", "ativo": true, "ordem": 6 },
+        "srv_007": { "nome": "Manutenção de Cílios",      "duracaoMin": 60,  "preco": 100, "emoji": "👁️", "ativo": true, "ordem": 7 },
+        "srv_008": { "nome": "Micropigmentação (consultar)", "duracaoMin": 180, "preco": 500, "emoji": "💉", "ativo": true, "ordem": 8 }
+      },
+      "profissionais": {
+        "prof_001": {
+          "nome": "Carla Oliveira", "especialidade": "Cílios e Sobrancelha", "comissao": 60, "ativo": true,
+          "horarioTrabalho": {
+            "segunda": { "ativo": true, "inicio": "09:00", "fim": "18:00" },
+            "terca":   { "ativo": true, "inicio": "09:00", "fim": "18:00" },
+            "quarta":  { "ativo": true, "inicio": "09:00", "fim": "18:00" },
+            "quinta":  { "ativo": true, "inicio": "09:00", "fim": "18:00" },
+            "sexta":   { "ativo": true, "inicio": "09:00", "fim": "20:00" },
+            "sabado":  { "ativo": true, "inicio": "08:00", "fim": "16:00" },
+            "domingo": { "ativo": false }
+          }
+        },
+        "prof_002": {
+          "nome": "Juliana Lima", "especialidade": "Unhas e Nail Art", "comissao": 60, "ativo": true,
+          "horarioTrabalho": {
+            "segunda": { "ativo": true, "inicio": "10:00", "fim": "19:00" },
+            "terca":   { "ativo": true, "inicio": "10:00", "fim": "19:00" },
+            "quarta":  { "ativo": true, "inicio": "10:00", "fim": "19:00" },
+            "quinta":  { "ativo": true, "inicio": "10:00", "fim": "19:00" },
+            "sexta":   { "ativo": true, "inicio": "10:00", "fim": "21:00" },
+            "sabado":  { "ativo": true, "inicio": "09:00", "fim": "18:00" },
+            "domingo": { "ativo": false }
+          }
+        }
+      },
+      "clientes": {},
+      "agendamentos": {}
+    }
+  }
+}
