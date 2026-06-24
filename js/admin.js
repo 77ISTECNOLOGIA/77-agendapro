@@ -3,6 +3,7 @@
 // ========================================
 
 import { db } from './firebase-config.js';
+import { aplicarTema } from './vocabulario.js';
 import {
   initializeApp,
   getApp
@@ -116,6 +117,7 @@ function inicializarAuth() {
         const userData = snap.val();
         state.barbeariaId = userData.barbeariaId;
         await carregarBarbearia();
+        aplicarTema(state.barbearia.tipoNegocio);
         renderizarUserInfo(userData);
         mostrarApp();
         ativarListenersTempoReal();
