@@ -189,9 +189,17 @@ function mostrarLogin(msg) {
   $('#loading').classList.add('hidden');
   $('#admin-app').classList.add('hidden');
   $('#tela-login').classList.remove('hidden');
+
+  // Reset do botão de login (corrige bug do botão travado em "Entrando..." após logout)
+  const btn = $('#btn-login');
+  btn.disabled = false;
+  btn.textContent = 'Entrar';
+
   if (msg) {
     $('#erro-login').textContent = msg;
     $('#erro-login').classList.remove('hidden');
+  } else {
+    $('#erro-login').classList.add('hidden');
   }
 }
 
