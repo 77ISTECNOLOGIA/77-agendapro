@@ -2,6 +2,7 @@
 // 77 AGENDAPRO — Lógica da Aplicação
 // ========================================
 
+import { db } from './firebase-config.js';
 import { aplicarTema } from './vocabulario.js';
 import {
   ref,
