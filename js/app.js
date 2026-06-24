@@ -147,6 +147,7 @@ async function inicializar() {
       return;
     }
 
+    aplicarTema(state.barbearia.tipoNegocio);
     renderizarHeader();
     inicializarEventos();
     mostrarApp();
