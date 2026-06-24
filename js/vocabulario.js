@@ -1,5 +1,5 @@
 // ========================================
-// 77 AGENDAPRO — Vocabulário por tipo de negócio
+// 77 AGENDAPRO — Vocabulário e Tema por tipo de negócio
 // Importar nos arquivos: app.js e admin.js
 // ========================================
 
@@ -12,7 +12,9 @@ export const VOCABULARIO = {
     cliente: 'Cliente',
     agenda: 'Agenda',
     emoji: '💈',
-    corAccent: '#d4ff3a'
+    corAccent: '#d4ff3a',
+    corAccentDark: '#b8e024',
+    corAccentGlow: 'rgba(212, 255, 58, 0.2)'
   },
   salao: {
     estabelecimento: 'Salão',
@@ -22,7 +24,9 @@ export const VOCABULARIO = {
     cliente: 'Cliente',
     agenda: 'Agenda',
     emoji: '💇',
-    corAccent: '#d4ff3a'
+    corAccent: '#ff6b9d',
+    corAccentDark: '#e8487f',
+    corAccentGlow: 'rgba(255, 107, 157, 0.2)'
   },
   estetica: {
     estabelecimento: 'Studio',
@@ -32,7 +36,9 @@ export const VOCABULARIO = {
     cliente: 'Cliente',
     agenda: 'Agenda',
     emoji: '✨',
-    corAccent: '#d4ff3a'
+    corAccent: '#b9a3e3',
+    corAccentDark: '#9d7fd1',
+    corAccentGlow: 'rgba(185, 163, 227, 0.2)'
   },
   nails: {
     estabelecimento: 'Studio',
@@ -42,7 +48,9 @@ export const VOCABULARIO = {
     cliente: 'Cliente',
     agenda: 'Agenda',
     emoji: '💅',
-    corAccent: '#d4ff3a'
+    corAccent: '#ff7a59',
+    corAccentDark: '#e85f3f',
+    corAccentGlow: 'rgba(255, 122, 89, 0.2)'
   },
   outro: {
     estabelecimento: 'Estabelecimento',
@@ -52,11 +60,13 @@ export const VOCABULARIO = {
     cliente: 'Cliente',
     agenda: 'Agenda',
     emoji: '📅',
-    corAccent: '#d4ff3a'
+    corAccent: '#d4ff3a',
+    corAccentDark: '#b8e024',
+    corAccentGlow: 'rgba(212, 255, 58, 0.2)'
   }
 };
 
-// Serviços sugeridos por tipo (usados no onboarding)
+// Serviços sugeridos por tipo (usados no cadastro/onboarding)
 export const SERVICOS_SUGERIDOS = {
   barbearia: [
     { nome: 'Corte Masculino',    duracaoMin: 30, preco: 40,  emoji: '✂️' },
@@ -92,10 +102,24 @@ export const SERVICOS_SUGERIDOS = {
 };
 
 /**
- * Retorna o vocabulário certo pro tipo de negócio
+ * Retorna o vocabulário e tema certo pro tipo de negócio
  * @param {string} tipo - tipoNegocio do Firebase (barbearia, salao, estetica, nails, outro)
- * @returns {object} vocabulário
+ * @returns {object} vocabulário + cores
  */
 export function getVocab(tipo) {
   return VOCABULARIO[tipo] || VOCABULARIO.outro;
+}
+
+/**
+ * Aplica o tema de cor dinamicamente na página, sobrescrevendo
+ * as variáveis CSS --accent, --accent-dark e --accent-glow.
+ * Chame essa função assim que os dados da barbearia/negócio forem carregados.
+ * @param {string} tipo - tipoNegocio do Firebase
+ */
+export function aplicarTema(tipo) {
+  const vocab = getVocab(tipo);
+  const root = document.documentElement;
+  root.style.setProperty('--accent', vocab.corAccent);
+  root.style.setProperty('--accent-dark', vocab.corAccentDark);
+  root.style.setProperty('--accent-glow', vocab.corAccentGlow);
 }
