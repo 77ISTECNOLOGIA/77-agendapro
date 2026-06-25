@@ -450,12 +450,41 @@ input { font-family: inherit; }
 }
 
 /* ====== SELETOR DE DATA ====== */
+.seletor-data-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.seletor-data-wrapper .seletor-data {
+  margin-bottom: 0;
+  flex: 1;
+}
+.seletor-nav {
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  color: var(--text-dim);
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all var(--transition);
+}
+.seletor-nav:hover {
+  border-color: var(--border-light);
+  color: var(--text);
+}
 .seletor-data {
   display: flex;
   gap: 8px;
   overflow-x: auto;
   padding-bottom: 4px;
-  margin-bottom: 8px;
   scrollbar-width: none;
 }
 .seletor-data::-webkit-scrollbar { display: none; }
