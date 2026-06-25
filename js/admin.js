@@ -3,7 +3,7 @@
 // ========================================
 
 import { db } from './firebase-config.js';
-import { aplicarTema } from './vocabulario.js';
+import { aplicarTema, resetarTema } from './vocabulario.js';
 import {
   initializeApp,
   getApp
@@ -188,6 +188,9 @@ async function handleLogout() {
 }
 
 function mostrarLogin(msg) {
+  // Restaura identidade visual padrão da 77 IS (corrige cor "presa" do último negócio logado)
+  resetarTema();
+
   $('#loading').classList.add('hidden');
   $('#admin-app').classList.add('hidden');
   $('#tela-login').classList.remove('hidden');
