@@ -1,5 +1,5 @@
 // ========================================
-// 77 AGENDAPRO — Lógica da Aplicação
+// 77 AGENDAPRO — Área Pública do Cliente
 // ========================================
 
 import { db } from './firebase-config.js';
@@ -24,14 +24,12 @@ const state = {
   profissionais: {},
   agendamentos: {},
 
-  // Seleções do cliente
   cliente: { whatsapp: null, nome: null, novo: true },
   servicosSelecionados: [],
   profissionalId: null,
   dataSelecionada: null,
   horarioSelecionado: null,
 
-  // Cache de horários disponíveis (para evitar recalcular)
   horariosCache: {}
 };
 
@@ -46,9 +44,7 @@ function formatarMoeda(valor) {
 }
 
 function normalizarWhatsapp(numero) {
-  // Remove tudo que não for dígito
   const digitos = numero.replace(/\D/g, '');
-  // Garante DDI 55 (Brasil)
   if (digitos.length === 11) return '55' + digitos;
   if (digitos.length === 13 && digitos.startsWith('55')) return digitos;
   return digitos;
@@ -78,7 +74,6 @@ function formatarData(date) {
 }
 
 function dataParaChave(date) {
-  // YYYY-MM-DD
   const ano = date.getFullYear();
   const mes = String(date.getMonth() + 1).padStart(2, '0');
   const dia = String(date.getDate()).padStart(2, '0');
@@ -120,7 +115,6 @@ function mostrarTela(numero) {
   };
   $('#header-passo').textContent = labels[numero] || '';
 
-  // Scroll para o topo
   window.scrollTo(0, 0);
 }
 
@@ -128,8 +122,6 @@ function mostrarTela(numero) {
 // INICIALIZAÇÃO
 // ========================================
 async function inicializar() {
-  // Identifica a barbearia pelo slug na URL
-  // Suporta: ?b=slug  OU  /slug (pretty URL via vercel.json)
   const params = new URLSearchParams(window.location.search);
   const slugQuery = params.get('b');
   const slugPath = window.location.pathname.split('/').filter(Boolean)[0];
@@ -190,17 +182,14 @@ function renderizarHeader() {
 // EVENTOS
 // ========================================
 function inicializarEventos() {
-  // Máscara de WhatsApp
   const inputWhats = $('#input-whatsapp');
   inputWhats.addEventListener('input', (e) => {
     e.target.value = formatarWhatsapp(e.target.value);
     verificarClienteExistente(e.target.value);
   });
 
-  // Tela 1: continuar
   $('#btn-continuar-1').addEventListener('click', handleContinuarIdentificacao);
 
-  // Tela 2: voltar e continuar
   $('#btn-voltar-2').addEventListener('click', () => mostrarTela(1));
   $('#btn-continuar-2').addEventListener('click', () => {
     if (state.servicosSelecionados.length === 0) return;
@@ -208,7 +197,6 @@ function inicializarEventos() {
     mostrarTela(3);
   });
 
-  // Tela 3: voltar e continuar
   $('#btn-voltar-3').addEventListener('click', () => mostrarTela(2));
   $('#btn-continuar-3').addEventListener('click', () => {
     if (!state.horarioSelecionado) return;
@@ -216,11 +204,19 @@ function inicializarEventos() {
     mostrarTela(4);
   });
 
-  // Tela 4: voltar e confirmar
   $('#btn-voltar-4').addEventListener('click', () => mostrarTela(3));
   $('#btn-confirmar').addEventListener('click', handleConfirmarAgendamento);
 
-  // Tela 5: novo agendamento
+  // Setas de navegação do carrossel de datas (rolagem suave)
+  const btnDataPrev = $('#btn-data-prev-cliente');
+  const btnDataNext = $('#btn-data-next-cliente');
+  if (btnDataPrev) btnDataPrev.addEventListener('click', () => {
+    $('#seletor-data').scrollBy({ left: -160, behavior: 'smooth' });
+  });
+  if (btnDataNext) btnDataNext.addEventListener('click', () => {
+    $('#seletor-data').scrollBy({ left: 160, behavior: 'smooth' });
+  });
+
   $('#btn-novo').addEventListener('click', () => {
     resetarFluxo();
     mostrarTela(1);
@@ -260,7 +256,6 @@ function handleContinuarIdentificacao() {
   const whatsappRaw = $('#input-whatsapp').value;
   const nome = $('#input-nome').value.trim();
 
-  // Validações
   let temErro = false;
   $('#erro-whatsapp').classList.remove('ativo');
   $('#erro-nome').classList.remove('ativo');
@@ -334,11 +329,9 @@ function toggleServico(id) {
     state.servicosSelecionados.push(id);
   }
 
-  // Limpa horário selecionado (mudou duração)
   state.horarioSelecionado = null;
   state.horariosCache = {};
 
-  // Atualiza visual
   const card = $(`.servico-card[data-id="${id}"]`);
   card.classList.toggle('selecionado');
 
@@ -386,17 +379,13 @@ function renderizarProfissionais() {
     return;
   }
 
-  // Cores aleatórias por profissional (mas determinísticas pelo id)
-  const cores = ['#d4ff3a', '#a3e635', '#ffaa3a', '#ff77aa', '#77ddff'];
-
-  profsArray.forEach(([id, p], idx) => {
+  profsArray.forEach(([id, p]) => {
     const iniciais = p.nome.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase();
-    const cor = cores[idx % cores.length];
     const card = document.createElement('div');
     card.className = 'prof-card';
     card.dataset.id = id;
     card.innerHTML = `
-      <div class="prof-foto" style="background: linear-gradient(135deg, ${cor}, ${cor}aa);">${iniciais}</div>
+      <div class="prof-foto" style="background: linear-gradient(135deg, var(--accent), var(--accent-dark));">${iniciais}</div>
       <div class="prof-nome">${p.nome.split(' ')[0]}</div>
       <div class="prof-spec">${p.especialidade || 'Profissional'}</div>
     `;
@@ -425,7 +414,6 @@ function renderizarSeletorDeData() {
   const hoje = new Date();
   const diasSemana = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
 
-  // Renderiza próximos 14 dias
   for (let i = 0; i < 14; i++) {
     const data = new Date(hoje);
     data.setDate(hoje.getDate() + i);
@@ -491,14 +479,12 @@ function calcularHorariosDisponiveis(profissionalId, data) {
 
   const inicio = horaParaMinutos(horarioTrabalho.inicio || '09:00');
   const fim = horaParaMinutos(horarioTrabalho.fim || '20:00');
-  const intervalo = 30; // slots de 30 em 30 minutos
+  const intervalo = 30;
 
-  // Duração total dos serviços selecionados
   const duracaoTotal = state.servicosSelecionados
     .map(id => state.servicos[id].duracaoMin)
     .reduce((sum, d) => sum + d, 0);
 
-  // Buscar agendamentos do profissional na data
   const dataChave = dataParaChave(data);
   const agendamentosOcupados = Object.values(state.agendamentos || {})
     .filter(a =>
@@ -511,7 +497,6 @@ function calcularHorariosDisponiveis(profissionalId, data) {
       fim: horaParaMinutos(a.horario) + a.duracaoMin
     }));
 
-  // Buscar bloqueios manuais
   const bloqueios = (prof.bloqueios && prof.bloqueios[dataChave]) || [];
 
   const slots = [];
@@ -523,10 +508,8 @@ function calcularHorariosDisponiveis(profissionalId, data) {
     const hora = minutosParaHora(m);
     let indisponivel = false;
 
-    // Já passou (se é hoje)
     if (ehHoje && m < minutosAgora + 30) indisponivel = true;
 
-    // Conflito com agendamento existente
     if (!indisponivel) {
       const slotInicio = m;
       const slotFim = m + duracaoTotal;
@@ -535,7 +518,6 @@ function calcularHorariosDisponiveis(profissionalId, data) {
       );
     }
 
-    // Conflito com bloqueio
     if (!indisponivel && bloqueios.includes(hora)) indisponivel = true;
 
     slots.push({ hora, indisponivel });
@@ -590,7 +572,6 @@ async function handleConfirmarAgendamento() {
   btn.textContent = 'Confirmando...';
 
   try {
-    // 1. Re-valida disponibilidade (alguém pode ter pego o slot enquanto isso)
     await recarregarAgendamentos();
     const horarios = calcularHorariosDisponiveis(state.profissionalId, state.dataSelecionada);
     const slotAlvo = horarios.find(s => s.hora === state.horarioSelecionado);
@@ -603,13 +584,10 @@ async function handleConfirmarAgendamento() {
       return;
     }
 
-    // 2. Salva/atualiza cliente
     await salvarCliente();
 
-    // 3. Cria agendamento
     const agendamentoId = await criarAgendamento();
 
-    // 4. Sucesso!
     renderizarTelaSucesso(agendamentoId);
     mostrarTela(5);
 
@@ -703,12 +681,10 @@ function renderizarTelaSucesso(agendamentoId) {
     <div class="resumo-linha destaque"><span class="label">Total</span><span class="valor">${formatarMoeda(total)}</span></div>
   `;
 
-  // Botão "Adicionar à agenda" — Solução Híbrida 2.0
   renderizarBotaoAgenda(data, fimMin, prof, servicos);
 }
 
 function renderizarBotaoAgenda(data, fimMin, prof, servicos) {
-  // Gera link universal de Google Calendar (funciona no Android e iPhone também)
   const titulo = encodeURIComponent(`${servicos.map(s => s.nome).join(' + ')} — ${state.barbearia.nome}`);
   const detalhes = encodeURIComponent(
     `Agendamento na ${state.barbearia.nome}\n` +
@@ -719,7 +695,6 @@ function renderizarBotaoAgenda(data, fimMin, prof, servicos) {
   );
   const local = encodeURIComponent(state.barbearia.endereco || state.barbearia.nome);
 
-  // Formata datas no padrão Google Calendar: YYYYMMDDTHHMMSS
   const dataInicio = new Date(data);
   const [hI, mI] = state.horarioSelecionado.split(':').map(Number);
   dataInicio.setHours(hI, mI, 0, 0);
@@ -738,9 +713,7 @@ function renderizarBotaoAgenda(data, fimMin, prof, servicos) {
   const datas = `${fmt(dataInicio)}/${fmt(dataFim)}`;
   const linkGoogle = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${titulo}&dates=${datas}&details=${detalhes}&location=${local}`;
 
-  // Insere botão antes do botão "Fazer novo agendamento"
   const btnNovo = $('#btn-novo');
-  // Remove botão antigo se existir (caso o cliente faça outro agendamento)
   const btnAgendaAntigo = $('#btn-add-agenda');
   if (btnAgendaAntigo) btnAgendaAntigo.remove();
 
@@ -766,7 +739,6 @@ function resetarFluxo() {
   $('#btn-confirmar').disabled = false;
   $('#btn-confirmar').textContent = 'Confirmar ✓';
 
-  // Recarrega dados (pode ter atualizações)
   carregarBarbearia(state.slug);
 }
 
