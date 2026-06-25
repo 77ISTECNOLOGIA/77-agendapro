@@ -127,6 +127,20 @@ export function aplicarTema(tipo) {
 }
 
 /**
+ * Restaura o tema visual padrão da 77 IS (verde-limão institucional),
+ * removendo qualquer cor de segmento aplicada anteriormente.
+ * Use na tela de login do admin, ou em qualquer tela que não pertença
+ * a um negócio específico ainda.
+ */
+export function resetarTema() {
+  const root = document.documentElement;
+  root.style.removeProperty('--accent');
+  root.style.removeProperty('--accent-dark');
+  root.style.removeProperty('--accent-glow');
+  aplicarFavicon('#d4ff3a');
+}
+
+/**
  * Gera e aplica dinamicamente o favicon (ícone "77") na cor do tema atual.
  * Substitui o conteúdo do <link rel="icon"> independente do que estava no HTML.
  * @param {string} cor - cor hexadecimal do accent (ex: '#ff6b9d')
