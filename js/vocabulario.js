@@ -134,10 +134,10 @@ export function aplicarTema(tipo) {
  */
 export function resetarTema() {
   const root = document.documentElement;
-  root.style.removeProperty('--accent');
-  root.style.removeProperty('--accent-dark');
-  root.style.removeProperty('--accent-glow');
-  aplicarFavicon('#d4ff3a');
+  root.style.setProperty('--accent', '#fb6464');
+  root.style.setProperty('--accent-dark', '#e84d4d');
+  root.style.setProperty('--accent-glow', 'rgba(251, 100, 100, 0.2)');
+  aplicarFavicon('#fb6464');
 }
 
 /**
