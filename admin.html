@@ -25,7 +25,7 @@
     </div>
   </div>
 
-  <!-- ============ TELA DE LOGIN ============ -->
+  <!-- ============ TELA DE LOGIN (identidade institucional 77 IS) ============ -->
   <div id="tela-login" class="hidden login-container">
     <div class="login-card">
       <div class="login-header">
@@ -47,6 +47,11 @@
         <button type="submit" id="btn-login" class="btn">Entrar</button>
         <button type="button" id="btn-esqueci" class="btn-link">Esqueci minha senha</button>
       </form>
+    </div>
+
+    <!-- Espaço institucional 77 IS — independente do tema de qualquer negócio -->
+    <div class="login-institucional">
+      <p>Sistema de agendamento criado por <strong>77 IS Tecnologia &amp; Inteligência</strong></p>
     </div>
   </div>
 
@@ -286,7 +291,7 @@
         <div class="view-header">
           <div>
             <h1 class="view-titulo">Configurações</h1>
-            <p class="view-sub">Dados da barbearia e horários</p>
+            <p class="view-sub">Dados do estabelecimento e horários</p>
           </div>
         </div>
 
@@ -294,7 +299,7 @@
           <!-- Dados Gerais -->
           <div class="card-grande">
             <div class="card-header">
-              <h3 class="card-titulo">Dados da barbearia</h3>
+              <h3 class="card-titulo">Dados do estabelecimento</h3>
             </div>
             <div class="form-grid">
               <div class="input-grupo">
@@ -310,7 +315,7 @@
                 <input type="tel" id="conf-telefone" class="input">
               </div>
               <div class="input-grupo">
-                <label class="input-label">SLUG (URL da barbearia)</label>
+                <label class="input-label">SLUG (URL do estabelecimento)</label>
                 <input type="text" id="conf-slug" class="input" disabled>
                 <small class="campo-help">Link público: <span id="link-publico">—</span></small>
               </div>
@@ -335,7 +340,7 @@
             <div class="qr-container">
               <div id="qr-code-container" class="qr-display"></div>
               <div class="qr-info">
-                <p>Imprima e cole no espelho da barbearia. Seus clientes escaneiam e agendam direto.</p>
+                <p>Imprima e cole no espelho ou balcão do estabelecimento. Seus clientes escaneiam e agendam direto.</p>
                 <button type="button" id="btn-baixar-qr" class="btn-acao-secundario">Baixar QR Code</button>
               </div>
             </div>
