@@ -144,7 +144,6 @@ function inicializarAuth() {
   $('#form-login').addEventListener('submit', handleLogin);
   $('#btn-esqueci').addEventListener('click', handleEsqueciSenha);
   $('#btn-logout').addEventListener('click', handleLogout);
-  $('#btn-logout-mobile').addEventListener('click', handleLogout);
 }
 
 async function handleLogin(e) {
@@ -388,13 +387,8 @@ function desativarListeners() {
 function inicializarNavegacao() {
   $$('.nav-item').forEach(item => {
     item.addEventListener('click', () => {
-      const view = item.dataset.view;
-      irPara(view);
-      if (window.innerWidth <= 900) $('#sidebar').classList.remove('aberta');
+      irPara(item.dataset.view);
     });
-  });
-  $('#btn-menu').addEventListener('click', () => {
-    $('#sidebar').classList.toggle('aberta');
   });
 }
 
@@ -402,11 +396,6 @@ function irPara(view) {
   state.viewAtual = view;
   $$('.nav-item').forEach(n => n.classList.toggle('ativo', n.dataset.view === view));
   $$('.view').forEach(v => v.classList.toggle('ativa', v.id === `view-${view}`));
-  const titulos = {
-    dashboard: 'Dashboard', agenda: 'Agenda', servicos: 'Serviços',
-    profissionais: 'Profissionais', clientes: 'Clientes', configuracoes: 'Configurações'
-  };
-  $('#topbar-titulo').textContent = titulos[view] || '';
   renderizarViewAtual();
 }
 
