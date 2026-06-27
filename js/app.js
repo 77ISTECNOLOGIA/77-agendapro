@@ -588,6 +588,9 @@ async function handleConfirmarAgendamento() {
 
     const agendamentoId = await criarAgendamento();
 
+    // Notifica o dono do estabelecimento (não bloqueia o fluxo se falhar)
+    notificarNovoAgendamento().catch(err => console.error('Erro ao notificar:', err));
+
     renderizarTelaSucesso(agendamentoId);
     mostrarTela(5);
 
@@ -655,6 +658,31 @@ async function criarAgendamento() {
   const novoRef = push(ref(db, `barbearias/${state.slug}/agendamentos`));
   await set(novoRef, agendamento);
   return novoRef.key;
+}
+
+// ========================================
+// NOTIFICAÇÃO PUSH PRO DONO DO ESTABELECIMENTO
+// ========================================
+async function notificarNovoAgendamento() {
+  // Busca todos os tokens salvos (um por dispositivo onde o dono ativou notificações)
+  const snap = await get(ref(db, `barbearias/${state.slug}/info/fcmTokens`));
+  if (!snap.exists()) return; // dono não ativou notificações em nenhum dispositivo ainda
+
+  const tokens = Object.values(snap.val());
+  const prof = state.profissionais[state.profissionalId];
+  const servicos = state.servicosSelecionados.map(id => state.servicos[id].nome).join(' + ');
+  const corpo = `${state.cliente.nome.split(' ')[0]} às ${state.horarioSelecionado} — ${servicos} com ${prof.nome.split(' ')[0]}`;
+
+  // Envia para cada dispositivo em paralelo (falha em um não afeta os outros)
+  await Promise.allSettled(
+    tokens.map(token =>
+      fetch('/api/send-notification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, corpo })
+      })
+    )
+  );
 }
 
 // ========================================
