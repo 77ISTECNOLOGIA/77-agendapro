@@ -193,6 +193,14 @@ async function handleEsqueciSenha() {
 // NOTIFICAÇÕES PUSH (FCM)
 // ========================================
 async function ativarNotificacoes() {
+  const ehIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const ehStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+
+  if (ehIOS && !ehStandalone) {
+    toast('No iPhone: toque em Compartilhar → "Adicionar à Tela de Início", abra o app por lá e tente de novo', 'erro');
+    return;
+  }
+
   if (!('serviceWorker' in navigator) || !('Notification' in window)) {
     toast('Seu navegador não suporta notificações push', 'erro');
     return;
