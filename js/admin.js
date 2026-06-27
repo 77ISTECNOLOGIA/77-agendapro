@@ -16,6 +16,10 @@ import {
   sendPasswordResetEmail
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import {
+  getMessaging,
+  getToken
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js";
+import {
   ref,
   get,
   set,
@@ -27,6 +31,9 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
 const auth = getAuth(getApp());
+
+// Chave gerada no Firebase Console > Configurações > Cloud Messaging > Certificados push da Web
+const VAPID_KEY = 'BBDdf4Estwxij9B1m3R7jZCrNNMul4EcIjAYJ9-Xw-8mgebCIgGwCUfPdYBko7scsVQ6VxMefFBYORQv9mzLYl4';
 
 // ========================================
 // ESTADO GLOBAL
@@ -179,6 +186,70 @@ async function handleEsqueciSenha() {
     toast('Email de recuperação enviado!', 'sucesso');
   } catch (err) {
     toast('Erro ao enviar email. Verifique o endereço.', 'erro');
+  }
+}
+
+// ========================================
+// NOTIFICAÇÕES PUSH (FCM)
+// ========================================
+async function ativarNotificacoes() {
+  if (!('serviceWorker' in navigator) || !('Notification' in window)) {
+    toast('Seu navegador não suporta notificações push', 'erro');
+    return;
+  }
+
+  try {
+    const permissao = await Notification.requestPermission();
+    if (permissao !== 'granted') {
+      toast('Permissão de notificação não concedida', 'erro');
+      return;
+    }
+
+    const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+    const messaging = getMessaging(getApp());
+    const token = await getToken(messaging, {
+      vapidKey: VAPID_KEY,
+      serviceWorkerRegistration: registration
+    });
+
+    if (!token) {
+      toast('Não foi possível gerar o token de notificação', 'erro');
+      return;
+    }
+
+    // Salva o token deste dispositivo na lista (não substitui os outros dispositivos já ativados)
+    const chave = sanitizarTokenKey(token);
+    await set(ref(db, `barbearias/${state.barbeariaId}/info/fcmTokens/${chave}`), token);
+
+    toast('Notificações ativadas neste dispositivo! 🔔', 'sucesso');
+    atualizarStatusNotificacoes(true);
+  } catch (err) {
+    console.error('Erro ao ativar notificações:', err);
+    toast('Erro ao ativar notificações', 'erro');
+  }
+}
+
+// Firebase não permite '.', '#', '$', '/', '[', ']' em chaves — substitui por '_'
+function sanitizarTokenKey(token) {
+  return token.replace(/[.#$/\[\]]/g, '_');
+}
+
+function atualizarStatusNotificacoes(ativo, totalDispositivos = 0) {
+  const btn = $('#btn-ativar-notificacoes');
+  const status = $('#status-notificacoes');
+  if (!btn) return;
+
+  if (ativo) {
+    btn.textContent = '🔔 Ativar neste dispositivo também';
+    btn.disabled = false;
+    if (status) {
+      status.textContent = `${totalDispositivos} dispositivo${totalDispositivos !== 1 ? 's' : ''} recebendo notificações`;
+      status.classList.remove('hidden');
+    }
+  } else {
+    btn.textContent = '🔔 Ativar notificações push';
+    btn.disabled = false;
+    if (status) status.classList.add('hidden');
   }
 }
 
@@ -1010,6 +1081,10 @@ function renderizarConfiguracoes() {
   $('#conf-slug').value = state.barbeariaId;
   $('#link-publico').textContent = `${window.location.origin}/${state.barbeariaId}`;
 
+  // Status das notificações push (verifica se há pelo menos 1 dispositivo ativado)
+  const totalDispositivos = state.barbearia.fcmTokens ? Object.keys(state.barbearia.fcmTokens).length : 0;
+  atualizarStatusNotificacoes(totalDispositivos > 0, totalDispositivos);
+
   // Horários
   const dias = diasDaSemana();
   const labels = { domingo: 'Domingo', segunda: 'Segunda', terca: 'Terça', quarta: 'Quarta', quinta: 'Quinta', sexta: 'Sexta', sabado: 'Sábado' };
@@ -1150,6 +1225,8 @@ function inicializarEventosViews() {
   // Configurações
   $('#form-config').addEventListener('submit', salvarConfiguracoes);
   $('#btn-baixar-qr').addEventListener('click', baixarQR);
+  const btnNotif = $('#btn-ativar-notificacoes');
+  if (btnNotif) btnNotif.addEventListener('click', ativarNotificacoes);
 }
 
 // ========================================
