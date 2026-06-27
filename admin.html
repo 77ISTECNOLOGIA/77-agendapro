@@ -6,14 +6,6 @@
   <meta name="theme-color" content="#0a0a0a">
   <title>77 AgendaPro — Painel</title>
 
-  <!-- Detecta hardware de toque real (não pode ser mascarado pelo modo
-       "Site para Computador" do Safari) e força o layout mobile via classe -->
-  <script>
-    if (navigator.maxTouchPoints > 0 || 'ontouchstart' in window) {
-      document.documentElement.classList.add('forcar-mobile');
-    }
-  </script>
-
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;500;600;700;800&family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -72,64 +64,56 @@
   <!-- ============ APP DO PAINEL ============ -->
   <div id="admin-app" class="hidden admin-app">
 
-    <!-- SIDEBAR -->
-    <aside class="sidebar" id="sidebar">
-      <div class="sidebar-header">
+    <!-- BARRA SUPERIOR -->
+    <header class="topbar-app">
+      <div class="topbar-brand">
         <div class="mini-logo">77</div>
         <div>
-          <div class="sidebar-titulo">77 <span class="accent">AgendaPro</span></div>
+          <div class="topbar-app-titulo">77 <span class="accent">AgendaPro</span></div>
           <div class="sidebar-barbearia" id="sidebar-barbearia">—</div>
         </div>
       </div>
-
-      <nav class="sidebar-nav">
-        <button class="nav-item ativo" data-view="dashboard">
-          <span class="nav-icon">📊</span>
-          <span class="nav-label">Dashboard</span>
-        </button>
-        <button class="nav-item" data-view="agenda">
-          <span class="nav-icon">📅</span>
-          <span class="nav-label">Agenda</span>
-        </button>
-        <button class="nav-item" data-view="servicos">
-          <span class="nav-icon">✂️</span>
-          <span class="nav-label">Serviços</span>
-        </button>
-        <button class="nav-item" data-view="profissionais">
-          <span class="nav-icon">👥</span>
-          <span class="nav-label">Profissionais</span>
-        </button>
-        <button class="nav-item" data-view="clientes">
-          <span class="nav-icon">👤</span>
-          <span class="nav-label">Clientes</span>
-        </button>
-        <button class="nav-item" data-view="configuracoes">
-          <span class="nav-icon">⚙️</span>
-          <span class="nav-label">Configurações</span>
-        </button>
-      </nav>
-
-      <div class="sidebar-footer">
-        <div class="user-info">
-          <div class="user-avatar" id="user-avatar">?</div>
-          <div class="user-detalhes">
-            <div class="user-nome" id="user-nome">—</div>
-            <div class="user-email" id="user-email">—</div>
-          </div>
+      <div class="topbar-user">
+        <div class="user-avatar" id="user-avatar">?</div>
+        <div class="user-detalhes">
+          <div class="user-nome" id="user-nome">—</div>
+          <div class="user-email" id="user-email">—</div>
         </div>
         <button id="btn-logout" class="btn-logout">Sair</button>
       </div>
-    </aside>
-
-    <!-- TOPBAR MOBILE -->
-    <header class="topbar-mobile">
-      <button id="btn-menu" class="btn-icon">☰</button>
-      <div class="topbar-titulo" id="topbar-titulo">Dashboard</div>
-      <button id="btn-logout-mobile" class="btn-icon">⏻</button>
     </header>
+
+    <!-- ABAS HORIZONTAIS -->
+    <nav class="tabs-nav">
+      <button class="nav-item ativo" data-view="dashboard">
+        <span class="nav-icon">📊</span>
+        <span class="nav-label">Dashboard</span>
+      </button>
+      <button class="nav-item" data-view="agenda">
+        <span class="nav-icon">📅</span>
+        <span class="nav-label">Agenda</span>
+      </button>
+      <button class="nav-item" data-view="servicos">
+        <span class="nav-icon">✂️</span>
+        <span class="nav-label">Serviços</span>
+      </button>
+      <button class="nav-item" data-view="profissionais">
+        <span class="nav-icon">👥</span>
+        <span class="nav-label">Profissionais</span>
+      </button>
+      <button class="nav-item" data-view="clientes">
+        <span class="nav-icon">👤</span>
+        <span class="nav-label">Clientes</span>
+      </button>
+      <button class="nav-item" data-view="configuracoes">
+        <span class="nav-icon">⚙️</span>
+        <span class="nav-label">Configurações</span>
+      </button>
+    </nav>
 
     <!-- CONTEÚDO PRINCIPAL -->
     <main class="main-content">
+
 
       <!-- ============ VIEW: DASHBOARD ============ -->
       <section class="view ativa" id="view-dashboard">
