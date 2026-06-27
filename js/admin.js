@@ -567,19 +567,17 @@ function abrirModalLembretes(pendentes) {
         </div>
       `).join('')}
     </div>
-    <div style="margin-top: 16px; padding: 12px; background: var(--surface-2); border-radius: 10px; font-size: 12px; color: var(--text-dim);">
-      💡 <strong>Dica:</strong> Use o botão "Abrir todos" para enviar em sequência. Cada WhatsApp abre em uma nova aba.
-    </div>
   `;
   const rodape = `
     <button class="btn-acao-secundario" id="modal-cancel">Fechar</button>
-    <button class="btn-acao" id="btn-abrir-todos">Abrir todos em sequência</button>
   `;
   abrirModal(`Lembretes pendentes (${ordenados.length})`, corpo, rodape);
 
   document.getElementById('modal-cancel').addEventListener('click', fecharModal);
 
-  // Eventos individuais
+  // Eventos individuais — único método garantido de funcionar em qualquer navegador.
+  // Abrir várias abas de uma vez via código é bloqueado pelos navegadores por segurança,
+  // então o envio é feito um clique por cliente.
   document.querySelectorAll('.lembrete-item button[data-acao="lembrar"]').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       const item = e.target.closest('.lembrete-item');
@@ -598,29 +596,6 @@ function abrirModalLembretes(pendentes) {
       btn.textContent = '✓ Enviado';
       btn.disabled = true;
     });
-  });
-
-  // Abrir todos de uma vez — TODAS as janelas precisam abrir de forma síncrona,
-  // ainda dentro do mesmo clique do usuário. Qualquer delay/await ANTES de abrir
-  // faz o navegador tratar como pop-up automático e bloquear a partir da 2ª aba.
-  document.getElementById('btn-abrir-todos').addEventListener('click', () => {
-    if (!confirm(`Vamos abrir ${ordenados.length} abas do WhatsApp. Continuar?`)) return;
-
-    // 1. Abre todas as janelas imediatamente, sem nenhuma pausa entre elas
-    ordenados.forEach(ag => enviarLembreteWhatsapp(ag));
-
-    // 2. Só depois, sem pressa, marca cada uma como enviada e atualiza o visual
-    ordenados.forEach(async (ag) => {
-      await marcarLembreteEnviado(ag.id);
-      const item = document.querySelector(`.lembrete-item[data-id="${ag.id}"]`);
-      if (item) {
-        item.style.opacity = '0.5';
-        const btn = item.querySelector('button[data-acao="lembrar"]');
-        if (btn) { btn.textContent = '✓ Enviado'; btn.disabled = true; }
-      }
-    });
-
-    toast(`${ordenados.length} lembretes abertos!`, 'sucesso');
   });
 }
 
