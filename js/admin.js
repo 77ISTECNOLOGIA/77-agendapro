@@ -600,26 +600,25 @@ function abrirModalLembretes(pendentes) {
     });
   });
 
-  // Abrir todos em sequência (com delay pra não bloquear o navegador)
-  document.getElementById('btn-abrir-todos').addEventListener('click', async () => {
+  // Abrir todos de uma vez — TODAS as janelas precisam abrir de forma síncrona,
+  // ainda dentro do mesmo clique do usuário. Qualquer delay/await ANTES de abrir
+  // faz o navegador tratar como pop-up automático e bloquear a partir da 2ª aba.
+  document.getElementById('btn-abrir-todos').addEventListener('click', () => {
     if (!confirm(`Vamos abrir ${ordenados.length} abas do WhatsApp. Continuar?`)) return;
 
-    for (let i = 0; i < ordenados.length; i++) {
-      const ag = ordenados[i];
-      enviarLembreteWhatsapp(ag);
-      await marcarLembreteEnviado(ag.id);
+    // 1. Abre todas as janelas imediatamente, sem nenhuma pausa entre elas
+    ordenados.forEach(ag => enviarLembreteWhatsapp(ag));
 
-      // Atualiza visual
+    // 2. Só depois, sem pressa, marca cada uma como enviada e atualiza o visual
+    ordenados.forEach(async (ag) => {
+      await marcarLembreteEnviado(ag.id);
       const item = document.querySelector(`.lembrete-item[data-id="${ag.id}"]`);
       if (item) {
         item.style.opacity = '0.5';
         const btn = item.querySelector('button[data-acao="lembrar"]');
         if (btn) { btn.textContent = '✓ Enviado'; btn.disabled = true; }
       }
-
-      // Pequeno delay entre cada (evita popup blocker)
-      if (i < ordenados.length - 1) await new Promise(r => setTimeout(r, 400));
-    }
+    });
 
     toast(`${ordenados.length} lembretes abertos!`, 'sucesso');
   });
