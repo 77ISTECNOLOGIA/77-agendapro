@@ -217,13 +217,14 @@ async function ativarNotificacoes() {
       return;
     }
 
-    // Salva o token deste dispositivo na lista (não substitui os outros dispositivos já ativados)
-    const chave = sanitizarTokenKey(token);
-    await set(ref(db, `barbearias/${state.barbeariaId}/info/fcmTokens/${chave}`), token);
+    // Salva o token deste dispositivo na lista, usando um ID fixo do navegador como chave
+    // (não o token em si, que pode rotacionar e criar entradas duplicadas pro mesmo dispositivo)
+    const deviceId = obterDeviceId();
+    await set(ref(db, `barbearias/${state.barbeariaId}/info/fcmTokens/${deviceId}`), token);
 
     // Atualiza o estado local imediatamente (o listener em tempo real também vai confirmar isso em seguida)
     if (!state.barbearia.fcmTokens) state.barbearia.fcmTokens = {};
-    state.barbearia.fcmTokens[chave] = token;
+    state.barbearia.fcmTokens[deviceId] = token;
     const totalAtual = Object.keys(state.barbearia.fcmTokens).length;
 
     toast('Notificações ativadas neste dispositivo! 🔔', 'sucesso');
@@ -234,9 +235,16 @@ async function ativarNotificacoes() {
   }
 }
 
-// Firebase não permite '.', '#', '$', '/', '[', ']' em chaves — substitui por '_'
-function sanitizarTokenKey(token) {
-  return token.replace(/[.#$/\[\]]/g, '_');
+// Gera (ou recupera) um ID fixo para este navegador/dispositivo, salvo localmente.
+// Garante que reativar notificações no mesmo aparelho sempre atualiza a mesma entrada,
+// mesmo que o token do Firebase mude.
+function obterDeviceId() {
+  let id = localStorage.getItem('agendapro_device_id');
+  if (!id) {
+    id = 'dev_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
+    localStorage.setItem('agendapro_device_id', id);
+  }
+  return id;
 }
 
 function atualizarStatusNotificacoes(ativo, totalDispositivos = 0) {
