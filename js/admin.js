@@ -221,8 +221,13 @@ async function ativarNotificacoes() {
     const chave = sanitizarTokenKey(token);
     await set(ref(db, `barbearias/${state.barbeariaId}/info/fcmTokens/${chave}`), token);
 
+    // Atualiza o estado local imediatamente (o listener em tempo real também vai confirmar isso em seguida)
+    if (!state.barbearia.fcmTokens) state.barbearia.fcmTokens = {};
+    state.barbearia.fcmTokens[chave] = token;
+    const totalAtual = Object.keys(state.barbearia.fcmTokens).length;
+
     toast('Notificações ativadas neste dispositivo! 🔔', 'sucesso');
-    atualizarStatusNotificacoes(true);
+    atualizarStatusNotificacoes(true, totalAtual);
   } catch (err) {
     console.error('Erro ao ativar notificações:', err);
     toast('Erro ao ativar notificações', 'erro');
