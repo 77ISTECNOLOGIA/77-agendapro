@@ -1008,3 +1008,33 @@
   .agenda-filtros { width: 100%; margin-left: 0; }
   .select-filtro { flex: 1; }
 }
+
+/* ====== FORÇA LAYOUT MOBILE VIA JAVASCRIPT ======
+   Reforço pro caso do Safari, no modo "Site para Computador", mascarar até a
+   detecção via CSS (hover/pointer). Aqui a classe é decidida em JS lendo
+   navigator.maxTouchPoints, que reflete o hardware real e não pode ser
+   disfarçado por esse modo do navegador. Ver script inline no admin.html. */
+html.forcar-mobile .sidebar {
+  transform: translateX(-100%);
+  width: 280px;
+  left: -1px;
+}
+html.forcar-mobile .sidebar.aberta { transform: translateX(0); }
+html.forcar-mobile .main-content {
+  margin-left: 0;
+  padding: 20px 16px;
+}
+html.forcar-mobile .topbar-mobile { display: flex; }
+html.forcar-mobile .dashboard-row { grid-template-columns: 1fr; }
+html.forcar-mobile .form-grid { grid-template-columns: 1fr; }
+html.forcar-mobile .horario-linha {
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+}
+html.forcar-mobile .horario-dia { grid-column: 1; }
+html.forcar-mobile .horario-switch { grid-column: 2; }
+html.forcar-mobile .horario-input { grid-column: span 1; }
+html.forcar-mobile .view-header { flex-direction: column; align-items: stretch; }
+html.forcar-mobile .agenda-filtros { width: 100%; margin-left: 0; }
+html.forcar-mobile .select-filtro { flex: 1; }
+html.forcar-mobile body { max-width: 100vw; overflow-x: hidden; }
