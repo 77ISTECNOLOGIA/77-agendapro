@@ -6,6 +6,14 @@
   <meta name="theme-color" content="#0a0a0a">
   <title>77 AgendaPro — Painel</title>
 
+  <!-- Detecta hardware de toque real (não pode ser mascarado pelo modo
+       "Site para Computador" do Safari) e força o layout mobile via classe -->
+  <script>
+    if (navigator.maxTouchPoints > 0 || 'ontouchstart' in window) {
+      document.documentElement.classList.add('forcar-mobile');
+    }
+  </script>
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;500;600;700;800&family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet">
