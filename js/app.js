@@ -671,7 +671,9 @@ async function notificarNovoAgendamento() {
   const tokens = Object.values(snap.val());
   const prof = state.profissionais[state.profissionalId];
   const servicos = state.servicosSelecionados.map(id => state.servicos[id].nome).join(' + ');
-  const corpo = `${state.cliente.nome.split(' ')[0]} às ${state.horarioSelecionado} — ${servicos} com ${prof.nome.split(' ')[0]}`;
+  const diasSemanaAbrev = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+  const dataStr = `${diasSemanaAbrev[state.dataSelecionada.getDay()]} ${formatarData(state.dataSelecionada)}`;
+  const corpo = `${state.cliente.nome.split(' ')[0]} — ${dataStr} às ${state.horarioSelecionado} — ${servicos} com ${prof.nome.split(' ')[0]}`;
 
   // Envia para cada dispositivo em paralelo (falha em um não afeta os outros)
   await Promise.allSettled(
