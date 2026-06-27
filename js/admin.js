@@ -17,7 +17,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import {
   getMessaging,
-  getToken
+  getToken,
+  onMessage
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js";
 import {
   ref,
@@ -129,6 +130,7 @@ function inicializarAuth() {
         mostrarApp();
         ativarListenersTempoReal();
         await renderizarTudo();
+        ouvirNotificacoesEmPrimeiroPlano();
       } catch (err) {
         console.error('Erro ao carregar usuário:', err);
         mostrarLogin('Erro ao carregar dados. Tente novamente.');
@@ -237,6 +239,7 @@ async function ativarNotificacoes() {
 
     toast('Notificações ativadas neste dispositivo! 🔔', 'sucesso');
     atualizarStatusNotificacoes(true, totalAtual);
+    ouvirNotificacoesEmPrimeiroPlano();
   } catch (err) {
     console.error('Erro ao ativar notificações:', err);
     toast('Erro ao ativar notificações', 'erro');
@@ -271,6 +274,28 @@ function atualizarStatusNotificacoes(ativo, totalDispositivos = 0) {
     btn.textContent = '🔔 Ativar notificações push';
     btn.disabled = false;
     if (status) status.classList.add('hidden');
+  }
+}
+
+// Escuta notificações chegando ENQUANTO o painel está aberto e em primeiro plano.
+// Sem isso, o navegador recebe a notificação silenciosamente e não mostra nada na tela
+// quando a aba do admin já está ativa (só mostra automaticamente em segundo plano).
+let listenerForegroundAtivo = false;
+function ouvirNotificacoesEmPrimeiroPlano() {
+  if (listenerForegroundAtivo) return;
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+
+  try {
+    const messaging = getMessaging(getApp());
+    onMessage(messaging, (payload) => {
+      const corpo = (payload.notification && payload.notification.body) || '';
+      // Em primeiro plano, mostra só o toast — a notificação nativa do sistema
+      // já é tratada automaticamente em segundo plano, evitando duplicidade
+      toast(`🔔 ${corpo}`, 'sucesso');
+    });
+    listenerForegroundAtivo = true;
+  } catch (err) {
+    console.error('Erro ao escutar notificações em primeiro plano:', err);
   }
 }
 
