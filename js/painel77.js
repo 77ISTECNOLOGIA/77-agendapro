@@ -123,9 +123,7 @@ $('#form-login').addEventListener('submit', async (e) => {
   }
 });
 
-['#btn-logout','#btn-logout-mobile'].forEach(s => {
-  $(s)?.addEventListener('click', async () => { if(confirm('Sair?')) await signOut(auth); });
-});
+$('#btn-logout')?.addEventListener('click', async () => { if(confirm('Sair?')) await signOut(auth); });
 $('#btn-logout-negado')?.addEventListener('click', () => signOut(auth));
 
 // ========================================
@@ -157,26 +155,19 @@ function atualizarBadges() {
 }
 
 // ========================================
-// NAVEGAÇÃO
+// NAVEGAÇÃO (abas horizontais, sem sidebar fixa)
 // ========================================
 $$('.nav-item').forEach(item => {
-  item.addEventListener('click', () => {
-    irPara(item.dataset.view);
-    if (window.innerWidth<=900) $('#sidebar').classList.remove('aberta');
-  });
+  item.addEventListener('click', () => irPara(item.dataset.view));
 });
-$('#btn-menu').addEventListener('click', () => $('#sidebar').classList.toggle('aberta'));
 $('#btn-atualizar').addEventListener('click', renderizarView);
 $('#modal-close').addEventListener('click', fecharModal);
 $('#modal-overlay').addEventListener('click', e => { if(e.target.id==='modal-overlay') fecharModal(); });
-
-const TITULOS = { overview:'Visão Geral', aprovacoes:'Aprovações', negocios:'Negócios', atividade:'Atividade' };
 
 function irPara(view) {
   state.viewAtual=view;
   $$('.nav-item').forEach(n=>n.classList.toggle('ativo',n.dataset.view===view));
   $$('.view').forEach(v=>v.classList.toggle('ativa',v.id===`view-${view}`));
-  $('#topbar-titulo').textContent=TITULOS[view]||'';
   renderizarView();
 }
 
@@ -310,6 +301,9 @@ async function aprovar(c) {
   await remove(ref(db,`cadastrosAguardando/${c.barbeariaId}`));
   await log('aprovou',c.barbeariaId,c.nomeBarbearia);
   toast(`${c.nomeBarbearia} aprovado! Trial até ${trialFim.toLocaleDateString('pt-BR')}`,'sucesso');
+
+  // Abre direto o modal de criar acesso, já preenchido com os dados do cadastro
+  setTimeout(() => abrirModalCriarAcesso(c.barbeariaId, { email: c.email, nome: c.nomeResponsavel }), 400);
 }
 
 async function recusar(c) {
@@ -324,6 +318,77 @@ async function recusar(c) {
 function wppBoasVindas(c) {
   const msg=encodeURIComponent(`Olá ${c.nomeResponsavel.split(' ')[0]}! 👋\n\nAqui é o Felipe, da 77 IS Tecnologia. Recebi seu cadastro de *${c.nomeBarbearia}* no 77 AgendaPro.\n\nVou liberar seu acesso agora. Em alguns minutos você pode entrar em:\n\n🔗 77-agendapro.vercel.app/admin\n📧 Email: ${c.email}\n\nQualquer dúvida é só chamar aqui! 🚀`);
   window.open(`https://wa.me/${c.telefone}?text=${msg}`,'_blank');
+}
+
+// ========================================
+// CRIAR ACESSO DO DONO (automatizado)
+// ========================================
+function abrirModalCriarAcesso(barbeariaId, sugestao = {}) {
+  const corpo = `
+    <p style="color:var(--text-dim);font-size:13px;margin-bottom:16px;line-height:1.5;">
+      Cria o login no Firebase e o vínculo com o negócio automaticamente — sem precisar abrir o Firebase Console.
+    </p>
+    <div class="input-grupo">
+      <label class="input-label">EMAIL DE LOGIN DO DONO</label>
+      <input type="email" id="criar-email" class="input" placeholder="dono@email.com" value="${sugestao.email || ''}">
+    </div>
+    <div class="input-grupo">
+      <label class="input-label">SENHA PROVISÓRIA</label>
+      <input type="text" id="criar-senha" class="input" placeholder="Mínimo 6 caracteres">
+    </div>
+    <div class="input-grupo">
+      <label class="input-label">NOME DO DONO</label>
+      <input type="text" id="criar-nome" class="input" placeholder="Nome completo" value="${sugestao.nome || ''}">
+    </div>
+    <div id="criar-acesso-erro" class="login-erro hidden"></div>
+  `;
+  const rodape = `
+    <button class="btn-acao-secundario" id="modal-cancel">Cancelar</button>
+    <button class="btn-acao" id="btn-confirmar-criar-acesso">Criar acesso</button>
+  `;
+  abrirModal(`Criar acesso do dono`, corpo, rodape);
+
+  $('#modal-cancel').addEventListener('click', fecharModal);
+  $('#btn-confirmar-criar-acesso').addEventListener('click', () => confirmarCriarAcesso(barbeariaId));
+}
+
+async function confirmarCriarAcesso(barbeariaId) {
+  const email = $('#criar-email').value.trim();
+  const senha = $('#criar-senha').value;
+  const nome = $('#criar-nome').value.trim();
+  const erroEl = $('#criar-acesso-erro');
+  erroEl.classList.add('hidden');
+
+  if (!email || !senha || senha.length < 6) {
+    erroEl.textContent = '⚠️ Preencha o email e uma senha de pelo menos 6 caracteres.';
+    erroEl.classList.remove('hidden');
+    return;
+  }
+
+  const btn = $('#btn-confirmar-criar-acesso');
+  btn.disabled = true;
+  btn.textContent = 'Criando...';
+
+  try {
+    const idToken = await state.user.getIdToken();
+    const resp = await fetch('/api/criar-usuario', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken, email, senha, nome, barbeariaId })
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.erro || 'Erro ao criar acesso');
+
+    fecharModal();
+    toast(`Acesso criado para ${nome || email}! 🔑`, 'sucesso');
+    const nomeNegocio = state.negocios[barbeariaId]?.info?.nome || barbeariaId;
+    await log('criou_acesso', barbeariaId, nomeNegocio);
+  } catch (err) {
+    erroEl.textContent = '❌ ' + err.message;
+    erroEl.classList.remove('hidden');
+    btn.disabled = false;
+    btn.textContent = 'Criar acesso';
+  }
 }
 
 // ========================================
@@ -382,6 +447,7 @@ function renderNegocios() {
         <div class="negocio-acoes">
           <button class="btn-mini" data-acao="ver">Ver detalhes</button>
           <button class="btn-mini" data-acao="link">📋 Copiar link</button>
+          <button class="btn-mini" data-acao="criar-acesso">🔑 Criar acesso</button>
           ${s==='ativa'||s==='trial'?'<button class="btn-mini perigo" data-acao="suspender">Suspender</button>':''}
           ${s==='suspensa'?'<button class="btn-mini" data-acao="reativar">Reativar</button>':''}
           ${s==='trial'?'<button class="btn-mini" data-acao="estender">+30d trial</button>':''}
@@ -403,6 +469,9 @@ async function acaoNegocio(id, acao) {
   const info=b.info||{};
   switch(acao) {
     case 'ver': modalDetalhes(id); break;
+    case 'criar-acesso':
+      abrirModalCriarAcesso(id, { email: '', nome: '' });
+      break;
     case 'link':
       navigator.clipboard.writeText(`${location.origin}/${id}`);
       toast('Link copiado!','sucesso'); break;
@@ -465,8 +534,8 @@ function renderAtividade() {
   const lista=Object.entries(state.logs).map(([id,l])=>({id,...l}))
     .sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp)).slice(0,50);
 
-  const icones={aprovou:'✓',recusou:'✕',suspendeu:'🚫',reativou:'🔄',estendeu_trial:'⏰',marcou_pagante:'💰'};
-  const labels={aprovou:'Aprovou cadastro',recusou:'Recusou cadastro',suspendeu:'Suspendeu',reativou:'Reativou',estendeu_trial:'Estendeu trial',marcou_pagante:'Marcou como pagante'};
+  const icones={aprovou:'✓',recusou:'✕',suspendeu:'🚫',reativou:'🔄',estendeu_trial:'⏰',marcou_pagante:'💰',criou_acesso:'🔑'};
+  const labels={aprovou:'Aprovou cadastro',recusou:'Recusou cadastro',suspendeu:'Suspendeu',reativou:'Reativou',estendeu_trial:'Estendeu trial',marcou_pagante:'Marcou como pagante',criou_acesso:'Criou acesso do dono'};
 
   $('#lista-atividade').innerHTML=lista.length===0
     ? '<div class="vazio-msg">Nenhuma atividade ainda</div>'
