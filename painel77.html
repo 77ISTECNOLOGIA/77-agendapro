@@ -59,37 +59,32 @@
   <!-- APP -->
   <div id="painel-app" class="hidden admin-app">
 
-    <aside class="sidebar" id="sidebar">
-      <div class="sidebar-header">
+    <!-- BARRA SUPERIOR -->
+    <header class="topbar-app">
+      <div class="topbar-brand">
         <div class="mini-logo">77</div>
         <div>
-          <div class="sidebar-titulo">77 <span class="accent">IS</span></div>
+          <div class="topbar-app-titulo">77 <span class="accent">IS</span></div>
           <div class="sidebar-barbearia">Super-Admin</div>
         </div>
       </div>
-      <nav class="sidebar-nav">
-        <button class="nav-item ativo" data-view="overview"><span class="nav-icon">📊</span><span class="nav-label">Visão Geral</span></button>
-        <button class="nav-item" data-view="aprovacoes"><span class="nav-icon">⏳</span><span class="nav-label">Aprovações</span><span class="nav-badge" id="badge-aprovacoes"></span></button>
-        <button class="nav-item" data-view="negocios"><span class="nav-icon">💈</span><span class="nav-label">Negócios</span></button>
-        <button class="nav-item" data-view="atividade"><span class="nav-icon">⚡</span><span class="nav-label">Atividade</span></button>
-      </nav>
-      <div class="sidebar-footer">
-        <div class="user-info">
-          <div class="user-avatar" id="user-avatar">?</div>
-          <div class="user-detalhes">
-            <div class="user-nome" id="user-nome">—</div>
-            <div class="user-email" id="user-email">—</div>
-          </div>
+      <div class="topbar-user">
+        <div class="user-avatar" id="user-avatar">?</div>
+        <div class="user-detalhes">
+          <div class="user-nome" id="user-nome">—</div>
+          <div class="user-email" id="user-email">—</div>
         </div>
         <button id="btn-logout" class="btn-logout">Sair</button>
       </div>
-    </aside>
-
-    <header class="topbar-mobile">
-      <button id="btn-menu" class="btn-icon">☰</button>
-      <div class="topbar-titulo" id="topbar-titulo">Visão Geral</div>
-      <button id="btn-logout-mobile" class="btn-icon">⏻</button>
     </header>
+
+    <!-- ABAS HORIZONTAIS -->
+    <nav class="tabs-nav">
+      <button class="nav-item ativo" data-view="overview"><span class="nav-icon">📊</span><span class="nav-label">Visão Geral</span></button>
+      <button class="nav-item" data-view="aprovacoes"><span class="nav-icon">⏳</span><span class="nav-label">Aprovações</span><span class="nav-badge" id="badge-aprovacoes"></span></button>
+      <button class="nav-item" data-view="negocios"><span class="nav-icon">💈</span><span class="nav-label">Negócios</span></button>
+      <button class="nav-item" data-view="atividade"><span class="nav-icon">⚡</span><span class="nav-label">Atividade</span></button>
+    </nav>
 
     <main class="main-content">
 
