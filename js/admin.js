@@ -986,7 +986,7 @@ function modalProfissional(id = null) {
   $('#modal-cancel').addEventListener('click', fecharModal);
   $('#modal-salvar').addEventListener('click', async () => {
     const horarioTrabalho = {};
-    $$('.horario-linha').forEach(linha => {
+    $$('#modal-body .horario-linha').forEach(linha => {
       const dia = linha.dataset.dia;
       horarioTrabalho[dia] = {
         ativo: linha.querySelector('.ht-ativo').checked,
