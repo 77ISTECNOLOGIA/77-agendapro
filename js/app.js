@@ -589,7 +589,7 @@ async function handleConfirmarAgendamento() {
     const agendamentoId = await criarAgendamento();
 
     // Notifica o dono do estabelecimento (não bloqueia o fluxo se falhar)
-    notificarNovoAgendamento().catch(err => console.error('Erro ao notificar:', err));
+    notificarNovoAgendamento(agendamentoId).catch(err => console.error('Erro ao notificar:', err));
 
     renderizarTelaSucesso(agendamentoId);
     mostrarTela(5);
@@ -663,28 +663,15 @@ async function criarAgendamento() {
 // ========================================
 // NOTIFICAÇÃO PUSH PRO DONO DO ESTABELECIMENTO
 // ========================================
-async function notificarNovoAgendamento() {
-  // Busca todos os tokens salvos (um por dispositivo onde o dono ativou notificações)
-  const snap = await get(ref(db, `barbearias/${state.slug}/info/fcmTokens`));
-  if (!snap.exists()) return; // dono não ativou notificações em nenhum dispositivo ainda
-
-  const tokens = Object.values(snap.val());
-  const prof = state.profissionais[state.profissionalId];
-  const servicos = state.servicosSelecionados.map(id => state.servicos[id].nome).join(' + ');
-  const diasSemanaAbrev = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
-  const dataStr = `${diasSemanaAbrev[state.dataSelecionada.getDay()]} ${formatarData(state.dataSelecionada)}`;
-  const corpo = `${state.cliente.nome.split(' ')[0]} — ${dataStr} às ${state.horarioSelecionado} — ${servicos} com ${prof.nome.split(' ')[0]}`;
-
-  // Envia para cada dispositivo em paralelo (falha em um não afeta os outros)
-  await Promise.allSettled(
-    tokens.map(token =>
-      fetch('/api/send-notification', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, corpo })
-      })
-    )
-  );
+// O servidor busca o agendamento e os tokens diretamente no banco — o
+// navegador só informa qual agendamento notificar, nunca o conteúdo da
+// mensagem nem o destino (ver api/send-notification.js).
+async function notificarNovoAgendamento(agendamentoId) {
+  await fetch('/api/send-notification', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ slug: state.slug, agendamentoId })
+  });
 }
 
 // ========================================
