@@ -3,6 +3,7 @@
 // ========================================
 
 import { db } from './firebase-config.js';
+import { escapeHtml } from './utils.js';
 import { aplicarTema, resetarTema } from './vocabulario.js';
 import {
   initializeApp,
@@ -464,11 +465,11 @@ function renderizarDashboard() {
   const proximo = proximos.find(a => horaParaMinutos(a.horario) >= minAgora) || proximos[0];
   if (proximo) {
     $('#proximo-cliente').innerHTML = `
-      <div class="proximo-avatar">${iniciais(proximo.clienteNome)}</div>
+      <div class="proximo-avatar">${escapeHtml(iniciais(proximo.clienteNome))}</div>
       <div class="proximo-info">
-        <div class="proximo-nome">${proximo.clienteNome}</div>
+        <div class="proximo-nome">${escapeHtml(proximo.clienteNome)}</div>
         <div class="proximo-detalhes">
-          ${proximo.profissionalNome} • ${(proximo.servicos || []).map(s => s.nome).join(' + ')}
+          ${escapeHtml(proximo.profissionalNome)} • ${(proximo.servicos || []).map(s => escapeHtml(s.nome)).join(' + ')}
         </div>
         <span class="proximo-horario">⏰ ${proximo.horario}</span>
       </div>
@@ -494,7 +495,7 @@ function renderizarDashboard() {
       <div class="fat-item">
         <div class="fat-info">
           <div class="fat-nome-row">
-            <span class="fat-nome">${nome}</span>
+            <span class="fat-nome">${escapeHtml(nome)}</span>
             <span class="fat-valor">${formatarMoeda(valor)}</span>
           </div>
           <div class="fat-bar-bg">
@@ -560,8 +561,8 @@ function abrirModalLembretes(pendentes) {
         <div class="lembrete-item" data-id="${a.id}" style="background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px; display: flex; gap: 12px; align-items: center;">
           <div style="font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; color: var(--accent); min-width: 50px;">${a.horario}</div>
           <div style="flex: 1; min-width: 0;">
-            <div style="font-weight: 600; font-size: 14px; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${a.clienteNome}</div>
-            <div style="font-size: 11px; color: var(--text-muted);">${(a.servicos || []).map(s => s.nome).join(' + ')}</div>
+            <div style="font-weight: 600; font-size: 14px; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(a.clienteNome)}</div>
+            <div style="font-size: 11px; color: var(--text-muted);">${(a.servicos || []).map(s => escapeHtml(s.nome)).join(' + ')}</div>
           </div>
           <button class="btn-mini" data-acao="lembrar" style="background: rgba(74, 222, 128, 0.1); border-color: rgba(74, 222, 128, 0.3); color: var(--success);">💬 Enviar</button>
         </div>
@@ -621,9 +622,9 @@ function renderizarCardAgendamento(a) {
     <div class="agendamento-card ${statusClass}" data-id="${a.id}">
       <div class="agendamento-hora">${a.horario}</div>
       <div class="agendamento-info">
-        <div class="agendamento-cliente">${lembreteBadge}${a.clienteNome}</div>
+        <div class="agendamento-cliente">${lembreteBadge}${escapeHtml(a.clienteNome)}</div>
         <div class="agendamento-detalhes">
-          ${a.profissionalNome} • ${(a.servicos || []).map(s => s.nome).join(' + ')}
+          ${escapeHtml(a.profissionalNome)} • ${(a.servicos || []).map(s => escapeHtml(s.nome)).join(' + ')}
         </div>
       </div>
       <div class="agendamento-valor">${formatarMoeda(a.valorTotal)}</div>
@@ -645,7 +646,7 @@ function renderizarAgenda() {
   filtroProf.innerHTML = '<option value="todos">Todos profissionais</option>' +
     Object.entries(state.profissionais)
       .filter(([id, p]) => p.ativo !== false)
-      .map(([id, p]) => `<option value="${id}">${p.nome}</option>`).join('');
+      .map(([id, p]) => `<option value="${id}">${escapeHtml(p.nome)}</option>`).join('');
   filtroProf.value = state.filtroProfissional || 'todos';
 
   // Filtra agendamentos da data
@@ -689,12 +690,12 @@ function abrirDetalhesAgendamento(id) {
 
   const corpo = `
     <div class="det-resumo">
-      <div class="det-linha"><span class="label">Cliente</span><span class="valor">${a.clienteNome}</span></div>
-      <div class="det-linha"><span class="label">WhatsApp</span><span class="valor">${formatarWhatsapp(a.clienteWhatsapp)}</span></div>
-      <div class="det-linha"><span class="label">Profissional</span><span class="valor">${a.profissionalNome}</span></div>
+      <div class="det-linha"><span class="label">Cliente</span><span class="valor">${escapeHtml(a.clienteNome)}</span></div>
+      <div class="det-linha"><span class="label">WhatsApp</span><span class="valor">${escapeHtml(formatarWhatsapp(a.clienteWhatsapp))}</span></div>
+      <div class="det-linha"><span class="label">Profissional</span><span class="valor">${escapeHtml(a.profissionalNome)}</span></div>
       <div class="det-linha"><span class="label">Data</span><span class="valor">${dataStr}</span></div>
       <div class="det-linha"><span class="label">Horário</span><span class="valor">${a.horario} — ${minutosParaHora(fimMin)}</span></div>
-      <div class="det-linha"><span class="label">Serviços</span><span class="valor">${(a.servicos || []).map(s => s.nome).join(' + ')}</span></div>
+      <div class="det-linha"><span class="label">Serviços</span><span class="valor">${(a.servicos || []).map(s => escapeHtml(s.nome)).join(' + ')}</span></div>
       <div class="det-linha"><span class="label">Total</span><span class="valor" style="color:var(--accent);font-family:'Bricolage Grotesque';font-weight:700;font-size:16px;">${formatarMoeda(a.valorTotal)}</span></div>
       <div class="det-linha"><span class="label">Status</span><span class="valor"><span class="agendamento-status status-${a.status}">${a.status}</span></span></div>
       ${a.status === 'confirmado' ? `<div class="det-linha"><span class="label">Lembrete</span><span class="valor">${lembreteStr}</span></div>` : ''}
@@ -780,9 +781,9 @@ function renderizarServicos() {
   $('#lista-servicos-admin').innerHTML = lista.map(s => `
     <div class="item-card" data-id="${s.id}">
       <div class="item-card-header">
-        <div class="item-card-emoji">${s.emoji || '✂️'}</div>
+        <div class="item-card-emoji">${escapeHtml(s.emoji || '✂️')}</div>
         <div style="flex:1;">
-          <div class="item-card-titulo">${s.nome}</div>
+          <div class="item-card-titulo">${escapeHtml(s.nome)}</div>
           <div class="item-card-sub">${s.duracaoMin} min • ${formatarMoeda(s.preco)}</div>
         </div>
         ${s.ativo === false ? '<span class="tag-inativo">Inativo</span>' : ''}
@@ -807,7 +808,7 @@ function modalServico(id = null) {
   const corpo = `
     <div class="input-grupo">
       <label class="input-label">NOME DO SERVIÇO</label>
-      <input type="text" id="serv-nome" class="input" value="${s.nome}" placeholder="Ex: Corte Masculino">
+      <input type="text" id="serv-nome" class="input" value="${escapeHtml(s.nome)}" placeholder="Ex: Corte Masculino">
     </div>
     <div class="form-grid">
       <div class="input-grupo">
@@ -821,7 +822,7 @@ function modalServico(id = null) {
     </div>
     <div class="input-grupo">
       <label class="input-label">EMOJI</label>
-      <input type="text" id="serv-emoji" class="input" value="${s.emoji || '✂️'}" maxlength="2">
+      <input type="text" id="serv-emoji" class="input" value="${escapeHtml(s.emoji || '✂️')}" maxlength="2">
       <small class="campo-help">Sugestões: ✂️ 🪒 💇 💆 💈 🧔 ✨</small>
     </div>
     <div class="input-grupo">
@@ -892,10 +893,10 @@ function renderizarProfissionais() {
     return `
       <div class="item-card" data-id="${p.id}">
         <div class="item-card-header">
-          <div class="item-card-emoji" style="background:linear-gradient(135deg,var(--accent),var(--accent-dark));color:#0a0a0a;font-family:'Bricolage Grotesque';font-weight:700;">${iniciais(p.nome)}</div>
+          <div class="item-card-emoji" style="background:linear-gradient(135deg,var(--accent),var(--accent-dark));color:#0a0a0a;font-family:'Bricolage Grotesque';font-weight:700;">${escapeHtml(iniciais(p.nome))}</div>
           <div style="flex:1;">
-            <div class="item-card-titulo">${p.nome}</div>
-            <div class="item-card-sub">${p.especialidade || 'Profissional'}</div>
+            <div class="item-card-titulo">${escapeHtml(p.nome)}</div>
+            <div class="item-card-sub">${escapeHtml(p.especialidade || 'Profissional')}</div>
           </div>
           ${p.ativo === false ? '<span class="tag-inativo">Inativo</span>' : ''}
         </div>
@@ -939,12 +940,12 @@ function modalProfissional(id = null) {
   const corpo = `
     <div class="input-grupo">
       <label class="input-label">NOME</label>
-      <input type="text" id="prof-nome" class="input" value="${p.nome}" placeholder="Nome completo">
+      <input type="text" id="prof-nome" class="input" value="${escapeHtml(p.nome)}" placeholder="Nome completo">
     </div>
     <div class="form-grid">
       <div class="input-grupo">
         <label class="input-label">ESPECIALIDADE</label>
-        <input type="text" id="prof-especialidade" class="input" value="${p.especialidade || ''}" placeholder="Ex: Clássico, Moderno">
+        <input type="text" id="prof-especialidade" class="input" value="${escapeHtml(p.especialidade || '')}" placeholder="Ex: Clássico, Moderno">
       </div>
       <div class="input-grupo">
         <label class="input-label">COMISSÃO (%)</label>
@@ -1056,10 +1057,10 @@ function renderizarClientes() {
     return `
       <div class="item-card">
         <div class="item-card-header">
-          <div class="item-card-emoji" style="background:var(--accent);color:#0a0a0a;font-family:'Bricolage Grotesque';font-weight:700;">${iniciais(c.nome)}</div>
+          <div class="item-card-emoji" style="background:var(--accent);color:#0a0a0a;font-family:'Bricolage Grotesque';font-weight:700;">${escapeHtml(iniciais(c.nome))}</div>
           <div style="flex:1;">
-            <div class="item-card-titulo">${c.nome}</div>
-            <div class="item-card-sub">${formatarWhatsapp(c.whatsapp)}</div>
+            <div class="item-card-titulo">${escapeHtml(c.nome)}</div>
+            <div class="item-card-sub">${escapeHtml(formatarWhatsapp(c.whatsapp))}</div>
           </div>
         </div>
         <div class="item-card-stats">
@@ -1073,7 +1074,7 @@ function renderizarClientes() {
           </div>
         </div>
         <div class="item-card-actions">
-          <button class="btn-mini" onclick="window.open('https://wa.me/${c.whatsapp}', '_blank')">💬 Conversar</button>
+          <button class="btn-mini" onclick="window.open('https://wa.me/${escapeHtml(c.whatsapp)}', '_blank')">💬 Conversar</button>
         </div>
       </div>
     `;

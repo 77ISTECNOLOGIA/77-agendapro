@@ -3,6 +3,7 @@
 // ========================================
 
 import { db } from './firebase-config.js';
+import { escapeHtml } from './utils.js';
 import { getApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
   getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged
@@ -213,7 +214,7 @@ function renderOverview() {
     ? '<div class="vazio-msg">Nenhum vencendo nos próximos 7 dias</div>'
     : trials.map(b=>`
       <div class="vencimento-item">
-        <div><div class="vencimento-nome">${b.nome||b.id}</div><div class="vencimento-detalhes">${b.bairro||b.cidade||'—'}</div></div>
+        <div><div class="vencimento-nome">${escapeHtml(b.nome||b.id)}</div><div class="vencimento-detalhes">${escapeHtml(b.bairro||b.cidade||'—')}</div></div>
         <span class="vencimento-dias ${b.dias<=2?'urgente':''}">${b.dias===0?'HOJE':b.dias+'d'}</span>
       </div>`).join('');
 
@@ -229,7 +230,7 @@ function renderOverview() {
     ? '<div class="vazio-msg">Todos ativos 🎉</div>'
     : inativas.map(b=>{
         const dias=Math.floor((Date.now()-b.ultimoAg)/86400000);
-        return `<div class="inativa-item"><div><div class="inativa-nome">${b.nome||b.id}</div><div class="inativa-detalhes">sem agendar há ${dias} dias</div></div></div>`;
+        return `<div class="inativa-item"><div><div class="inativa-nome">${escapeHtml(b.nome||b.id)}</div><div class="inativa-detalhes">sem agendar há ${dias} dias</div></div></div>`;
       }).join('');
 
   // Status grid
@@ -265,19 +266,19 @@ function renderAprovacoes() {
   const label = t => TIPO_LABEL[t]||'Outro';
 
   $('#lista-aprovacoes').innerHTML=lista.map(c=>`
-    <div class="aprovacao-card" data-id="${c.barbeariaId}">
+    <div class="aprovacao-card" data-id="${escapeHtml(c.barbeariaId)}">
       <div class="header-linha">
         <div>
-          <div class="aprovacao-nome">${emoji(c.tipoNegocio)} ${c.nomeBarbearia}</div>
-          <div class="aprovacao-resp">${c.nomeResponsavel} · ${label(c.tipoNegocio)}</div>
+          <div class="aprovacao-nome">${emoji(c.tipoNegocio)} ${escapeHtml(c.nomeBarbearia)}</div>
+          <div class="aprovacao-resp">${escapeHtml(c.nomeResponsavel)} · ${label(c.tipoNegocio)}</div>
         </div>
         <div class="aprovacao-tempo">${tempoRel(c.criadoEm)}</div>
       </div>
       <div class="aprovacao-detalhes">
-        <div class="det-mini"><span class="label">EMAIL</span><span class="valor">${c.email}</span></div>
-        <div class="det-mini"><span class="label">WHATSAPP</span><span class="valor">${fmtWhats(c.telefone)}</span></div>
-        <div class="det-mini"><span class="label">CIDADE/BAIRRO</span><span class="valor">${c.cidade||'—'}${c.bairro?' / '+c.bairro:''}</span></div>
-        <div class="det-mini"><span class="label">LINK</span><span class="valor" style="font-family:monospace;">/${c.barbeariaId}</span></div>
+        <div class="det-mini"><span class="label">EMAIL</span><span class="valor">${escapeHtml(c.email)}</span></div>
+        <div class="det-mini"><span class="label">WHATSAPP</span><span class="valor">${escapeHtml(fmtWhats(c.telefone))}</span></div>
+        <div class="det-mini"><span class="label">CIDADE/BAIRRO</span><span class="valor">${escapeHtml(c.cidade||'—')}${c.bairro?' / '+escapeHtml(c.bairro):''}</span></div>
+        <div class="det-mini"><span class="label">LINK</span><span class="valor" style="font-family:monospace;">/${escapeHtml(c.barbeariaId)}</span></div>
       </div>
       <div class="aprovacao-acoes">
         <button class="btn-acao" data-acao="aprovar">✓ Aprovar (30d trial)</button>
@@ -330,7 +331,7 @@ function abrirModalCriarAcesso(barbeariaId, sugestao = {}) {
     </p>
     <div class="input-grupo">
       <label class="input-label">EMAIL DE LOGIN DO DONO</label>
-      <input type="email" id="criar-email" class="input" placeholder="dono@email.com" value="${sugestao.email || ''}">
+      <input type="email" id="criar-email" class="input" placeholder="dono@email.com" value="${escapeHtml(sugestao.email || '')}">
     </div>
     <div class="input-grupo">
       <label class="input-label">SENHA PROVISÓRIA</label>
@@ -338,7 +339,7 @@ function abrirModalCriarAcesso(barbeariaId, sugestao = {}) {
     </div>
     <div class="input-grupo">
       <label class="input-label">NOME DO DONO</label>
-      <input type="text" id="criar-nome" class="input" placeholder="Nome completo" value="${sugestao.nome || ''}">
+      <input type="text" id="criar-nome" class="input" placeholder="Nome completo" value="${escapeHtml(sugestao.nome || '')}">
     </div>
     <div id="criar-acesso-erro" class="login-erro hidden"></div>
   `;
@@ -429,14 +430,14 @@ function renderNegocios() {
       if (d!==null) extra=d<0?`<div style="font-size:11px;color:var(--danger);margin-bottom:6px;">Trial expirado há ${Math.abs(d)}d</div>`:d===0?`<div style="font-size:11px;color:var(--danger);font-weight:600;margin-bottom:6px;">Trial vence HOJE</div>`:`<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">Trial vence em ${d}d</div>`;
     }
     return `
-      <div class="negocio-card" data-id="${b.id}">
+      <div class="negocio-card" data-id="${escapeHtml(b.id)}">
         <div class="negocio-card-header">
           <div style="flex:1;min-width:0;">
-            <div class="negocio-nome">${emoji} ${b.nome||b.id}</div>
-            <div class="negocio-slug">/${b.id}</div>
+            <div class="negocio-nome">${emoji} ${escapeHtml(b.nome||b.id)}</div>
+            <div class="negocio-slug">/${escapeHtml(b.id)}</div>
             <div class="negocio-tipo">${tipo}</div>
           </div>
-          <span class="tag-status tag-${s}">${statusLabel[s]||s}</span>
+          <span class="tag-status tag-${s}">${escapeHtml(statusLabel[s]||s)}</span>
         </div>
         ${extra}
         <div class="negocio-stats">
@@ -508,10 +509,10 @@ function modalDetalhes(id) {
     <div class="modal-secao">
       <h4>Dados Gerais</h4>
       <div class="modal-info-row"><span class="label">Tipo</span><span class="valor">${TIPO_LABEL[info.tipoNegocio]||'—'}</span></div>
-      <div class="modal-info-row"><span class="label">Slug</span><span class="valor" style="font-family:monospace;">/${id}</span></div>
-      <div class="modal-info-row"><span class="label">Endereço</span><span class="valor">${info.bairro||'—'}${info.cidade?', '+info.cidade:''}</span></div>
-      <div class="modal-info-row"><span class="label">WhatsApp</span><span class="valor">${fmtWhats(info.telefone)}</span></div>
-      <div class="modal-info-row"><span class="label">Status</span><span class="valor">${info.status||'—'}</span></div>
+      <div class="modal-info-row"><span class="label">Slug</span><span class="valor" style="font-family:monospace;">/${escapeHtml(id)}</span></div>
+      <div class="modal-info-row"><span class="label">Endereço</span><span class="valor">${escapeHtml(info.bairro||'—')}${info.cidade?', '+escapeHtml(info.cidade):''}</span></div>
+      <div class="modal-info-row"><span class="label">WhatsApp</span><span class="valor">${escapeHtml(fmtWhats(info.telefone))}</span></div>
+      <div class="modal-info-row"><span class="label">Status</span><span class="valor">${escapeHtml(info.status||'—')}</span></div>
       ${info.trialFim?`<div class="modal-info-row"><span class="label">Trial até</span><span class="valor">${new Date(info.trialFim).toLocaleDateString('pt-BR')}</span></div>`:''}
       <div class="modal-info-row"><span class="label">Cadastrado em</span><span class="valor">${info.criadoEm?new Date(info.criadoEm).toLocaleDateString('pt-BR'):'—'}</span></div>
     </div>
@@ -523,7 +524,7 @@ function modalDetalhes(id) {
       <div class="modal-info-row"><span class="label">Clientes</span><span class="valor">${clientes}</span></div>
       <div class="modal-info-row"><span class="label">Último agendamento</span><span class="valor">${ulAg?tempoRel(new Date(ulAg).toISOString()):'nenhum'}</span></div>
     </div>
-    <a href="/${id}" target="_blank" class="btn-acao-secundario" style="display:block;text-decoration:none;text-align:center;margin-top:4px;">🔗 Abrir página pública</a>
+    <a href="/${escapeHtml(id)}" target="_blank" class="btn-acao-secundario" style="display:block;text-decoration:none;text-align:center;margin-top:4px;">🔗 Abrir página pública</a>
   `);
 }
 
@@ -543,8 +544,8 @@ function renderAtividade() {
       <div class="atividade-item">
         <div class="atividade-icone">${icones[l.acao]||'⚡'}</div>
         <div style="flex:1;min-width:0;">
-          <div class="atividade-acao">${labels[l.acao]||l.acao} — <strong>${l.alvoNome}</strong></div>
-          <div class="atividade-meta">por ${l.adminNome||'admin'}</div>
+          <div class="atividade-acao">${escapeHtml(labels[l.acao]||l.acao)} — <strong>${escapeHtml(l.alvoNome)}</strong></div>
+          <div class="atividade-meta">por ${escapeHtml(l.adminNome||'admin')}</div>
         </div>
         <div class="atividade-tempo">${tempoRel(l.timestamp)}</div>
       </div>`).join('');

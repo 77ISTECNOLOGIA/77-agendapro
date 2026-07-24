@@ -4,6 +4,7 @@
 
 import { db } from './firebase-config.js';
 import { aplicarTema } from './vocabulario.js';
+import { escapeHtml } from './utils.js';
 import {
   ref,
   get,
@@ -307,9 +308,9 @@ function renderizarTela2() {
     card.className = `servico-card ${selecionado ? 'selecionado' : ''}`;
     card.dataset.id = id;
     card.innerHTML = `
-      <div class="servico-foto">${s.emoji || '✂️'}</div>
+      <div class="servico-foto">${escapeHtml(s.emoji) || '✂️'}</div>
       <div class="servico-info">
-        <div class="servico-nome">${s.nome}</div>
+        <div class="servico-nome">${escapeHtml(s.nome)}</div>
         <div class="servico-detalhes">${s.duracaoMin} min • <span class="servico-preco">${formatarMoeda(s.preco)}</span></div>
       </div>
       <div class="check-circle">✓</div>
@@ -385,9 +386,9 @@ function renderizarProfissionais() {
     card.className = 'prof-card';
     card.dataset.id = id;
     card.innerHTML = `
-      <div class="prof-foto" style="background: linear-gradient(135deg, var(--accent), var(--accent-dark));">${iniciais}</div>
-      <div class="prof-nome">${p.nome.split(' ')[0]}</div>
-      <div class="prof-spec">${p.especialidade || 'Profissional'}</div>
+      <div class="prof-foto" style="background: linear-gradient(135deg, var(--accent), var(--accent-dark));">${escapeHtml(iniciais)}</div>
+      <div class="prof-nome">${escapeHtml(p.nome.split(' ')[0])}</div>
+      <div class="prof-spec">${escapeHtml(p.especialidade) || 'Profissional'}</div>
     `;
     card.addEventListener('click', () => selecionarProfissional(id));
     container.appendChild(card);
@@ -554,11 +555,11 @@ function renderizarResumoFinal() {
 
   const container = $('#resumo-final');
   container.innerHTML = `
-    <div class="resumo-linha"><span class="label">Cliente</span><span class="valor">${state.cliente.nome}</span></div>
-    <div class="resumo-linha"><span class="label">Profissional</span><span class="valor">${prof.nome}</span></div>
+    <div class="resumo-linha"><span class="label">Cliente</span><span class="valor">${escapeHtml(state.cliente.nome)}</span></div>
+    <div class="resumo-linha"><span class="label">Profissional</span><span class="valor">${escapeHtml(prof.nome)}</span></div>
     <div class="resumo-linha"><span class="label">Data</span><span class="valor">${dataStr}</span></div>
     <div class="resumo-linha"><span class="label">Horário</span><span class="valor">${state.horarioSelecionado} — ${horaFim}</span></div>
-    <div class="resumo-linha"><span class="label">Serviços</span><span class="valor">${servicos.map(s => s.nome).join(' + ')}</span></div>
+    <div class="resumo-linha"><span class="label">Serviços</span><span class="valor">${servicos.map(s => escapeHtml(s.nome)).join(' + ')}</span></div>
     <div class="resumo-linha destaque"><span class="label">Total</span><span class="valor">${formatarMoeda(total)}</span></div>
   `;
 }
@@ -687,14 +688,14 @@ function renderizarTelaSucesso(agendamentoId) {
   const dataStr = `${diasSemana[data.getDay()]}, ${formatarData(data)}`;
   const fimMin = horaParaMinutos(state.horarioSelecionado) + duracao;
 
-  $('#confirm-sub-msg').innerHTML = `<strong>${state.cliente.nome.split(' ')[0]}</strong>, seu horário está confirmado.`;
+  $('#confirm-sub-msg').innerHTML = `<strong>${escapeHtml(state.cliente.nome.split(' ')[0])}</strong>, seu horário está confirmado.`;
 
   $('#resumo-sucesso').innerHTML = `
-    <div class="resumo-linha"><span class="label">Barbearia</span><span class="valor">${state.barbearia.nome}</span></div>
-    <div class="resumo-linha"><span class="label">Profissional</span><span class="valor">${prof.nome}</span></div>
+    <div class="resumo-linha"><span class="label">Barbearia</span><span class="valor">${escapeHtml(state.barbearia.nome)}</span></div>
+    <div class="resumo-linha"><span class="label">Profissional</span><span class="valor">${escapeHtml(prof.nome)}</span></div>
     <div class="resumo-linha"><span class="label">Data</span><span class="valor">${dataStr}</span></div>
     <div class="resumo-linha"><span class="label">Horário</span><span class="valor">${state.horarioSelecionado} — ${minutosParaHora(fimMin)}</span></div>
-    <div class="resumo-linha"><span class="label">Serviços</span><span class="valor">${servicos.map(s => s.nome).join(' + ')}</span></div>
+    <div class="resumo-linha"><span class="label">Serviços</span><span class="valor">${servicos.map(s => escapeHtml(s.nome)).join(' + ')}</span></div>
     <div class="resumo-linha destaque"><span class="label">Total</span><span class="valor">${formatarMoeda(total)}</span></div>
   `;
 
