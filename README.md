@@ -10,72 +10,57 @@ O 77 AgendaPro é um sistema de marcação de horários focado em barbearias aut
 
 ---
 
-## 📦 O que está na Fase 1
+## 📦 Estado atual (Fases 1-4 já construídas)
 
-✅ Área pública (cliente final agenda em 4 passos)
+✅ Área pública (cliente final agenda em 4 passos) — `index.html` / `js/app.js`
 ✅ Identificação automática de cliente recorrente (via WhatsApp)
-✅ Cálculo dinâmico de horários disponíveis (considerando duração dos serviços, agendamentos existentes, folgas e horário de trabalho de cada profissional)
-✅ Re-validação anti-conflito no momento da confirmação (evita 2 clientes pegarem o mesmo horário)
-✅ Estrutura Firebase Realtime Database completa
-✅ Deploy via Vercel com pretty URLs (`77agendapro.vercel.app/barbearia-do-joao`)
+✅ Cálculo dinâmico de horários disponíveis (duração dos serviços, agendamentos existentes, folgas, horário de trabalho por profissional)
+✅ Re-validação anti-conflito no momento da confirmação
+✅ Painel do dono do negócio — `painel77.html` / `js/painel77.js`: dashboard, agenda, CRUD de serviços/profissionais
+✅ Auto-cadastro público de novo negócio — `cadastro.html` / `js/cadastro.js`
+✅ Painel administrativo interno da 77 IS — `admin.html` / `js/admin.js`: aprovação de cadastros, gestão de trials/assinaturas, todos os negócios
+✅ Notificação push (Web Push/FCM) pro dono a cada novo agendamento — `api/send-notification.js`
+✅ Onboarding de dono via função serverless — `api/criar-usuario.js`
+✅ Regras do Realtime Database versionadas (`database.rules.json`) e deployadas
 
 ---
 
-## 🚀 Setup completo (passo a passo)
+## 🔐 Segurança e autenticação
 
-### 1️⃣ Criar projeto no Firebase
+- **Cliente final:** sem login, fluxo público.
+- **Dono do negócio:** Firebase Authentication (email/senha), vínculo `usuarios/{uid} → { barbeariaId, role: 'owner' }`.
+- **Admin interno 77 IS:** Firebase Authentication, vínculo `admins77/{uid} → { role: 'super_admin' }`.
+- Regras do Realtime Database (`database.rules.json`) restringem escrita por caminho: `info`/`servicos`/`profissionais` só pelo dono ou super-admin; `agendamentos` criação livre (cliente anônimo) mas edição só pelo dono; `clientes` só o campo específico do WhatsApp de quem está agendando.
+- `api/send-notification.js` nunca recebe token/corpo prontos do navegador — busca o agendamento real no banco via Admin SDK e monta a notificação a partir de dado confiável.
 
-1. Acesse [console.firebase.google.com](https://console.firebase.google.com)
-2. Clique em **"Criar projeto"** → nome `77-agendapro`
-3. Pode desativar o Google Analytics (não precisa nesta fase)
-4. No menu lateral: **Build → Realtime Database → Criar banco de dados**
-5. Localização: `us-central1` (ou mais próxima)
-6. Comece em **"Modo de teste"** (deixaremos as regras certas mais tarde)
+---
 
-### 2️⃣ Pegar credenciais do Firebase
+## 🚀 Setup local (git + Claude Code)
 
-1. Engrenagem no topo → **"Configurações do projeto"** → aba **"Geral"**
-2. Role até **"Seus apps"** → clique em **"Adicionar app"** → ícone Web (`</>`)
-3. Apelido: `77-agendapro-web` → clique em **"Registrar app"**
-4. Copie o objeto `firebaseConfig` que aparecer
-5. Cole em `js/firebase-config.js` substituindo os placeholders
+Workflow local via git — não mais só pela interface web do GitHub.
 
-### 3️⃣ Popular o banco com dados de teste
-
-1. No console do Firebase: **Realtime Database** → aba **"Dados"**
-2. Clique nos 3 pontinhos (`⋮`) → **"Importar JSON"**
-3. Selecione o arquivo `seed-data.json` deste repositório
-4. Clique em **"Importar"**
-
-Pronto! Uma barbearia de teste chamada `barbearia-do-joao` foi criada com 4 serviços e 2 profissionais.
-
-### 4️⃣ Subir pro GitHub
+### 1️⃣ Clonar e configurar
 
 ```bash
+git clone https://github.com/77ISTECNOLOGIA/77-agendapro.git
 cd 77-agendapro
-git init
-git add .
-git commit -m "Fase 1: área pública do 77 AgendaPro"
-git branch -M main
-git remote add origin https://github.com/SEU-USUARIO/77-agendapro.git
-git push -u origin main
 ```
 
-### 5️⃣ Deploy no Vercel
+Credenciais do Firebase (client-side) já estão em `js/firebase-config.js` — projeto `agendapro-179cb`.
 
-1. Acesse [vercel.com](https://vercel.com) → **"Add New" → "Project"**
-2. Importe o repositório `77-agendapro` do GitHub
-3. **Framework Preset:** "Other" (deixa padrão mesmo)
-4. **Root directory:** deixa em branco
-5. Clique em **"Deploy"**
+Para rodar as funções serverless (`api/*.js`) localmente ou fazer deploy, as env vars `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` (credenciais do Admin SDK) já estão configuradas no projeto Vercel.
 
-Em ~30 segundos seu site estará no ar em `77-agendapro.vercel.app`.
+### 2️⃣ Deploy
 
-### 6️⃣ Testar
+Deploy automático via Vercel a cada push na branch `main`. Alterações nas regras do banco exigem deploy manual:
 
-Acesse: **`https://77-agendapro.vercel.app/barbearia-do-joao`**
+```bash
+firebase deploy --only database --project agendapro-179cb
+```
 
-Você verá a área pública funcionando. Faça um agendamento de teste — ele aparecerá no Firebase Realtime Database em `barbearias/barbearia-do-joao/agendamentos`.
+### 3️⃣ Testar
+
+Produção: `https://77-agendapro.vercel.app/barbearia-do-joao` (negócio de teste/seed, populado via `seed-data.json`).
 
 ---
 
@@ -83,16 +68,26 @@ Você verá a área pública funcionando. Faça um agendamento de teste — ele 
 
 ```
 77-agendapro/
-├── index.html              # SPA com as 4 telas
+├── index.html               # Área pública (SPA, 4 telas)
+├── painel77.html            # Painel do dono do negócio
+├── admin.html                # Painel interno 77 IS (super-admin)
+├── cadastro.html             # Auto-cadastro de novo negócio
 ├── css/
-│   └── style.css           # Estilos (dark mode + verde-limão)
 ├── js/
-│   ├── firebase-config.js  # ⚠️ EDITAR: credenciais do Firebase
-│   └── app.js              # Toda a lógica
-├── assets/                 # Imagens, logos (vazio por enquanto)
-├── seed-data.json          # Dados iniciais pra importar no Firebase
-├── vercel.json             # Configuração de rotas
-├── .gitignore
+│   ├── firebase-config.js    # Credenciais do Firebase (client-side)
+│   ├── utils.js               # escapeHtml() e utilitários compartilhados
+│   ├── app.js                  # Lógica da área pública
+│   ├── painel77.js             # Lógica do painel do dono
+│   ├── admin.js                 # Lógica do painel interno 77 IS
+│   └── cadastro.js              # Lógica do auto-cadastro
+├── api/
+│   ├── criar-usuario.js       # Serverless: cria acesso do dono (Admin SDK)
+│   ├── send-notification.js   # Serverless: notificação push (Admin SDK)
+│   └── agendamentos-ocupados.js # Serverless: ocupação de horários sem PII
+├── database.rules.json        # Regras do Realtime Database (versionadas)
+├── firebase.json
+├── seed-data.json             # Dados iniciais do negócio de teste
+├── vercel.json
 └── README.md
 ```
 
@@ -101,31 +96,28 @@ Você verá a área pública funcionando. Faça um agendamento de teste — ele 
 ## 🗄️ Estrutura do banco (Firebase Realtime Database)
 
 ```
+admins77/
+└── [uid]: { role: 'super_admin' }
+
+usuarios/
+└── [uid]: { email, nome, barbeariaId, role: 'owner', criadoEm, precisaOnboarding }
+
+cadastrosAguardando/
+└── [slug]: { barbeariaId, nomeBarbearia, nomeResponsavel, email, telefone, ... }
+
+logs77/
+└── [id_auto]: { acao, alvoId, alvoNome, admin, adminNome, timestamp }
+
 barbearias/
 └── [slug-da-barbearia]/
-    ├── info: { nome, slug, endereco, telefone, horarioFuncionamento, plano, trialFim }
-    ├── servicos/
-    │   └── [id_servico]: { nome, duracaoMin, preco, emoji, ativo, ordem }
-    ├── profissionais/
-    │   └── [id_prof]: { nome, especialidade, comissao, ativo, horarioTrabalho, bloqueios }
-    ├── clientes/
-    │   └── [whatsapp_normalizado]: { nome, primeiraVisita, totalAgendamentos, ultimoAgendamento }
-    └── agendamentos/
-        └── [id_auto]: { clienteWhatsapp, clienteNome, profissionalId, servicos[], dataChave, horario, duracaoMin, valorTotal, status, criadoEm }
+    ├── info: { nome, slug, endereco, telefone, horarioFuncionamento, plano, trialFim, status, fcmTokens }
+    ├── servicos/[id_servico]: { nome, duracaoMin, preco, emoji, ativo, ordem }
+    ├── profissionais/[id_prof]: { nome, especialidade, comissao, ativo, horarioTrabalho, bloqueios }
+    ├── clientes/[whatsapp_normalizado]: { nome, primeiraVisita, totalAgendamentos, ultimoAgendamento }
+    └── agendamentos/[id_auto]: { clienteWhatsapp, clienteNome, profissionalId, profissionalNome, servicos[], dataChave, horario, duracaoMin, valorTotal, status, criadoEm, notificacaoEnviada }
 ```
 
-**Nota sobre clientes:** a chave é o WhatsApp normalizado (DDI 55 + DDD + número, sem formatação). Isso permite buscar clientes recorrentes em O(1).
-
----
-
-## 🔧 Como adicionar uma nova barbearia (manual nesta fase)
-
-Enquanto não temos o painel admin (Fase 2), é manual no Firebase:
-
-1. Acesse o Firebase → Realtime Database → Dados
-2. Em `barbearias`, adicione um novo node com o slug (ex: `barbearia-vitoria`)
-3. Replique a estrutura do `barbearia-do-joao` ajustando os dados
-4. O link público será automaticamente `77-agendapro.vercel.app/barbearia-vitoria`
+**Nota sobre clientes:** a chave é o WhatsApp normalizado (DDI 55 + DDD + número, sem formatação) — busca de cliente recorrente em O(1).
 
 ---
 
@@ -135,14 +127,6 @@ Enquanto não temos o painel admin (Fase 2), é manual no Firebase:
 - **Fundo:** `#0A0A0A` (preto profundo)
 - **Tipografia display:** Bricolage Grotesque
 - **Tipografia corpo:** Geist
-
----
-
-## 📅 Próximas fases
-
-- **Fase 2:** Painel do barbeiro (dashboard, agenda, CRUD de serviços/profissionais)
-- **Fase 3:** Lembretes WhatsApp (modelo híbrido - 1 clique manual + cadastro recorrente avançado)
-- **Fase 4:** Painel administrativo 77 IS (gestão de trials, assinaturas)
 
 ---
 
@@ -156,6 +140,9 @@ Enquanto não temos o painel admin (Fase 2), é manual no Firebase:
 
 **Horários não aparecem**
 → Verifique se o profissional tem `horarioTrabalho` configurado para o dia da semana selecionado.
+
+**Notificação push não chega**
+→ Confirme que o dono ativou notificações no navegador (token salvo em `barbearias/{slug}/info/fcmTokens`) e que as env vars do Admin SDK estão configuradas na Vercel.
 
 ---
 
