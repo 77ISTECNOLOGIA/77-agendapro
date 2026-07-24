@@ -28,18 +28,36 @@
     },
 
     "barbearias": {
+      // Painel interno 77IS (painel77.js) le a colecao inteira de uma vez
+      // pra listar todos os negocios - só quem esta em admins77.
+      ".read": "auth != null && root.child('admins77').child(auth.uid).exists()",
+
       "$slug": {
-        ".read": true,
+        // Leitura do no inteiro (info+servicos+profissionais+agendamentos+
+        // clientes, tudo de uma vez) so pro dono/admin autenticado - e o que
+        // o painel do dono (admin.js) ja faz hoje. Visitante anonimo nao
+        // ganha isso; só os sub-nos explicitamente marcados .read:true abaixo.
+        ".read": "auth != null && (root.child('usuarios').child(auth.uid).child('barbeariaId').val() === $slug || root.child('admins77').child(auth.uid).exists())",
+
+        // Auto-cadastro (cadastro.js) cria o negocio inteiro numa unica
+        // chamada, logo apos autenticar o novo dono (usuarios/{uid} so e
+        // criado DEPOIS desta escrita, entao nao da pra exigir o vinculo
+        // barbeariaId aqui ainda) - só precisa estar autenticado e o slug
+        // ainda nao existir.
+        ".write": "!data.exists() && auth != null",
 
         "info": {
+          ".read": true,
           ".write": "auth != null && (root.child('usuarios').child(auth.uid).child('barbeariaId').val() === $slug || root.child('admins77').child(auth.uid).exists())"
         },
 
         "servicos": {
+          ".read": true,
           ".write": "auth != null && (root.child('usuarios').child(auth.uid).child('barbeariaId').val() === $slug || root.child('admins77').child(auth.uid).exists())"
         },
 
         "profissionais": {
+          ".read": true,
           ".write": "auth != null && (root.child('usuarios').child(auth.uid).child('barbeariaId').val() === $slug || root.child('admins77').child(auth.uid).exists())"
         },
 
@@ -51,6 +69,10 @@
 
         "clientes": {
           "$whatsapp": {
+            // Leitura pontual liberada: o visitante anonimo so consegue ler
+            // o proprio registro se souber a chave exata (o whatsapp dele
+            // mesmo, ja normalizado) - nao existe forma de listar todos.
+            ".read": true,
             ".write": true,
             ".validate": "newData.hasChildren(['nome','whatsapp'])"
           }

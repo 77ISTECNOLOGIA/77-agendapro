@@ -152,16 +152,37 @@ async function inicializar() {
 }
 
 async function carregarBarbearia(slug) {
-  const snap = await get(ref(db, `barbearias/${slug}`));
-  if (!snap.exists()) return false;
+  // Lê info/servicos/profissionais separadamente (não o nó da barbearia
+  // inteiro) - agendamentos e clientes de outras pessoas contêm nome e
+  // WhatsApp e não devem ser lidos pelo visitante anônimo. A ocupação de
+  // horários vem de /api/agendamentos-ocupados, sem esses dados.
+  const [infoSnap, servicosSnap, profissionaisSnap] = await Promise.all([
+    get(ref(db, `barbearias/${slug}/info`)),
+    get(ref(db, `barbearias/${slug}/servicos`)),
+    get(ref(db, `barbearias/${slug}/profissionais`)),
+  ]);
 
-  const data = snap.val();
-  state.barbearia = data.info || {};
-  state.servicos = data.servicos || {};
-  state.profissionais = data.profissionais || {};
-  state.agendamentos = data.agendamentos || {};
+  if (!infoSnap.exists()) return false;
+
+  state.barbearia = infoSnap.val() || {};
+  state.servicos = servicosSnap.val() || {};
+  state.profissionais = profissionaisSnap.val() || {};
+  state.agendamentos = await carregarOcupacao(slug);
 
   return true;
+}
+
+async function carregarOcupacao(slug) {
+  try {
+    const resp = await fetch(`/api/agendamentos-ocupados?slug=${encodeURIComponent(slug)}`);
+    if (!resp.ok) return {};
+    const { ocupados } = await resp.json();
+    // calcularHorariosDisponiveis() só usa Object.values(...), a chave não importa
+    return ocupados || {};
+  } catch (err) {
+    console.error('Erro ao carregar ocupação de horários:', err);
+    return {};
+  }
 }
 
 function mostrarApp() {
@@ -604,8 +625,7 @@ async function handleConfirmarAgendamento() {
 }
 
 async function recarregarAgendamentos() {
-  const snap = await get(ref(db, `barbearias/${state.slug}/agendamentos`));
-  state.agendamentos = snap.exists() ? snap.val() : {};
+  state.agendamentos = await carregarOcupacao(state.slug);
 }
 
 async function salvarCliente() {

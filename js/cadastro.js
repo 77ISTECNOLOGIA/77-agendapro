@@ -128,8 +128,8 @@ async function handleCadastro(e) {
   btn.textContent = 'Verificando...';
 
   try {
-    // 1. Verifica se slug já existe
-    const slugSnap = await get(ref(db, `barbearias/${dados.slug}`));
+    // 1. Verifica se slug já existe (só "info" é público p/ visitante anônimo)
+    const slugSnap = await get(ref(db, `barbearias/${dados.slug}/info`));
     if (slugSnap.exists()) {
       mostrarErro(`O link "${dados.slug}" já está em uso. Tente outro.`);
       btn.disabled = false;
