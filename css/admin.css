@@ -908,6 +908,48 @@
   justify-content: flex-end;
 }
 
+/* ====== NOVO AGENDAMENTO (busca de cliente + lista de serviços) ====== */
+.nag-sugestoes {
+  margin-top: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.nag-sugestao-item {
+  padding: 10px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  transition: background var(--transition);
+}
+.nag-sugestao-item:last-child { border-bottom: none; }
+.nag-sugestao-item:hover { background: var(--surface); color: var(--accent); }
+.nag-servicos-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px;
+}
+.nag-servico-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 0;
+}
+.nag-servico-item input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+
 /* ====== DETALHES DO AGENDAMENTO (no modal) ====== */
 .det-resumo {
   background: var(--surface-2);
@@ -955,6 +997,12 @@
   border-color: rgba(74, 222, 128, 0.3);
   color: var(--success);
 }
+.det-acoes .btn-remarcar {
+  background: rgba(96, 165, 250, 0.1);
+  border-color: rgba(96, 165, 250, 0.3);
+  color: #60a5fa;
+}
+.det-acoes .btn-remarcar:hover { background: rgba(96, 165, 250, 0.18); }
 .det-acoes .btn-cancelar {
   background: rgba(255, 68, 68, 0.05);
   border-color: rgba(255, 68, 68, 0.3);

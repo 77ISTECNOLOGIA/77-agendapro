@@ -702,6 +702,7 @@ function abrirDetalhesAgendamento(id) {
     </div>
     <div class="det-acoes">
       ${a.status === 'confirmado' ? `<button class="btn-concluir" id="acao-concluir">✓ Marcar como concluído</button>` : ''}
+      ${a.status === 'confirmado' ? `<button class="btn-remarcar" id="acao-remarcar">🔁 Remarcar</button>` : ''}
       ${a.status === 'confirmado' ? `<button class="btn-whatsapp" id="acao-whatsapp">💬 ${a.lembreteEnviado ? 'Reenviar' : 'Enviar'} lembrete no WhatsApp</button>` : ''}
       ${a.status !== 'cancelado' && a.status !== 'concluido' ? `<button class="btn-cancelar" id="acao-cancelar">✕ Cancelar agendamento</button>` : ''}
     </div>
@@ -711,9 +712,102 @@ function abrirDetalhesAgendamento(id) {
 
   if (a.status === 'confirmado') {
     $('#acao-concluir').addEventListener('click', () => concluirAgendamento(id));
+    $('#acao-remarcar').addEventListener('click', () => modalRemarcarAgendamento(id));
     $('#acao-whatsapp').addEventListener('click', () => enviarLembreteWhatsapp({ ...a, id }));
     $('#acao-cancelar').addEventListener('click', () => cancelarAgendamento(id));
   }
+}
+
+function modalRemarcarAgendamento(id) {
+  const a = state.agendamentos[id];
+  if (!a) return;
+
+  const hojeStr = dataParaChave(new Date());
+  const corpo = `
+    <div class="det-resumo" style="margin-bottom:20px;">
+      <div class="det-linha"><span class="label">Cliente</span><span class="valor">${escapeHtml(a.clienteNome)}</span></div>
+      <div class="det-linha"><span class="label">Profissional</span><span class="valor">${escapeHtml(a.profissionalNome)}</span></div>
+      <div class="det-linha"><span class="label">Serviços</span><span class="valor">${(a.servicos || []).map(s => escapeHtml(s.nome)).join(' + ')}</span></div>
+      <div class="det-linha"><span class="label">Atual</span><span class="valor">${formatarDataLonga(chaveParaData(a.dataChave))} — ${a.horario}</span></div>
+    </div>
+    <div class="form-grid">
+      <div class="input-grupo">
+        <label class="input-label">NOVA DATA</label>
+        <input type="date" id="rmc-data" class="input" min="${hojeStr}" value="${a.dataChave}">
+      </div>
+      <div class="input-grupo">
+        <label class="input-label">NOVO HORÁRIO</label>
+        <select id="rmc-horario" class="input" disabled>
+          <option value="">Escolha a data</option>
+        </select>
+      </div>
+    </div>
+  `;
+  const rodape = `
+    <button class="btn-acao-secundario" id="modal-cancel">Cancelar</button>
+    <button class="btn-acao" id="modal-salvar">Confirmar nova data</button>
+  `;
+  abrirModal('Remarcar agendamento', corpo, rodape);
+
+  $('#modal-cancel').addEventListener('click', fecharModal);
+
+  function atualizarHorariosRemarcar() {
+    const selectHorario = $('#rmc-horario');
+    const dataStr = $('#rmc-data').value;
+    if (!dataStr) {
+      selectHorario.innerHTML = '<option value="">Escolha a data</option>';
+      selectHorario.disabled = true;
+      return;
+    }
+    const slots = calcularHorariosDisponiveisAdmin(a.profissionalId, chaveParaData(dataStr), a.duracaoMin, id);
+    if (slots.length === 0) {
+      selectHorario.innerHTML = '<option value="">Nenhum horário disponível nessa data</option>';
+      selectHorario.disabled = true;
+      return;
+    }
+    selectHorario.innerHTML = '<option value="">Selecione...</option>' + slots.map(h =>
+      `<option value="${h}" ${h === a.horario && dataStr === a.dataChave ? 'selected' : ''}>${h}</option>`
+    ).join('');
+    selectHorario.disabled = false;
+  }
+  $('#rmc-data').addEventListener('change', atualizarHorariosRemarcar);
+  atualizarHorariosRemarcar();
+
+  $('#modal-salvar').addEventListener('click', async () => {
+    const novaData = $('#rmc-data').value;
+    const novoHorario = $('#rmc-horario').value;
+    if (!novaData || !novoHorario) { toast('Selecione data e horário', 'erro'); return; }
+
+    const btn = $('#modal-salvar');
+    btn.disabled = true;
+    btn.textContent = 'Remarcando...';
+
+    try {
+      const slotsAtuais = calcularHorariosDisponiveisAdmin(a.profissionalId, chaveParaData(novaData), a.duracaoMin, id);
+      if (!slotsAtuais.includes(novoHorario)) {
+        toast('Esse horário acabou de ficar indisponível. Escolha outro.', 'erro');
+        atualizarHorariosRemarcar();
+        btn.disabled = false;
+        btn.textContent = 'Confirmar nova data';
+        return;
+      }
+
+      await update(ref(db, `barbearias/${state.barbeariaId}/agendamentos/${id}`), {
+        dataChave: novaData,
+        horario: novoHorario,
+        lembreteEnviado: false,
+        remarcadoEm: new Date().toISOString(),
+        remarcadoPor: 'dono'
+      });
+      toast('Agendamento remarcado', 'sucesso');
+      fecharModal();
+    } catch (err) {
+      console.error('Erro ao remarcar:', err);
+      toast('Erro ao remarcar', 'erro');
+      btn.disabled = false;
+      btn.textContent = 'Confirmar nova data';
+    }
+  });
 }
 
 async function concluirAgendamento(id) {
@@ -740,6 +834,261 @@ async function cancelarAgendamento(id) {
     toast('Agendamento cancelado', 'sucesso');
   } catch (err) {
     toast('Erro ao cancelar', 'erro');
+  }
+}
+
+// ========================================
+// NOVO AGENDAMENTO MANUAL (pelo dono)
+// ========================================
+function calcularHorariosDisponiveisAdmin(profissionalId, data, duracaoTotal, ignorarId = null) {
+  const prof = state.profissionais[profissionalId];
+  if (!prof) return [];
+
+  const diaSemana = diasDaSemana()[data.getDay()];
+  const horarioTrabalho = (prof.horarioTrabalho && prof.horarioTrabalho[diaSemana])
+    || (state.barbearia.horarioFuncionamento && state.barbearia.horarioFuncionamento[diaSemana]);
+
+  if (!horarioTrabalho || !horarioTrabalho.ativo) return [];
+
+  const inicio = horaParaMinutos(horarioTrabalho.inicio || '09:00');
+  const fim = horaParaMinutos(horarioTrabalho.fim || '20:00');
+  const intervalo = 30;
+  const dataChave = dataParaChave(data);
+
+  const ocupados = Object.entries(state.agendamentos)
+    .filter(([id, a]) => a.profissionalId === profissionalId && a.dataChave === dataChave && a.status !== 'cancelado' && id !== ignorarId)
+    .map(([id, a]) => ({ inicio: horaParaMinutos(a.horario), fim: horaParaMinutos(a.horario) + a.duracaoMin }));
+
+  const bloqueios = (prof.bloqueios && prof.bloqueios[dataChave]) || [];
+
+  const agora = new Date();
+  const ehHoje = dataChave === dataParaChave(agora);
+  const minutosAgora = agora.getHours() * 60 + agora.getMinutes();
+
+  const slots = [];
+  for (let m = inicio; m + duracaoTotal <= fim; m += intervalo) {
+    if (ehHoje && m < minutosAgora) continue;
+    const hora = minutosParaHora(m);
+    const slotInicio = m, slotFim = m + duracaoTotal;
+    const ocupado = ocupados.some(o => slotInicio < o.fim && slotFim > o.inicio);
+    if (ocupado) continue;
+    if (bloqueios.includes(hora)) continue;
+    slots.push(hora);
+  }
+  return slots;
+}
+
+function modalNovoAgendamento() {
+  const profsAtivos = Object.entries(state.profissionais).filter(([id, p]) => p.ativo !== false);
+  const servicosAtivos = Object.entries(state.servicos)
+    .filter(([id, s]) => s.ativo !== false)
+    .sort((a, b) => (a[1].ordem || 0) - (b[1].ordem || 0));
+  const hojeStr = dataParaChave(new Date());
+
+  const corpo = `
+    <div class="input-grupo">
+      <label class="input-label">BUSCAR CLIENTE EXISTENTE</label>
+      <input type="text" id="nag-busca-cliente" class="input" placeholder="Nome ou WhatsApp..." autocomplete="off">
+      <div id="nag-sugestoes-cliente" class="nag-sugestoes hidden"></div>
+    </div>
+    <div class="form-grid">
+      <div class="input-grupo">
+        <label class="input-label">NOME DO CLIENTE</label>
+        <input type="text" id="nag-cliente-nome" class="input" placeholder="Nome completo">
+      </div>
+      <div class="input-grupo">
+        <label class="input-label">WHATSAPP</label>
+        <input type="tel" id="nag-cliente-whatsapp" class="input" placeholder="(21) 98765-4321">
+      </div>
+    </div>
+    <div class="input-grupo">
+      <label class="input-label">SERVIÇOS</label>
+      ${servicosAtivos.length === 0 ? '<div class="campo-help">Nenhum serviço cadastrado ainda.</div>' : `
+        <div class="nag-servicos-lista">
+          ${servicosAtivos.map(([id, s]) => `
+            <label class="nag-servico-item">
+              <input type="checkbox" class="nag-servico-check" value="${id}">
+              <span>${escapeHtml(s.nome)} — ${s.duracaoMin} min • ${formatarMoeda(s.preco)}</span>
+            </label>
+          `).join('')}
+        </div>
+      `}
+    </div>
+    <div class="input-grupo">
+      <label class="input-label">PROFISSIONAL</label>
+      <select id="nag-profissional" class="input">
+        <option value="">Selecione...</option>
+        ${profsAtivos.map(([id, p]) => `<option value="${id}">${escapeHtml(p.nome)}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-grid">
+      <div class="input-grupo">
+        <label class="input-label">DATA</label>
+        <input type="date" id="nag-data" class="input" min="${hojeStr}" value="${hojeStr}">
+      </div>
+      <div class="input-grupo">
+        <label class="input-label">HORÁRIO</label>
+        <select id="nag-horario" class="input" disabled>
+          <option value="">Escolha serviço, profissional e data</option>
+        </select>
+      </div>
+    </div>
+  `;
+  const rodape = `
+    <button class="btn-acao-secundario" id="modal-cancel">Cancelar</button>
+    <button class="btn-acao" id="modal-salvar">Criar agendamento</button>
+  `;
+  abrirModal('Novo agendamento', corpo, rodape);
+
+  $('#modal-cancel').addEventListener('click', fecharModal);
+
+  $('#nag-busca-cliente').addEventListener('input', (e) => {
+    const termo = e.target.value.trim().toLowerCase();
+    const sugestoesEl = $('#nag-sugestoes-cliente');
+    if (termo.length < 2) {
+      sugestoesEl.classList.add('hidden');
+      sugestoesEl.innerHTML = '';
+      return;
+    }
+    const matches = Object.entries(state.clientes)
+      .filter(([whats, c]) => (c.nome || '').toLowerCase().includes(termo) || whats.includes(termo))
+      .slice(0, 6);
+    if (matches.length === 0) {
+      sugestoesEl.classList.add('hidden');
+      sugestoesEl.innerHTML = '';
+      return;
+    }
+    sugestoesEl.innerHTML = matches.map(([whats, c]) => `
+      <div class="nag-sugestao-item" data-whats="${whats}" data-nome="${escapeHtml(c.nome)}">${escapeHtml(c.nome)} • ${escapeHtml(formatarWhatsapp(whats))}</div>
+    `).join('');
+    sugestoesEl.classList.remove('hidden');
+    sugestoesEl.querySelectorAll('.nag-sugestao-item').forEach(item => {
+      item.addEventListener('click', () => {
+        $('#nag-cliente-nome').value = item.dataset.nome;
+        $('#nag-cliente-whatsapp').value = formatarWhatsapp(item.dataset.whats);
+        sugestoesEl.classList.add('hidden');
+        $('#nag-busca-cliente').value = '';
+      });
+    });
+  });
+
+  $$('#modal-body .nag-servico-check').forEach(chk => chk.addEventListener('change', atualizarHorariosNovoAgendamento));
+  $('#nag-profissional').addEventListener('change', atualizarHorariosNovoAgendamento);
+  $('#nag-data').addEventListener('change', atualizarHorariosNovoAgendamento);
+
+  $('#modal-salvar').addEventListener('click', salvarNovoAgendamento);
+}
+
+function duracaoServicosSelecionadosNovoAgendamento() {
+  return $$('#modal-body .nag-servico-check:checked')
+    .map(c => state.servicos[c.value]?.duracaoMin || 0)
+    .reduce((s, d) => s + d, 0);
+}
+
+function atualizarHorariosNovoAgendamento() {
+  const selectHorario = $('#nag-horario');
+  const profId = $('#nag-profissional').value;
+  const dataStr = $('#nag-data').value;
+  const duracao = duracaoServicosSelecionadosNovoAgendamento();
+
+  if (!profId || !dataStr || duracao === 0) {
+    selectHorario.innerHTML = '<option value="">Escolha serviço, profissional e data</option>';
+    selectHorario.disabled = true;
+    return;
+  }
+
+  const slots = calcularHorariosDisponiveisAdmin(profId, chaveParaData(dataStr), duracao);
+
+  if (slots.length === 0) {
+    selectHorario.innerHTML = '<option value="">Nenhum horário disponível nessa data</option>';
+    selectHorario.disabled = true;
+    return;
+  }
+
+  selectHorario.innerHTML = '<option value="">Selecione...</option>' + slots.map(h => `<option value="${h}">${h}</option>`).join('');
+  selectHorario.disabled = false;
+}
+
+async function salvarNovoAgendamento() {
+  const nome = $('#nag-cliente-nome').value.trim();
+  const whatsappRaw = $('#nag-cliente-whatsapp').value.trim();
+  const servicoIds = $$('#modal-body .nag-servico-check:checked').map(c => c.value);
+  const profId = $('#nag-profissional').value;
+  const dataStr = $('#nag-data').value;
+  const horario = $('#nag-horario').value;
+
+  if (!nome) { toast('Digite o nome do cliente', 'erro'); return; }
+  const whatsDigitos = whatsappRaw.replace(/\D/g, '');
+  if (whatsDigitos.length !== 11 || whatsDigitos[2] !== '9') { toast('Digite um WhatsApp válido com DDD', 'erro'); return; }
+  if (servicoIds.length === 0) { toast('Selecione ao menos um serviço', 'erro'); return; }
+  if (!profId) { toast('Selecione o profissional', 'erro'); return; }
+  if (!dataStr || !horario) { toast('Selecione data e horário', 'erro'); return; }
+
+  const whatsNorm = '55' + whatsDigitos;
+  const servicos = servicoIds.map(id => ({
+    id, nome: state.servicos[id].nome, preco: state.servicos[id].preco, duracaoMin: state.servicos[id].duracaoMin
+  }));
+  const valorTotal = servicos.reduce((s, sv) => s + sv.preco, 0);
+  const duracaoMin = servicos.reduce((s, sv) => s + sv.duracaoMin, 0);
+
+  const btn = $('#modal-salvar');
+  btn.disabled = true;
+  btn.textContent = 'Criando...';
+
+  try {
+    // Revalida o horário na hora de salvar (mesma proteção anti-conflito do fluxo público)
+    const slotsAtuais = calcularHorariosDisponiveisAdmin(profId, chaveParaData(dataStr), duracaoMin);
+    if (!slotsAtuais.includes(horario)) {
+      toast('Esse horário acabou de ficar indisponível. Escolha outro.', 'erro');
+      atualizarHorariosNovoAgendamento();
+      btn.disabled = false;
+      btn.textContent = 'Criar agendamento';
+      return;
+    }
+
+    const clienteRef = ref(db, `barbearias/${state.barbeariaId}/clientes/${whatsNorm}`);
+    const clienteSnap = await get(clienteRef);
+    if (clienteSnap.exists()) {
+      const atual = clienteSnap.val();
+      await set(clienteRef, {
+        ...atual,
+        nome,
+        totalAgendamentos: (atual.totalAgendamentos || 0) + 1,
+        ultimoAgendamento: new Date().toISOString()
+      });
+    } else {
+      await set(clienteRef, {
+        nome,
+        whatsapp: whatsNorm,
+        primeiraVisita: new Date().toISOString(),
+        ultimoAgendamento: new Date().toISOString(),
+        totalAgendamentos: 1
+      });
+    }
+
+    const novoRef = push(ref(db, `barbearias/${state.barbeariaId}/agendamentos`));
+    await set(novoRef, {
+      clienteWhatsapp: whatsNorm,
+      clienteNome: nome,
+      profissionalId: profId,
+      profissionalNome: state.profissionais[profId].nome,
+      servicos,
+      dataChave: dataStr,
+      horario,
+      duracaoMin,
+      valorTotal,
+      status: 'confirmado',
+      criadoEm: new Date().toISOString(),
+      origem: 'dono'
+    });
+
+    toast('Agendamento criado', 'sucesso');
+    fecharModal();
+  } catch (err) {
+    console.error('Erro ao criar agendamento:', err);
+    toast('Erro ao criar agendamento', 'erro');
+    btn.disabled = false;
+    btn.textContent = 'Criar agendamento';
   }
 }
 
@@ -1219,9 +1568,7 @@ function inicializarEventosViews() {
     state.filtroStatus = e.target.value;
     renderizarAgenda();
   });
-  $('#btn-novo-agendamento').addEventListener('click', () => {
-    toast('Em breve: agendamento manual pelo painel', 'sucesso');
-  });
+  $('#btn-novo-agendamento').addEventListener('click', () => modalNovoAgendamento());
 
   // Serviços
   $('#btn-novo-servico').addEventListener('click', () => modalServico());

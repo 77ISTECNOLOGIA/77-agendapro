@@ -90,6 +90,8 @@
             <span>Bem-vindo de volta, <strong id="nome-reconhecido">—</strong>!</span>
           </div>
         </form>
+
+        <button id="btn-meus-agendamentos" class="link-secundario" type="button">Já tenho agendamento — ver meus horários</button>
       </div>
       <div class="tela-footer">
         <button id="btn-continuar-1" class="btn" type="button">Continuar →</button>
@@ -168,7 +170,7 @@
 
         <div class="aviso-wpp">
           <span class="aviso-icone">💬</span>
-          <span>Você receberá um lembrete no WhatsApp antes do horário.</span>
+          <span>O estabelecimento pode te enviar um lembrete no WhatsApp antes do horário.</span>
         </div>
       </div>
       <div class="tela-footer">
@@ -191,6 +193,48 @@
         </div>
 
         <button id="btn-novo" class="btn" type="button">Fazer novo agendamento</button>
+      </div>
+    </section>
+
+    <!-- ============ TELA 6: MEUS AGENDAMENTOS ============ -->
+    <section id="tela-6" class="tela">
+      <div class="tela-body">
+        <div id="painel-lista-agendamentos">
+          <div class="tela-rotulo">Seus agendamentos</div>
+          <h1 class="tela-h1">Meus horários</h1>
+          <p class="tela-sub">Agendamentos feitos com este WhatsApp.</p>
+          <div id="lista-meus-agendamentos" class="lista-meus-agendamentos">
+            <!-- Renderizado dinamicamente -->
+          </div>
+        </div>
+
+        <div id="painel-remarcar" class="hidden">
+          <div class="tela-rotulo">Remarcando</div>
+          <h1 class="tela-h1" id="remarcar-titulo">Escolha o novo horário</h1>
+
+          <div class="subsecao-titulo">DATA</div>
+          <div class="seletor-data-wrapper">
+            <button id="btn-remarcar-data-prev" class="seletor-nav" type="button" aria-label="Datas anteriores">‹</button>
+            <div id="remarcar-seletor-data" class="seletor-data">
+              <!-- Botões de data renderizados dinamicamente -->
+            </div>
+            <button id="btn-remarcar-data-next" class="seletor-nav" type="button" aria-label="Próximas datas">›</button>
+          </div>
+
+          <div class="subsecao-titulo">HORÁRIO DISPONÍVEL</div>
+          <div id="remarcar-grid-horarios" class="horarios-grid">
+            <div class="horario-placeholder">Selecione uma data</div>
+          </div>
+        </div>
+      </div>
+      <div class="tela-footer">
+        <div class="botoes-row" id="footer-lista-agendamentos">
+          <button id="btn-voltar-6" class="btn btn-outline" type="button">← Voltar</button>
+        </div>
+        <div class="botoes-row hidden" id="footer-remarcar">
+          <button id="btn-cancelar-remarcacao" class="btn btn-outline" type="button">← Cancelar</button>
+          <button id="btn-confirmar-remarcacao" class="btn" type="button" disabled>Confirmar novo horário</button>
+        </div>
       </div>
     </section>
 

@@ -35,7 +35,8 @@ module.exports = async function handler(req, res) {
     const snap = await admin.database().ref(`barbearias/${slug}/agendamentos`).once('value');
     const agendamentos = snap.val() || {};
 
-    const ocupados = Object.values(agendamentos).map(a => ({
+    const ocupados = Object.entries(agendamentos).map(([id, a]) => ({
+      id,
       profissionalId: a.profissionalId,
       dataChave: a.dataChave,
       horario: a.horario,

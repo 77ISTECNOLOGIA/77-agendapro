@@ -4,7 +4,7 @@ Plataforma de agendamento online para barbearias e salões. Produto da **77 IS T
 
 ## 🎯 Sobre o produto
 
-O 77 AgendaPro é um sistema de marcação de horários focado em barbearias autônomas e pequenas (1 a 5 profissionais). O cliente final acessa a barbearia via link público ou QR Code, escolhe serviço, profissional e horário, e recebe lembrete automático via WhatsApp.
+O 77 AgendaPro é um sistema de marcação de horários focado em barbearias autônomas e pequenas (1 a 5 profissionais). O cliente final acessa a barbearia via link público ou QR Code, escolhe serviço, profissional e horário; o dono pode enviar lembrete pelo WhatsApp com 1 clique direto do painel.
 
 **Diferencial:** painel operacional voltado pro profissional — saber em tempo real faturamento do dia, horário previsto de término, próximos clientes e ticket médio.
 
@@ -16,9 +16,9 @@ O 77 AgendaPro é um sistema de marcação de horários focado em barbearias aut
 ✅ Identificação automática de cliente recorrente (via WhatsApp)
 ✅ Cálculo dinâmico de horários disponíveis (duração dos serviços, agendamentos existentes, folgas, horário de trabalho por profissional)
 ✅ Re-validação anti-conflito no momento da confirmação
-✅ Painel do dono do negócio — `painel77.html` / `js/painel77.js`: dashboard, agenda, CRUD de serviços/profissionais
+✅ Painel do dono do negócio — `admin.html` / `js/admin.js`: dashboard, agenda, CRUD de serviços/profissionais
 ✅ Auto-cadastro público de novo negócio — `cadastro.html` / `js/cadastro.js`
-✅ Painel administrativo interno da 77 IS — `admin.html` / `js/admin.js`: aprovação de cadastros, gestão de trials/assinaturas, todos os negócios
+✅ Painel administrativo interno da 77 IS — `painel77.html` / `js/painel77.js`: aprovação de cadastros, gestão de trials/assinaturas, todos os negócios
 ✅ Notificação push (Web Push/FCM) pro dono a cada novo agendamento — `api/send-notification.js`
 ✅ Onboarding de dono via função serverless — `api/criar-usuario.js`
 ✅ Regras do Realtime Database versionadas (`database.rules.json`) e deployadas
@@ -69,16 +69,16 @@ Produção: `https://77-agendapro.vercel.app/barbearia-do-joao` (negócio de tes
 ```
 77-agendapro/
 ├── index.html               # Área pública (SPA, 4 telas)
-├── painel77.html            # Painel do dono do negócio
-├── admin.html                # Painel interno 77 IS (super-admin)
+├── admin.html                # Painel do dono do negócio
+├── painel77.html             # Painel interno 77 IS (super-admin)
 ├── cadastro.html             # Auto-cadastro de novo negócio
 ├── css/
 ├── js/
 │   ├── firebase-config.js    # Credenciais do Firebase (client-side)
 │   ├── utils.js               # escapeHtml() e utilitários compartilhados
 │   ├── app.js                  # Lógica da área pública
-│   ├── painel77.js             # Lógica do painel do dono
-│   ├── admin.js                 # Lógica do painel interno 77 IS
+│   ├── admin.js                 # Lógica do painel do dono
+│   ├── painel77.js             # Lógica do painel interno 77 IS
 │   └── cadastro.js              # Lógica do auto-cadastro
 ├── api/
 │   ├── criar-usuario.js       # Serverless: cria acesso do dono (Admin SDK)

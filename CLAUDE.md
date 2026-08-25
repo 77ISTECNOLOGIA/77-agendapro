@@ -21,16 +21,18 @@ AgendaPro é um produto da **77 IS Tecnologia & Inteligência**, plataforma de a
 2. **`usuarios/{uid} → { barbeariaId, role }`** — resolve o bootstrapping de autenticação do dono, mesmo padrão do índice `usuarios/{uid} → { orgId }` do BarOS.
 3. **`admins77/{uid} → { role: 'super_admin' }`** — separa admin interno da 77 IS (acesso a todos os negócios) do dono de um negócio individual (acesso só ao próprio).
 4. **Nunca confiar em dado sensível vindo do navegador em função serverless** — `api/send-notification.js` recebe só `{slug, agendamentoId}` e busca o agendamento real via Admin SDK antes de montar a notificação; não aceita `{token, corpo}` prontos (corrigido em 2026-07 após achado de segurança: o formato antigo permitia qualquer um disparar notificação com texto arbitrário).
-5. **`api/agendamentos-ocupados.js`** — o front-end público nunca lê `agendamentos` nem `clientes` completos do Realtime Database (continha nome+WhatsApp de todo mundo, exposto a qualquer visitante). Disponibilidade de horário é calculada a partir desse endpoint, que devolve só `profissionalId/dataChave/horario/duracaoMin/status`, sem PII.
+5. **`api/agendamentos-ocupados.js`** — o front-end público nunca lê `agendamentos` nem `clientes` completos do Realtime Database (continha nome+WhatsApp de todo mundo, exposto a qualquer visitante). Disponibilidade de horário é calculada a partir desse endpoint, que devolve só `id/profissionalId/dataChave/horario/duracaoMin/status`, sem PII (o `id` foi adicionado depois pra permitir a remarcação ignorar o próprio agendamento no cálculo de conflito).
+6. **`api/agendamento-cliente.js`** — autoatendimento do cliente (listar/cancelar/remarcar os próprios agendamentos). O cliente não tem Firebase Auth, então `database.rules.json` bloqueia qualquer escrita dele em um agendamento já existente (só a criação inicial é liberada). Essa função usa o Admin SDK, mas só age depois de confirmar que `agendamento.clienteWhatsapp` bate com o WhatsApp informado — nunca confia em "esse agendamento é meu" vindo pronto do navegador, mesmo padrão da decisão #4. Reaproveita a mesma lógica de disponibilidade de `calcularHorariosDisponiveis` (app.js), portada pro contexto serverless.
+7. **Agendamento manual e remarcação pelo dono** (`js/admin.js`) — o dono também consegue criar agendamento direto no painel (antes só o cliente criava pelo link público) e remarcar qualquer agendamento existente. Como o dono já está autenticado e tem os dados completos em memória (`state.agendamentos`), o cálculo de horários disponíveis é feito localmente (`calcularHorariosDisponiveisAdmin`), sem precisar da API pública — mas revalida o slot escolhido no momento de salvar, mesma proteção anti-conflito (corrida entre duas reservas simultâneas) que já existia no fluxo do cliente.
 
 ## Módulos construídos
 
 | Módulo | Arquivo | Resumo |
 |---|---|---|
-| Área pública | `index.html` / `js/app.js` | Agendamento em 4 passos, sem login, cliente identificado por WhatsApp |
-| Painel do dono | `painel77.html` / `js/painel77.js` | Dashboard, agenda do dia, CRUD de serviços/profissionais, notificações push |
+| Área pública | `index.html` / `js/app.js` | Agendamento em 4 passos, sem login, cliente identificado por WhatsApp. "Meus agendamentos" (Tela 6) permite cancelar/remarcar sozinho via `api/agendamento-cliente.js` |
+| Painel do dono | `admin.html` / `js/admin.js` | Dashboard, agenda do dia (com agendamento manual e remarcação), CRUD de serviços/profissionais, clientes, configurações, notificações push |
 | Auto-cadastro | `cadastro.html` / `js/cadastro.js` | Novo negócio se cadastra sozinho (cria conta + registro em `cadastrosAguardando`) |
-| Painel interno 77 IS | `admin.html` / `js/admin.js` | Aprovação de cadastros, gestão de trial/assinatura de todos os negócios, logs |
+| Painel interno 77 IS | `painel77.html` / `js/painel77.js` | Aprovação de cadastros, gestão de trial/assinatura de todos os negócios, logs |
 
 ## Pendências conhecidas
 

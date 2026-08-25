@@ -31,7 +31,10 @@ const state = {
   dataSelecionada: null,
   horarioSelecionado: null,
 
-  horariosCache: {}
+  horariosCache: {},
+
+  meusAgendamentos: [],
+  remarcacao: { agendamentoId: null, profissionalId: null, duracaoMin: null, dataSelecionada: null, horarioSelecionado: null }
 };
 
 // ========================================
@@ -112,7 +115,8 @@ function mostrarTela(numero) {
     2: 'Passo 1 de 3',
     3: 'Passo 2 de 3',
     4: 'Passo 3 de 3',
-    5: 'Concluído'
+    5: 'Concluído',
+    6: 'Meus agendamentos'
   };
   $('#header-passo').textContent = labels[numero] || '';
 
@@ -242,6 +246,22 @@ function inicializarEventos() {
   $('#btn-novo').addEventListener('click', () => {
     resetarFluxo();
     mostrarTela(1);
+  });
+
+  $('#btn-meus-agendamentos').addEventListener('click', abrirMeusAgendamentos);
+  $('#btn-voltar-6').addEventListener('click', () => mostrarTela(1));
+  $('#btn-cancelar-remarcacao').addEventListener('click', () => {
+    mostrarPainelLista();
+  });
+  $('#btn-confirmar-remarcacao').addEventListener('click', confirmarNovaRemarcacao);
+
+  const btnRemarcarDataPrev = $('#btn-remarcar-data-prev');
+  const btnRemarcarDataNext = $('#btn-remarcar-data-next');
+  if (btnRemarcarDataPrev) btnRemarcarDataPrev.addEventListener('click', () => {
+    $('#remarcar-seletor-data').scrollBy({ left: -160, behavior: 'smooth' });
+  });
+  if (btnRemarcarDataNext) btnRemarcarDataNext.addEventListener('click', () => {
+    $('#remarcar-seletor-data').scrollBy({ left: 160, behavior: 'smooth' });
   });
 }
 
@@ -489,7 +509,7 @@ function renderizarHorarios() {
   });
 }
 
-function calcularHorariosDisponiveis(profissionalId, data) {
+function calcularHorariosDisponiveis(profissionalId, data, opcoes = {}) {
   const prof = state.profissionais[profissionalId];
   if (!prof) return [];
 
@@ -503,16 +523,19 @@ function calcularHorariosDisponiveis(profissionalId, data) {
   const fim = horaParaMinutos(horarioTrabalho.fim || '20:00');
   const intervalo = 30;
 
-  const duracaoTotal = state.servicosSelecionados
-    .map(id => state.servicos[id].duracaoMin)
-    .reduce((sum, d) => sum + d, 0);
+  const duracaoTotal = opcoes.duracaoTotalOverride != null
+    ? opcoes.duracaoTotalOverride
+    : state.servicosSelecionados
+        .map(id => state.servicos[id].duracaoMin)
+        .reduce((sum, d) => sum + d, 0);
 
   const dataChave = dataParaChave(data);
   const agendamentosOcupados = Object.values(state.agendamentos || {})
     .filter(a =>
       a.profissionalId === profissionalId &&
       a.dataChave === dataChave &&
-      a.status !== 'cancelado'
+      a.status !== 'cancelado' &&
+      (!opcoes.ignorarId || a.id !== opcoes.ignorarId)
     )
     .map(a => ({
       inicio: horaParaMinutos(a.horario),
@@ -778,6 +801,239 @@ function resetarFluxo() {
   $('#btn-confirmar').textContent = 'Confirmar ✓';
 
   carregarBarbearia(state.slug);
+}
+
+// ========================================
+// TELA 6: MEUS AGENDAMENTOS
+// ========================================
+async function abrirMeusAgendamentos() {
+  const whatsappRaw = $('#input-whatsapp').value;
+  if (!validarWhatsapp(whatsappRaw)) {
+    $('#erro-whatsapp').textContent = 'Digite um WhatsApp válido com DDD pra ver seus agendamentos';
+    $('#erro-whatsapp').classList.add('ativo');
+    $('#input-whatsapp').classList.add('erro');
+    return;
+  }
+
+  state.cliente.whatsapp = normalizarWhatsapp(whatsappRaw);
+  mostrarTela(6);
+  mostrarPainelLista();
+  await carregarMeusAgendamentos();
+}
+
+async function carregarMeusAgendamentos() {
+  $('#lista-meus-agendamentos').innerHTML = '<div class="horario-placeholder">Carregando...</div>';
+  try {
+    const resp = await fetch('/api/agendamento-cliente', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: state.slug, whatsapp: state.cliente.whatsapp, action: 'listar' })
+    });
+    const dados = await resp.json();
+    state.meusAgendamentos = dados.agendamentos || [];
+    renderizarMeusAgendamentos();
+  } catch (err) {
+    console.error('Erro ao carregar agendamentos:', err);
+    $('#lista-meus-agendamentos').innerHTML = '<div class="horario-placeholder">Erro ao carregar. Tente novamente.</div>';
+  }
+}
+
+function renderizarMeusAgendamentos() {
+  const container = $('#lista-meus-agendamentos');
+  const hojeChave = dataParaChave(new Date());
+  const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+  const labelStatus = { confirmado: 'Confirmado', concluido: 'Concluído', cancelado: 'Cancelado' };
+
+  if (state.meusAgendamentos.length === 0) {
+    container.innerHTML = '<div class="horario-placeholder">Nenhum agendamento encontrado com este WhatsApp.</div>';
+    return;
+  }
+
+  container.innerHTML = state.meusAgendamentos.map(a => {
+    const podeGerenciar = a.status === 'confirmado' && a.dataChave >= hojeChave;
+    const [ano, mes, dia] = a.dataChave.split('-').map(Number);
+    const dataStr = `${diasSemana[new Date(ano, mes - 1, dia).getDay()]}, ${formatarData(new Date(ano, mes - 1, dia))}`;
+
+    return `
+      <div class="meu-agendamento-card">
+        <div class="meu-ag-topo">
+          <span class="meu-ag-data">${dataStr} • ${a.horario}</span>
+          <span class="meu-ag-status meu-ag-status-${a.status}">${labelStatus[a.status] || a.status}</span>
+        </div>
+        <div class="meu-ag-info">${escapeHtml(a.profissionalNome)} • ${(a.servicos || []).map(s => escapeHtml(s.nome)).join(' + ')}</div>
+        <div class="meu-ag-valor">${formatarMoeda(a.valorTotal)}</div>
+        ${podeGerenciar ? `
+          <div class="meu-ag-acoes">
+            <button class="btn-outline btn-mini-full" data-acao="remarcar" data-id="${a.id}" type="button">Remarcar</button>
+            <button class="btn-outline btn-mini-full btn-perigo-outline" data-acao="cancelar" data-id="${a.id}" type="button">Cancelar</button>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
+
+  container.querySelectorAll('[data-acao="remarcar"]').forEach(btn => {
+    btn.addEventListener('click', () => iniciarRemarcacao(btn.dataset.id));
+  });
+  container.querySelectorAll('[data-acao="cancelar"]').forEach(btn => {
+    btn.addEventListener('click', () => confirmarCancelamento(btn.dataset.id));
+  });
+}
+
+async function confirmarCancelamento(agendamentoId) {
+  if (!confirm('Tem certeza que deseja cancelar este agendamento?')) return;
+  try {
+    const resp = await fetch('/api/agendamento-cliente', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: state.slug, whatsapp: state.cliente.whatsapp, action: 'cancelar', agendamentoId })
+    });
+    const dados = await resp.json();
+    if (!resp.ok) {
+      toast(dados.erro || 'Erro ao cancelar', 'erro');
+      return;
+    }
+    toast('Agendamento cancelado', 'sucesso');
+    await carregarMeusAgendamentos();
+  } catch (err) {
+    console.error('Erro ao cancelar:', err);
+    toast('Erro ao cancelar. Tente novamente.', 'erro');
+  }
+}
+
+function mostrarPainelLista() {
+  $('#painel-lista-agendamentos').classList.remove('hidden');
+  $('#painel-remarcar').classList.add('hidden');
+  $('#footer-lista-agendamentos').classList.remove('hidden');
+  $('#footer-remarcar').classList.add('hidden');
+  renderizarMeusAgendamentos();
+}
+
+function mostrarPainelRemarcar() {
+  $('#painel-lista-agendamentos').classList.add('hidden');
+  $('#painel-remarcar').classList.remove('hidden');
+  $('#footer-lista-agendamentos').classList.add('hidden');
+  $('#footer-remarcar').classList.remove('hidden');
+}
+
+async function iniciarRemarcacao(agendamentoId) {
+  const ag = state.meusAgendamentos.find(a => a.id === agendamentoId);
+  if (!ag) return;
+
+  state.remarcacao = {
+    agendamentoId: ag.id,
+    profissionalId: ag.profissionalId,
+    duracaoMin: ag.duracaoMin,
+    dataSelecionada: null,
+    horarioSelecionado: null
+  };
+
+  $('#remarcar-titulo').textContent = `${(ag.servicos || []).map(s => s.nome).join(' + ')} com ${ag.profissionalNome}`;
+  mostrarPainelRemarcar();
+  $('#remarcar-grid-horarios').innerHTML = '<div class="horario-placeholder">Selecione uma data</div>';
+  $('#btn-confirmar-remarcacao').disabled = true;
+
+  await recarregarAgendamentos();
+  renderizarRemarcarSeletorDeData();
+}
+
+function renderizarRemarcarSeletorDeData() {
+  const container = $('#remarcar-seletor-data');
+  container.innerHTML = '';
+  const hoje = new Date();
+  const diasSemana = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
+
+  for (let i = 0; i < 14; i++) {
+    const data = new Date(hoje);
+    data.setDate(hoje.getDate() + i);
+    const btn = document.createElement('div');
+    btn.className = 'data-btn';
+    btn.dataset.data = dataParaChave(data);
+    btn.innerHTML = `
+      <div class="data-dia">${diasSemana[data.getDay()]}</div>
+      <div class="data-num">${data.getDate()}</div>
+    `;
+    btn.addEventListener('click', () => selecionarDataRemarcacao(data));
+    container.appendChild(btn);
+  }
+}
+
+function selecionarDataRemarcacao(data) {
+  state.remarcacao.dataSelecionada = data;
+  state.remarcacao.horarioSelecionado = null;
+  const chave = dataParaChave(data);
+  $$('#remarcar-seletor-data .data-btn').forEach(b => b.classList.toggle('selecionado', b.dataset.data === chave));
+  $('#btn-confirmar-remarcacao').disabled = true;
+  renderizarRemarcarHorarios();
+}
+
+function renderizarRemarcarHorarios() {
+  const container = $('#remarcar-grid-horarios');
+  container.innerHTML = '';
+
+  const horarios = calcularHorariosDisponiveis(state.remarcacao.profissionalId, state.remarcacao.dataSelecionada, {
+    duracaoTotalOverride: state.remarcacao.duracaoMin,
+    ignorarId: state.remarcacao.agendamentoId
+  });
+
+  if (horarios.length === 0) {
+    container.innerHTML = '<div class="horario-placeholder">Não há horários disponíveis nesta data</div>';
+    return;
+  }
+
+  horarios.forEach(slot => {
+    const el = document.createElement('div');
+    el.className = `horario ${slot.indisponivel ? 'indisponivel' : ''}`;
+    el.textContent = slot.hora;
+    if (!slot.indisponivel) {
+      el.addEventListener('click', () => selecionarHorarioRemarcacao(slot.hora));
+    }
+    container.appendChild(el);
+  });
+}
+
+function selecionarHorarioRemarcacao(hora) {
+  state.remarcacao.horarioSelecionado = hora;
+  $$('#remarcar-grid-horarios .horario').forEach(h => h.classList.toggle('selecionado', h.textContent === hora));
+  $('#btn-confirmar-remarcacao').disabled = false;
+}
+
+async function confirmarNovaRemarcacao() {
+  const btn = $('#btn-confirmar-remarcacao');
+  btn.disabled = true;
+  btn.textContent = 'Remarcando...';
+
+  try {
+    const resp = await fetch('/api/agendamento-cliente', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        slug: state.slug,
+        whatsapp: state.cliente.whatsapp,
+        action: 'remarcar',
+        agendamentoId: state.remarcacao.agendamentoId,
+        novaDataChave: dataParaChave(state.remarcacao.dataSelecionada),
+        novoHorario: state.remarcacao.horarioSelecionado
+      })
+    });
+    const dados = await resp.json();
+
+    if (!resp.ok) {
+      toast(dados.erro || 'Erro ao remarcar', 'erro');
+      btn.disabled = false;
+      btn.textContent = 'Confirmar novo horário';
+      return;
+    }
+
+    toast('Agendamento remarcado!', 'sucesso');
+    await carregarMeusAgendamentos();
+  } catch (err) {
+    console.error('Erro ao remarcar:', err);
+    toast('Erro ao remarcar. Tente novamente.', 'erro');
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Confirmar novo horário';
 }
 
 // ========================================
