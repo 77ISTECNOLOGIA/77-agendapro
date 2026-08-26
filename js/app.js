@@ -850,7 +850,10 @@ function renderizarMeusAgendamentos() {
   }
 
   container.innerHTML = state.meusAgendamentos.map(a => {
-    const podeGerenciar = a.status === 'confirmado' && a.dataChave >= hojeChave;
+    // Cliente só mexe sozinho até 1 dia (data corrida) antes do agendamento —
+    // em cima da hora, só falando direto com o estabelecimento.
+    const dentroDoPrazo = a.status === 'confirmado' && a.dataChave > hojeChave;
+    const jaRemarcou = (a.remarcacoesCliente || 0) >= 1;
     const [ano, mes, dia] = a.dataChave.split('-').map(Number);
     const dataStr = `${diasSemana[new Date(ano, mes - 1, dia).getDay()]}, ${formatarData(new Date(ano, mes - 1, dia))}`;
 
@@ -862,12 +865,13 @@ function renderizarMeusAgendamentos() {
         </div>
         <div class="meu-ag-info">${escapeHtml(a.profissionalNome)} • ${(a.servicos || []).map(s => escapeHtml(s.nome)).join(' + ')}</div>
         <div class="meu-ag-valor">${formatarMoeda(a.valorTotal)}</div>
-        ${podeGerenciar ? `
+        ${dentroDoPrazo ? `
           <div class="meu-ag-acoes">
-            <button class="btn-outline btn-mini-full" data-acao="remarcar" data-id="${a.id}" type="button">Remarcar</button>
+            ${!jaRemarcou ? `<button class="btn-outline btn-mini-full" data-acao="remarcar" data-id="${a.id}" type="button">Remarcar</button>` : ''}
             <button class="btn-outline btn-mini-full btn-perigo-outline" data-acao="cancelar" data-id="${a.id}" type="button">Cancelar</button>
           </div>
-        ` : ''}
+          ${jaRemarcou ? '<div class="meu-ag-aviso">Já remarcado uma vez — pra remarcar de novo, fale com o estabelecimento.</div>' : ''}
+        ` : (a.status === 'confirmado' ? '<div class="meu-ag-aviso">Menos de 1 dia pro horário — pra alterar, fale direto com o estabelecimento.</div>' : '')}
       </div>
     `;
   }).join('');

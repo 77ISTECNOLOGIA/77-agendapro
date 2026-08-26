@@ -28,11 +28,35 @@ if (!admin.apps.length) {
   }
 }
 
+// Autoatendimento do cliente tem duas travas de negócio (dono não é afetado,
+// só remarca/cancela sem limite pelo painel):
+// 1. só pode cancelar ou remarcar até 1 dia (data corrida) antes do agendamento original;
+// 2. só pode remarcar 1 vez por agendamento — depois disso, fala direto com o estabelecimento.
+const LIMITE_REMARCACOES_CLIENTE = 1;
+
 function normalizarWhatsapp(numero) {
   const digitos = String(numero || '').replace(/\D/g, '');
   if (digitos.length === 11) return '55' + digitos;
   if (digitos.length === 13 && digitos.startsWith('55')) return digitos;
   return digitos;
+}
+
+// Vercel executa em UTC — calcular "hoje" com new Date().getFullYear() etc
+// dá o dia errado no fim da tarde/noite no horário do Brasil (mesma classe
+// de bug já corrigida no BarOS com dataLocalHoje()).
+function hojeChaveBrasil() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).format(new Date());
+}
+
+function minutoAgoraBrasil() {
+  const partes = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', hour12: false
+  }).formatToParts(new Date());
+  const h = Number(partes.find(p => p.type === 'hour').value);
+  const m = Number(partes.find(p => p.type === 'minute').value);
+  return h * 60 + m;
 }
 
 function horaParaMinutos(hora) {
@@ -69,11 +93,10 @@ async function verificarSlotDisponivel(db, slug, { profissionalId, dataChave, ho
 
   if (slotInicio < inicioExp || slotFim > fimExp) return { ok: false, motivo: 'Fora do horário de trabalho' };
 
-  const agora = new Date();
-  const hojeChave = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}-${String(agora.getDate()).padStart(2, '0')}`;
+  const hojeChave = hojeChaveBrasil();
   if (dataChave < hojeChave) return { ok: false, motivo: 'Data no passado' };
   if (dataChave === hojeChave) {
-    const minutosAgora = agora.getHours() * 60 + agora.getMinutes();
+    const minutosAgora = minutoAgoraBrasil();
     if (slotInicio < minutosAgora + 30) return { ok: false, motivo: 'Horário muito próximo ou já passou' };
   }
 
@@ -127,7 +150,8 @@ module.exports = async function handler(req, res) {
           horario: a.horario,
           duracaoMin: a.duracaoMin,
           valorTotal: a.valorTotal,
-          status: a.status
+          status: a.status,
+          remarcacoesCliente: a.remarcacoesCliente || 0
         }))
         .sort((a, b) => (a.dataChave + a.horario).localeCompare(b.dataChave + b.horario));
 
@@ -146,6 +170,9 @@ module.exports = async function handler(req, res) {
       }
       if (ag.status !== 'confirmado') {
         return res.status(400).json({ erro: 'Este agendamento não pode mais ser cancelado' });
+      }
+      if (ag.dataChave <= hojeChaveBrasil()) {
+        return res.status(400).json({ erro: 'Esse agendamento está a menos de 1 dia da data marcada. Pra cancelar agora, entre em contato direto com o estabelecimento.' });
       }
 
       await agRef.update({ status: 'cancelado', canceladoEm: new Date().toISOString(), canceladoPor: 'cliente' });
@@ -167,6 +194,12 @@ module.exports = async function handler(req, res) {
       if (ag.status !== 'confirmado') {
         return res.status(400).json({ erro: 'Este agendamento não pode mais ser remarcado' });
       }
+      if (ag.dataChave <= hojeChaveBrasil()) {
+        return res.status(400).json({ erro: 'Esse agendamento está a menos de 1 dia da data marcada. Pra remarcar agora, entre em contato direto com o estabelecimento.' });
+      }
+      if ((ag.remarcacoesCliente || 0) >= LIMITE_REMARCACOES_CLIENTE) {
+        return res.status(400).json({ erro: 'Esse agendamento já foi remarcado o número máximo de vezes permitido. Entre em contato direto com o estabelecimento.' });
+      }
 
       const disponibilidade = await verificarSlotDisponivel(db, slug, {
         profissionalId: ag.profissionalId,
@@ -184,7 +217,8 @@ module.exports = async function handler(req, res) {
         horario: novoHorario,
         lembreteEnviado: false,
         remarcadoEm: new Date().toISOString(),
-        remarcadoPor: 'cliente'
+        remarcadoPor: 'cliente',
+        remarcacoesCliente: (ag.remarcacoesCliente || 0) + 1
       });
       return res.status(200).json({ sucesso: true });
     }

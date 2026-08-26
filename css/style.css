@@ -773,6 +773,12 @@ input { font-family: inherit; }
   gap: 8px;
   margin-top: 14px;
 }
+.meu-ag-aviso {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+}
 .btn-mini-full {
   flex: 1;
   width: auto;
