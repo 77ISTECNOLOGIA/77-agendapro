@@ -1,0 +1,91 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function autenticado() { return request.auth != null; }
+
+    function isSuperAdmin() {
+      return autenticado()
+        && get(/databases/$(database)/documents/admins77/$(request.auth.uid)).data.role == 'super_admin';
+    }
+
+    function barbeariaIdDoUsuario() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.barbeariaId;
+    }
+
+    function isDonoNegocio(slug) {
+      return autenticado() && barbeariaIdDoUsuario() == slug;
+    }
+
+    match /admins77/{uid} {
+      allow read: if autenticado() && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // cadastro.js escreve isso direto (self-signup, autenticado mas ainda
+    // sem usuarios/{uid} criado) - mesmo padrão do RTDB original
+    // (!data.exists() && auth.uid===uid).
+    match /usuarios/{uid} {
+      allow read: if autenticado() && request.auth.uid == uid;
+      allow create: if autenticado() && request.auth.uid == uid;
+      allow update, delete: if false; // updates sensíveis (barbeariaId) só via api/criar-usuario.js
+    }
+
+    match /cadastrosAguardando/{slug} {
+      allow read: if isSuperAdmin();
+      allow create: if autenticado(); // cadastro.js
+      allow update, delete: if isSuperAdmin();
+    }
+
+    match /logs77/{id} {
+      allow read, write: if isSuperAdmin();
+    }
+
+    match /barbearias/{slug} {
+      // Doc principal = o que era `info` no Realtime Database (nome,
+      // endereco, telefone, horarioFuncionamento, plano, trialFim, status,
+      // fcmTokens) - leitura pública ponto-a-ponto (get), nunca listagem
+      // pública da coleção inteira (list só pro painel interno 77IS).
+      allow get: if true;
+      allow list: if isSuperAdmin();
+      allow create: if autenticado(); // cadastro.js cria o negócio inteiro no self-signup
+      allow update: if isDonoNegocio(slug) || isSuperAdmin();
+      allow delete: if false;
+
+      match /servicos/{id} {
+        allow read: if true;
+        allow write: if isDonoNegocio(slug) || isSuperAdmin();
+      }
+
+      match /profissionais/{id} {
+        allow read: if true;
+        allow write: if isDonoNegocio(slug) || isSuperAdmin();
+      }
+
+      match /agendamentos/{id} {
+        // Sem leitura pública da coleção (mesmo padrão de hoje - o
+        // cardápio... digo, o app do cliente nunca lê agendamentos direto,
+        // só via api/agendamentos-ocupados.js e api/agendamento-cliente.js,
+        // que usam Admin SDK e ignoram essas regras). Criação é aberta pro
+        // cliente anônimo agendar (mesmo padrão do RTDB original: só a
+        // criação era liberada sem auth, update/delete sempre exigiam
+        // dono/admin - por isso cancelar/remarcar do lado do cliente precisa
+        // passar pela função serverless).
+        allow get, list: if isDonoNegocio(slug) || isSuperAdmin();
+        allow create: if request.resource.data.clienteWhatsapp is string
+          && request.resource.data.profissionalId is string
+          && request.resource.data.dataChave is string
+          && request.resource.data.horario is string;
+        allow update, delete: if isDonoNegocio(slug) || isSuperAdmin();
+      }
+
+      match /clientes/{whatsapp} {
+        // Leitura/escrita pública, chave = whatsapp normalizado (mesmo
+        // padrão do RTDB original) - não existe forma de listar todos, só
+        // de ler/escrever um documento se souber a chave exata.
+        allow read: if true;
+        allow write: if request.resource.data.nome is string && request.resource.data.whatsapp is string;
+      }
+    }
+  }
+}

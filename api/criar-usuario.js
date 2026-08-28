@@ -11,8 +11,7 @@ if (!admin.apps.length) {
       projectId: process.env.FIREBASE_PROJECT_ID,
       clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
       privateKey: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n')
-    }),
-    databaseURL: 'https://agendapro-179cb-default-rtdb.firebaseio.com'
+    })
   });
 }
 
@@ -31,17 +30,19 @@ module.exports = async function handler(req, res) {
   }
 
   try {
+    const db = admin.firestore();
+
     // 1. Confirma que quem está chamando é mesmo um super-admin da 77 IS
     const decoded = await admin.auth().verifyIdToken(idToken);
-    const adminSnap = await admin.database().ref(`admins77/${decoded.uid}`).once('value');
-    const adminData = adminSnap.val();
+    const adminSnap = await db.collection('admins77').doc(decoded.uid).get();
+    const adminData = adminSnap.data();
     if (!adminData || adminData.role !== 'super_admin') {
       return res.status(403).json({ erro: 'Sem permissão de super-admin' });
     }
 
     // 2. Confirma que o negócio existe
-    const negocioSnap = await admin.database().ref(`barbearias/${barbeariaId}/info`).once('value');
-    if (!negocioSnap.exists()) {
+    const negocioSnap = await db.collection('barbearias').doc(barbeariaId).get();
+    if (!negocioSnap.exists) {
       return res.status(404).json({ erro: 'Negócio não encontrado' });
     }
 
@@ -52,8 +53,8 @@ module.exports = async function handler(req, res) {
       displayName: nome || undefined
     });
 
-    // 4. Cria o vínculo dono ↔ negócio no Realtime Database
-    await admin.database().ref(`usuarios/${userRecord.uid}`).set({
+    // 4. Cria o vínculo dono ↔ negócio no Firestore
+    await db.collection('usuarios').doc(userRecord.uid).set({
       email,
       nome: nome || email,
       barbeariaId,

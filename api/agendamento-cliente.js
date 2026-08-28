@@ -3,8 +3,8 @@
 // Vercel Serverless Function (Node.js)
 // ========================================
 // O cliente final não tem login (Firebase Auth), então as regras do
-// Realtime Database bloqueiam qualquer escrita dele em um agendamento já
-// existente (só a criação inicial é liberada, ver database.rules.json).
+// Firestore bloqueiam qualquer escrita dele em um agendamento já
+// existente (só a criação inicial é liberada, ver firestore.rules).
 // Esta função usa o Admin SDK pra fazer essas ações, mas só depois de
 // confirmar que o agendamento pertence mesmo ao whatsapp informado —
 // nunca confia em "é meu" vindo pronto do navegador (mesmo padrão de
@@ -20,8 +20,7 @@ if (!admin.apps.length) {
         projectId: process.env.FIREBASE_PROJECT_ID,
         clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
         privateKey: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n')
-      }),
-      databaseURL: 'https://agendapro-179cb-default-rtdb.firebaseio.com'
+      })
     });
   } catch (e) {
     erroInicializacao = e;
@@ -71,18 +70,19 @@ function diaSemanaDaChave(dataChave) {
 }
 
 async function verificarSlotDisponivel(db, slug, { profissionalId, dataChave, horario, duracaoMin, ignorarId }) {
+  const negocioRef = db.collection('barbearias').doc(slug);
   const [profSnap, infoSnap, agsSnap] = await Promise.all([
-    db.ref(`barbearias/${slug}/profissionais/${profissionalId}`).once('value'),
-    db.ref(`barbearias/${slug}/info`).once('value'),
-    db.ref(`barbearias/${slug}/agendamentos`).once('value')
+    negocioRef.collection('profissionais').doc(profissionalId).get(),
+    negocioRef.get(),
+    negocioRef.collection('agendamentos').get()
   ]);
 
-  const prof = profSnap.val();
+  const prof = profSnap.data();
   if (!prof || prof.ativo === false) return { ok: false, motivo: 'Profissional indisponível' };
 
   const diaSemana = diaSemanaDaChave(dataChave);
   const horarioTrabalho = (prof.horarioTrabalho && prof.horarioTrabalho[diaSemana])
-    || ((infoSnap.val() || {}).horarioFuncionamento || {})[diaSemana];
+    || ((infoSnap.data() || {}).horarioFuncionamento || {})[diaSemana];
 
   if (!horarioTrabalho || !horarioTrabalho.ativo) return { ok: false, motivo: 'Fora do horário de trabalho' };
 
@@ -103,9 +103,9 @@ async function verificarSlotDisponivel(db, slug, { profissionalId, dataChave, ho
   const bloqueios = (prof.bloqueios && prof.bloqueios[dataChave]) || [];
   if (bloqueios.includes(horario)) return { ok: false, motivo: 'Horário bloqueado' };
 
-  const agendamentos = agsSnap.val() || {};
-  const conflita = Object.entries(agendamentos).some(([id, a]) => {
-    if (id === ignorarId) return false;
+  const conflita = agsSnap.docs.some((doc) => {
+    if (doc.id === ignorarId) return false;
+    const a = doc.data();
     if (a.profissionalId !== profissionalId || a.dataChave !== dataChave || a.status === 'cancelado') return false;
     const aInicio = horaParaMinutos(a.horario);
     const aFim = aInicio + a.duracaoMin;
@@ -133,16 +133,17 @@ module.exports = async function handler(req, res) {
   }
 
   const whatsNorm = normalizarWhatsapp(whatsapp);
-  const db = admin.database();
+  const db = admin.firestore();
+  const agendamentosRef = db.collection('barbearias').doc(slug).collection('agendamentos');
 
   try {
     if (action === 'listar') {
-      const snap = await db.ref(`barbearias/${slug}/agendamentos`).once('value');
-      const todos = snap.val() || {};
-      const meus = Object.entries(todos)
-        .filter(([, a]) => a.clienteWhatsapp === whatsNorm)
-        .map(([id, a]) => ({
-          id,
+      const snap = await agendamentosRef.get();
+      const meus = snap.docs
+        .map((doc) => ({ id: doc.id, ...doc.data() }))
+        .filter((a) => a.clienteWhatsapp === whatsNorm)
+        .map((a) => ({
+          id: a.id,
           profissionalId: a.profissionalId,
           profissionalNome: a.profissionalNome,
           servicos: a.servicos,
@@ -161,9 +162,9 @@ module.exports = async function handler(req, res) {
     if (action === 'cancelar') {
       if (!agendamentoId) return res.status(400).json({ erro: 'Parâmetro obrigatório: agendamentoId' });
 
-      const agRef = db.ref(`barbearias/${slug}/agendamentos/${agendamentoId}`);
-      const agSnap = await agRef.once('value');
-      const ag = agSnap.val();
+      const agRef = agendamentosRef.doc(agendamentoId);
+      const agSnap = await agRef.get();
+      const ag = agSnap.data();
 
       if (!ag || ag.clienteWhatsapp !== whatsNorm) {
         return res.status(404).json({ erro: 'Agendamento não encontrado' });
@@ -184,9 +185,9 @@ module.exports = async function handler(req, res) {
         return res.status(400).json({ erro: 'Parâmetros obrigatórios: agendamentoId, novaDataChave, novoHorario' });
       }
 
-      const agRef = db.ref(`barbearias/${slug}/agendamentos/${agendamentoId}`);
-      const agSnap = await agRef.once('value');
-      const ag = agSnap.val();
+      const agRef = agendamentosRef.doc(agendamentoId);
+      const agSnap = await agRef.get();
+      const ag = agSnap.data();
 
       if (!ag || ag.clienteWhatsapp !== whatsNorm) {
         return res.status(404).json({ erro: 'Agendamento não encontrado' });

@@ -9,8 +9,9 @@ import {
   getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import {
-  ref, get, set, update, remove, push, onValue, off
-} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+  doc, collection, getDoc, getDocs, addDoc, updateDoc, deleteDoc,
+  onSnapshot, query, orderBy, limit, getCountFromServer
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const auth = getAuth(getApp());
 
@@ -19,7 +20,7 @@ const auth = getAuth(getApp());
 // ========================================
 const state = {
   user: null, adminData: null,
-  negocios: {}, cadastrosAguardando: {}, logs: {},
+  negocios: {}, cadastrosAguardando: {}, logs: {}, contagens: {},
   viewAtual: 'overview', filtroStatus: 'todos', filtroTipo: 'todos', filtroBusca: '',
   listeners: []
 };
@@ -79,13 +80,13 @@ onAuthStateChanged(auth, async (user) => {
   if (user) {
     state.user = user;
     try {
-      const snap = await get(ref(db, `admins77/${user.uid}`));
-      if (!snap.exists() || snap.val().role !== 'super_admin') {
+      const snap = await getDoc(doc(db, 'admins77', user.uid));
+      if (!snap.exists() || snap.data().role !== 'super_admin') {
         $('#loading').classList.add('hidden');
         $('#tela-negado').classList.remove('hidden');
         return;
       }
-      state.adminData = snap.val();
+      state.adminData = snap.data();
       $('#user-nome').textContent = state.adminData.nome || user.email;
       $('#user-email').textContent = user.email;
       $('#user-avatar').textContent = iniciais(state.adminData.nome || user.email);
@@ -130,22 +131,58 @@ $('#btn-logout-negado')?.addEventListener('click', () => signOut(auth));
 // ========================================
 // LISTENERS TEMPO REAL
 // ========================================
+// `barbearias` aqui só traz os campos de nível superior (nome/status/
+// trialFim/plano/...) de cada negócio — não desce nas sub-coleções
+// (servicos/profissionais/agendamentos/clientes). No Realtime Database um
+// onValue no nó inteiro trazia tudo de uma vez "de graça"; no Firestore
+// isso exigiria ler a árvore inteira de todos os negócios a cada tick, que
+// não escala. As contagens (agendamentos/serviços/profissionais) e a data
+// do último agendamento vêm de `carregarContagens()`, via query de
+// contagem (getCountFromServer) por negócio, carregada uma vez ao entrar
+// no painel e de novo no botão "Atualizar" — não em tempo real, mas esse
+// painel é de uso ocasional, não um dashboard operacional.
 function ativarListeners() {
   desativarListeners();
-  const paths = { negocios:'barbearias', cadastrosAguardando:'cadastrosAguardando', logs:'logs77' };
-  Object.entries(paths).forEach(([key,path]) => {
-    const r = ref(db, path);
-    const cb = onValue(r, snap => {
-      state[key] = snap.val() || {};
+  const specs = [
+    { key: 'negocios', path: 'barbearias' },
+    { key: 'cadastrosAguardando', path: 'cadastrosAguardando' },
+    { key: 'logs', path: 'logs77' },
+  ];
+  specs.forEach(({ key, path }) => {
+    const unsub = onSnapshot(collection(db, path), (snap) => {
+      const obj = {};
+      snap.forEach((d) => { obj[d.id] = d.data(); });
+      state[key] = obj;
       atualizarBadges();
       renderizarView();
     });
-    state.listeners.push({ref:r,cb});
+    state.listeners.push(unsub);
   });
+  carregarContagens();
 }
 function desativarListeners() {
-  state.listeners.forEach(l=>off(l.ref));
-  state.listeners=[];
+  state.listeners.forEach(unsub => unsub());
+  state.listeners = [];
+}
+
+async function carregarContagens() {
+  const ids = Object.keys(state.negocios);
+  await Promise.all(ids.map(async (id) => {
+    const agsRef = collection(db, 'barbearias', id, 'agendamentos');
+    const [agsCount, srvCount, profCount, ultimoSnap] = await Promise.all([
+      getCountFromServer(agsRef),
+      getCountFromServer(collection(db, 'barbearias', id, 'servicos')),
+      getCountFromServer(collection(db, 'barbearias', id, 'profissionais')),
+      getDocs(query(agsRef, orderBy('criadoEm', 'desc'), limit(1))).catch(() => null),
+    ]);
+    state.contagens[id] = {
+      totalAgs: agsCount.data().count,
+      totalServicos: srvCount.data().count,
+      totalProfs: profCount.data().count,
+      ultimoAg: (ultimoSnap && !ultimoSnap.empty) ? ultimoSnap.docs[0].data().criadoEm : null,
+    };
+  }));
+  renderizarView();
 }
 
 function atualizarBadges() {
@@ -187,7 +224,7 @@ function renderizarView() {
 function renderOverview() {
   $('#overview-data').textContent = fmtDataLonga(new Date());
 
-  const arr = Object.entries(state.negocios).map(([id,b])=>({id,...(b.info||{}),dados:b}));
+  const arr = Object.entries(state.negocios).map(([id,b])=>({id,...b}));
   const cnt = {aguardando_aprovacao:0,trial:0,ativa:0,suspensa:0,expirada:0};
   arr.forEach(b=>{ const s=b.status||'trial'; if(cnt[s]!==undefined) cnt[s]++; });
 
@@ -197,7 +234,7 @@ function renderOverview() {
   $('#kpi-aguardando').textContent=Object.keys(state.cadastrosAguardando).length;
 
   let totalAgs=0;
-  Object.values(state.negocios).forEach(b=>{ totalAgs+=Object.keys(b.agendamentos||{}).length; });
+  arr.forEach(b=>{ totalAgs += state.contagens[b.id]?.totalAgs || 0; });
   $('#kpi-agendamentos').textContent=totalAgs;
   $('#kpi-ag-extra').textContent=`em ${arr.length} negócios`;
 
@@ -221,8 +258,8 @@ function renderOverview() {
   // Inativas
   const limite=Date.now()-(14*86400000);
   const inativas=arr.filter(b=>b.status==='trial'||b.status==='ativa').map(b=>{
-    const ags=Object.values(b.dados.agendamentos||{});
-    const ul=ags.length>0?Math.max(...ags.map(a=>new Date(a.criadoEm||0).getTime())):0;
+    const ultimoAgIso = state.contagens[b.id]?.ultimoAg;
+    const ul = ultimoAgIso ? new Date(ultimoAgIso).getTime() : 0;
     return {...b,ultimoAg:ul};
   }).filter(b=>b.ultimoAg>0&&b.ultimoAg<limite).sort((a,b)=>a.ultimoAg-b.ultimoAg).slice(0,5);
 
@@ -298,8 +335,8 @@ function renderAprovacoes() {
 async function aprovar(c) {
   if (!confirm(`Aprovar "${c.nomeBarbearia}" e iniciar trial de 30 dias?`)) return;
   const agora=new Date(), trialFim=new Date(agora.getTime()+30*86400000);
-  await update(ref(db,`barbearias/${c.barbeariaId}/info`),{status:'trial',aprovadaEm:agora.toISOString(),aprovadaPor:state.user.uid,trialFim:trialFim.toISOString()});
-  await remove(ref(db,`cadastrosAguardando/${c.barbeariaId}`));
+  await updateDoc(doc(db,'barbearias',c.barbeariaId),{status:'trial',aprovadaEm:agora.toISOString(),aprovadaPor:state.user.uid,trialFim:trialFim.toISOString()});
+  await deleteDoc(doc(db,'cadastrosAguardando',c.barbeariaId));
   await log('aprovou',c.barbeariaId,c.nomeBarbearia);
   toast(`${c.nomeBarbearia} aprovado! Trial até ${trialFim.toLocaleDateString('pt-BR')}`,'sucesso');
 
@@ -310,8 +347,8 @@ async function aprovar(c) {
 async function recusar(c) {
   const motivo=prompt(`Recusar "${c.nomeBarbearia}"?\n\nMotivo (opcional):`);
   if (motivo===null) return;
-  await update(ref(db,`barbearias/${c.barbeariaId}/info`),{status:'suspensa',suspensaEm:new Date().toISOString(),motivoSuspensao:motivo||'Recusado'});
-  await remove(ref(db,`cadastrosAguardando/${c.barbeariaId}`));
+  await updateDoc(doc(db,'barbearias',c.barbeariaId),{status:'suspensa',suspensaEm:new Date().toISOString(),motivoSuspensao:motivo||'Recusado'});
+  await deleteDoc(doc(db,'cadastrosAguardando',c.barbeariaId));
   await log('recusou',c.barbeariaId,c.nomeBarbearia);
   toast('Cadastro recusado','sucesso');
 }
@@ -382,7 +419,7 @@ async function confirmarCriarAcesso(barbeariaId) {
 
     fecharModal();
     toast(`Acesso criado para ${nome || email}! 🔑`, 'sucesso');
-    const nomeNegocio = state.negocios[barbeariaId]?.info?.nome || barbeariaId;
+    const nomeNegocio = state.negocios[barbeariaId]?.nome || barbeariaId;
     await log('criou_acesso', barbeariaId, nomeNegocio);
   } catch (err) {
     erroEl.textContent = '❌ ' + err.message;
@@ -401,10 +438,10 @@ $('#filtro-tipo').addEventListener('change',e=>{state.filtroTipo=e.target.value;
 
 function renderNegocios() {
   let lista=Object.entries(state.negocios).map(([id,b])=>({
-    id,...(b.info||{}),
-    totalAgs:Object.keys(b.agendamentos||{}).length,
-    totalServicos:Object.keys(b.servicos||{}).length,
-    totalProfs:Object.keys(b.profissionais||{}).length
+    id,...b,
+    totalAgs: state.contagens[id]?.totalAgs || 0,
+    totalServicos: state.contagens[id]?.totalServicos || 0,
+    totalProfs: state.contagens[id]?.totalProfs || 0
   }));
 
   if (state.filtroStatus!=='todos') lista=lista.filter(b=>(b.status||'trial')===state.filtroStatus);
@@ -466,8 +503,7 @@ function renderNegocios() {
 }
 
 async function acaoNegocio(id, acao) {
-  const b=state.negocios[id]; if(!b) return;
-  const info=b.info||{};
+  const info=state.negocios[id]; if(!info) return;
   switch(acao) {
     case 'ver': modalDetalhes(id); break;
     case 'criar-acesso':
@@ -478,31 +514,40 @@ async function acaoNegocio(id, acao) {
       toast('Link copiado!','sucesso'); break;
     case 'suspender':
       if (!confirm(`Suspender "${info.nome}"?`)) return;
-      await update(ref(db,`barbearias/${id}/info`),{status:'suspensa',suspensaEm:new Date().toISOString()});
+      await updateDoc(doc(db,'barbearias',id),{status:'suspensa',suspensaEm:new Date().toISOString()});
       await log('suspendeu',id,info.nome); toast('Suspenso','sucesso'); break;
     case 'reativar':
       if (!confirm(`Reativar "${info.nome}"?`)) return;
-      await update(ref(db,`barbearias/${id}/info`),{status:info.trialFim?'trial':'ativa',reativadaEm:new Date().toISOString()});
+      await updateDoc(doc(db,'barbearias',id),{status:info.trialFim?'trial':'ativa',reativadaEm:new Date().toISOString()});
       await log('reativou',id,info.nome); toast('Reativado','sucesso'); break;
     case 'estender':
       const base=info.trialFim?new Date(info.trialFim):new Date();
       const novo=new Date(base.getTime()+30*86400000);
-      await update(ref(db,`barbearias/${id}/info`),{trialFim:novo.toISOString()});
+      await updateDoc(doc(db,'barbearias',id),{trialFim:novo.toISOString()});
       await log('estendeu_trial',id,info.nome); toast(`Trial até ${novo.toLocaleDateString('pt-BR')}`,'sucesso'); break;
     case 'ativar':
       if (!confirm(`Marcar "${info.nome}" como pagante?`)) return;
-      await update(ref(db,`barbearias/${id}/info`),{status:'ativa',ativadaEm:new Date().toISOString(),plano:'mensal'});
+      await updateDoc(doc(db,'barbearias',id),{status:'ativa',ativadaEm:new Date().toISOString(),plano:'mensal'});
       await log('marcou_pagante',id,info.nome); toast('Marcado como pagante 💰','sucesso'); break;
   }
 }
 
-function modalDetalhes(id) {
-  const b=state.negocios[id]; if(!b) return;
-  const info=b.info||{};
-  const ags=Object.values(b.agendamentos||{});
+// Diferente do resto do painel (que só lê os campos de nível superior de
+// `barbearias`), aqui é UM negócio só, sob demanda (o modal só abre quando
+// alguém clica "Ver detalhes") — então ler a coleção de agendamentos
+// inteira desse negócio é barato e não precisa de contagem pré-calculada.
+async function modalDetalhes(id) {
+  const info=state.negocios[id]; if(!info) return;
+  abrirModal(info.nome||id, '<div class="vazio-msg">Carregando…</div>');
+
+  const [agsSnap, clientesCountSnap] = await Promise.all([
+    getDocs(collection(db,'barbearias',id,'agendamentos')),
+    getCountFromServer(collection(db,'barbearias',id,'clientes')),
+  ]);
+  const ags=agsSnap.docs.map(d=>d.data());
   const conc=ags.filter(a=>a.status==='concluido');
   const fat=conc.reduce((s,a)=>s+(a.valorTotal||0),0);
-  const clientes=Object.keys(b.clientes||{}).length;
+  const clientes=clientesCountSnap.data().count;
   const ulAg=ags.length>0?Math.max(...ags.map(a=>new Date(a.criadoEm||0).getTime())):null;
 
   abrirModal(info.nome||id,`
@@ -556,6 +601,6 @@ function renderAtividade() {
 // ========================================
 async function log(acao, alvoId, alvoNome) {
   try {
-    await set(push(ref(db,'logs77')),{acao,alvoId,alvoNome,admin:state.user.uid,adminNome:state.adminData?.nome||state.user.email,timestamp:new Date().toISOString()});
+    await addDoc(collection(db,'logs77'),{acao,alvoId,alvoNome,admin:state.user.uid,adminNome:state.adminData?.nome||state.user.email,timestamp:new Date().toISOString()});
   } catch(e){ console.error('log:',e); }
 }

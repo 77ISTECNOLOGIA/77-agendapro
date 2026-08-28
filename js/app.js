@@ -6,14 +6,13 @@ import { db } from './firebase-config.js';
 import { aplicarTema } from './vocabulario.js';
 import { escapeHtml } from './utils.js';
 import {
-  ref,
-  get,
-  set,
-  push,
-  query,
-  orderByChild,
-  equalTo
-} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+  doc,
+  getDoc,
+  setDoc,
+  addDoc,
+  collection,
+  getDocs
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 // ========================================
 // ESTADO GLOBAL
@@ -161,16 +160,18 @@ async function carregarBarbearia(slug) {
   // WhatsApp e não devem ser lidos pelo visitante anônimo. A ocupação de
   // horários vem de /api/agendamentos-ocupados, sem esses dados.
   const [infoSnap, servicosSnap, profissionaisSnap] = await Promise.all([
-    get(ref(db, `barbearias/${slug}/info`)),
-    get(ref(db, `barbearias/${slug}/servicos`)),
-    get(ref(db, `barbearias/${slug}/profissionais`)),
+    getDoc(doc(db, 'barbearias', slug)),
+    getDocs(collection(db, 'barbearias', slug, 'servicos')),
+    getDocs(collection(db, 'barbearias', slug, 'profissionais')),
   ]);
 
   if (!infoSnap.exists()) return false;
 
-  state.barbearia = infoSnap.val() || {};
-  state.servicos = servicosSnap.val() || {};
-  state.profissionais = profissionaisSnap.val() || {};
+  state.barbearia = infoSnap.data() || {};
+  state.servicos = {};
+  servicosSnap.forEach((d) => { state.servicos[d.id] = d.data(); });
+  state.profissionais = {};
+  profissionaisSnap.forEach((d) => { state.profissionais[d.id] = d.data(); });
   state.agendamentos = await carregarOcupacao(slug);
 
   return true;
@@ -277,9 +278,9 @@ async function verificarClienteExistente(whatsappFormatado) {
   const whatsNorm = normalizarWhatsapp(whatsappFormatado);
 
   try {
-    const snap = await get(ref(db, `barbearias/${state.slug}/clientes/${whatsNorm}`));
+    const snap = await getDoc(doc(db, 'barbearias', state.slug, 'clientes', whatsNorm));
     if (snap.exists()) {
-      const cliente = snap.val();
+      const cliente = snap.data();
       $('#nome-reconhecido').textContent = cliente.nome.split(' ')[0];
       $('#cliente-reconhecido').classList.remove('hidden');
       $('#input-nome').value = cliente.nome;
@@ -652,19 +653,19 @@ async function recarregarAgendamentos() {
 }
 
 async function salvarCliente() {
-  const path = `barbearias/${state.slug}/clientes/${state.cliente.whatsapp}`;
-  const snap = await get(ref(db, path));
+  const clienteRef = doc(db, 'barbearias', state.slug, 'clientes', state.cliente.whatsapp);
+  const snap = await getDoc(clienteRef);
 
   if (snap.exists()) {
-    const atual = snap.val();
-    await set(ref(db, path), {
+    const atual = snap.data();
+    await setDoc(clienteRef, {
       ...atual,
       nome: state.cliente.nome,
       totalAgendamentos: (atual.totalAgendamentos || 0) + 1,
       ultimoAgendamento: new Date().toISOString()
     });
   } else {
-    await set(ref(db, path), {
+    await setDoc(clienteRef, {
       nome: state.cliente.nome,
       whatsapp: state.cliente.whatsapp,
       primeiraVisita: new Date().toISOString(),
@@ -699,9 +700,8 @@ async function criarAgendamento() {
     origem: 'cliente'
   };
 
-  const novoRef = push(ref(db, `barbearias/${state.slug}/agendamentos`));
-  await set(novoRef, agendamento);
-  return novoRef.key;
+  const novoRef = await addDoc(collection(db, 'barbearias', state.slug, 'agendamentos'), agendamento);
+  return novoRef.id;
 }
 
 // ========================================

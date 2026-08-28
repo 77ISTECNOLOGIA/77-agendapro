@@ -6,7 +6,7 @@
 // agendamento (sem login). Por isso o servidor nunca confia em "token"/"corpo"
 // vindos do navegador — eles seriam livremente falsificáveis por qualquer um
 // que soubesse a URL. Em vez disso, recebe só a referência do agendamento
-// (slug + agendamentoId), busca o registro real no Realtime Database e monta
+// (slug + agendamentoId), busca o registro real no Firestore e monta
 // a mensagem e a lista de dispositivos a partir desse dado confiável.
 
 const admin = require('firebase-admin');
@@ -19,8 +19,7 @@ if (!admin.apps.length) {
       clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
       // O Vercel armazena quebras de linha como "\n" literal — precisa converter de volta
       privateKey: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n')
-    }),
-    databaseURL: 'https://agendapro-179cb-default-rtdb.firebaseio.com'
+    })
   });
 }
 
@@ -53,10 +52,12 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const db = admin.database();
+    const db = admin.firestore();
+    const negocioRef = db.collection('barbearias').doc(slug);
+    const agRef = negocioRef.collection('agendamentos').doc(agendamentoId);
 
-    const agSnap = await db.ref(`barbearias/${slug}/agendamentos/${agendamentoId}`).once('value');
-    const agendamento = agSnap.val();
+    const agSnap = await agRef.get();
+    const agendamento = agSnap.data();
     if (!agendamento) {
       return res.status(404).json({ erro: 'Agendamento não encontrado' });
     }
@@ -66,11 +67,12 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ sucesso: true, jaEnviada: true });
     }
 
-    const tokensSnap = await db.ref(`barbearias/${slug}/info/fcmTokens`).once('value');
-    if (!tokensSnap.exists()) {
+    const negocioSnap = await negocioRef.get();
+    const fcmTokens = (negocioSnap.data() || {}).fcmTokens;
+    if (!fcmTokens) {
       return res.status(200).json({ sucesso: true, semTokens: true });
     }
-    const tokens = Object.values(tokensSnap.val());
+    const tokens = Object.values(fcmTokens);
     const corpo = montarCorpo(agendamento);
 
     await Promise.allSettled(
@@ -89,7 +91,7 @@ module.exports = async function handler(req, res) {
       }))
     );
 
-    await db.ref(`barbearias/${slug}/agendamentos/${agendamentoId}/notificacaoEnviada`).set(true);
+    await agRef.update({ notificacaoEnviada: true });
 
     return res.status(200).json({ sucesso: true });
   } catch (err) {

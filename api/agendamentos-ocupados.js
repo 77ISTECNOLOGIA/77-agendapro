@@ -4,9 +4,9 @@
 // ========================================
 // O front-end público precisa saber quais horários já estão ocupados
 // para calcular a disponibilidade, mas não precisa (e não deve) receber
-// nome/WhatsApp dos clientes de outros agendamentos. Esta função lê o
-// agendamentos completo via Admin SDK e devolve só os campos
-// necessários para o cálculo de disponibilidade.
+// nome/WhatsApp dos clientes de outros agendamentos. Esta função lê a
+// coleção completa via Admin SDK e devolve só os campos necessários para
+// o cálculo de disponibilidade.
 
 const admin = require('firebase-admin');
 
@@ -16,8 +16,7 @@ if (!admin.apps.length) {
       projectId: process.env.FIREBASE_PROJECT_ID,
       clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
       privateKey: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n')
-    }),
-    databaseURL: 'https://agendapro-179cb-default-rtdb.firebaseio.com'
+    })
   });
 }
 
@@ -32,17 +31,19 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const snap = await admin.database().ref(`barbearias/${slug}/agendamentos`).once('value');
-    const agendamentos = snap.val() || {};
+    const snap = await admin.firestore().collection('barbearias').doc(slug).collection('agendamentos').get();
 
-    const ocupados = Object.entries(agendamentos).map(([id, a]) => ({
-      id,
-      profissionalId: a.profissionalId,
-      dataChave: a.dataChave,
-      horario: a.horario,
-      duracaoMin: a.duracaoMin,
-      status: a.status
-    }));
+    const ocupados = snap.docs.map((doc) => {
+      const a = doc.data();
+      return {
+        id: doc.id,
+        profissionalId: a.profissionalId,
+        dataChave: a.dataChave,
+        horario: a.horario,
+        duracaoMin: a.duracaoMin,
+        status: a.status
+      };
+    });
 
     return res.status(200).json({ ocupados });
   } catch (err) {

@@ -22,15 +22,16 @@ import {
   onMessage
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js";
 import {
-  ref,
-  get,
-  set,
-  update,
-  remove,
-  push,
-  onValue,
-  off
-} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+  doc,
+  collection,
+  getDoc,
+  getDocs,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  addDoc,
+  onSnapshot
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const auth = getAuth(getApp());
 
@@ -117,13 +118,13 @@ function inicializarAuth() {
     if (user) {
       state.user = user;
       try {
-        const snap = await get(ref(db, `usuarios/${user.uid}`));
+        const snap = await getDoc(doc(db, 'usuarios', user.uid));
         if (!snap.exists()) {
           await signOut(auth);
           mostrarLogin('Usuário sem barbearia vinculada. Contate o suporte.');
           return;
         }
-        const userData = snap.val();
+        const userData = snap.data();
         state.barbeariaId = userData.barbeariaId;
         await carregarBarbearia();
         aplicarTema(state.barbearia.tipoNegocio);
@@ -230,7 +231,7 @@ async function ativarNotificacoes() {
     // Salva o token deste dispositivo na lista, usando um ID fixo do navegador como chave
     // (não o token em si, que pode rotacionar e criar entradas duplicadas pro mesmo dispositivo)
     const deviceId = obterDeviceId();
-    await set(ref(db, `barbearias/${state.barbeariaId}/info/fcmTokens/${deviceId}`), token);
+    await updateDoc(doc(db, 'barbearias', state.barbeariaId), { [`fcmTokens.${deviceId}`]: token });
 
     // Atualiza o estado local imediatamente (o listener em tempo real também vai confirmar isso em seguida)
     if (!state.barbearia.fcmTokens) state.barbearia.fcmTokens = {};
@@ -341,14 +342,22 @@ function renderizarUserInfo(userData) {
 // CARREGAR DADOS DA BARBEARIA
 // ========================================
 async function carregarBarbearia() {
-  const snap = await get(ref(db, `barbearias/${state.barbeariaId}`));
-  if (!snap.exists()) throw new Error('Barbearia não encontrada');
-  const data = snap.val();
-  state.barbearia = data.info || {};
-  state.servicos = data.servicos || {};
-  state.profissionais = data.profissionais || {};
-  state.agendamentos = data.agendamentos || {};
-  state.clientes = data.clientes || {};
+  const negocioRef = doc(db, 'barbearias', state.barbeariaId);
+  const [infoSnap, servicosSnap, profissionaisSnap, agendamentosSnap, clientesSnap] = await Promise.all([
+    getDoc(negocioRef),
+    getDocs(collection(negocioRef, 'servicos')),
+    getDocs(collection(negocioRef, 'profissionais')),
+    getDocs(collection(negocioRef, 'agendamentos')),
+    getDocs(collection(negocioRef, 'clientes')),
+  ]);
+  if (!infoSnap.exists()) throw new Error('Barbearia não encontrada');
+
+  const paraObjeto = (snap) => { const obj = {}; snap.forEach(d => { obj[d.id] = d.data(); }); return obj; };
+  state.barbearia = infoSnap.data() || {};
+  state.servicos = paraObjeto(servicosSnap);
+  state.profissionais = paraObjeto(profissionaisSnap);
+  state.agendamentos = paraObjeto(agendamentosSnap);
+  state.clientes = paraObjeto(clientesSnap);
   $('#sidebar-barbearia').textContent = state.barbearia.nome || '—';
 }
 
@@ -357,28 +366,25 @@ async function carregarBarbearia() {
 // ========================================
 function ativarListenersTempoReal() {
   desativarListeners();
-  const paths = [
-    `barbearias/${state.barbeariaId}/info`,
-    `barbearias/${state.barbeariaId}/servicos`,
-    `barbearias/${state.barbeariaId}/profissionais`,
-    `barbearias/${state.barbeariaId}/agendamentos`,
-    `barbearias/${state.barbeariaId}/clientes`
-  ];
-  paths.forEach(p => {
-    const r = ref(db, p);
-    const cb = onValue(r, (snap) => {
-      const dados = snap.val() || {};
-      const chave = p.split('/').pop();
-      if (chave === 'info') state.barbearia = dados;
-      else state[chave] = dados;
+  const negocioRef = doc(db, 'barbearias', state.barbeariaId);
+
+  state.listeners.push(onSnapshot(negocioRef, (snap) => {
+    state.barbearia = snap.data() || {};
+    renderizarViewAtual();
+  }));
+
+  ['servicos', 'profissionais', 'agendamentos', 'clientes'].forEach((chave) => {
+    state.listeners.push(onSnapshot(collection(negocioRef, chave), (snap) => {
+      const dados = {};
+      snap.forEach(d => { dados[d.id] = d.data(); });
+      state[chave] = dados;
       renderizarViewAtual();
-    });
-    state.listeners.push({ ref: r, cb });
+    }));
   });
 }
 
 function desativarListeners() {
-  state.listeners.forEach(l => off(l.ref));
+  state.listeners.forEach(unsub => unsub());
   state.listeners = [];
 }
 
@@ -602,7 +608,7 @@ function abrirModalLembretes(pendentes) {
 
 async function marcarLembreteEnviado(agendamentoId) {
   try {
-    await update(ref(db, `barbearias/${state.barbeariaId}/agendamentos/${agendamentoId}`), {
+    await updateDoc(doc(db, 'barbearias', state.barbeariaId, 'agendamentos', agendamentoId), {
       lembreteEnviado: true,
       lembreteEnviadoEm: new Date().toISOString()
     });
@@ -792,7 +798,7 @@ function modalRemarcarAgendamento(id) {
         return;
       }
 
-      await update(ref(db, `barbearias/${state.barbeariaId}/agendamentos/${id}`), {
+      await updateDoc(doc(db, 'barbearias', state.barbeariaId, 'agendamentos', id), {
         dataChave: novaData,
         horario: novoHorario,
         lembreteEnviado: false,
@@ -812,7 +818,7 @@ function modalRemarcarAgendamento(id) {
 
 async function concluirAgendamento(id) {
   try {
-    await update(ref(db, `barbearias/${state.barbeariaId}/agendamentos/${id}`), {
+    await updateDoc(doc(db, 'barbearias', state.barbeariaId, 'agendamentos', id), {
       status: 'concluido',
       concluidoEm: new Date().toISOString()
     });
@@ -826,7 +832,7 @@ async function concluirAgendamento(id) {
 async function cancelarAgendamento(id) {
   if (!confirm('Tem certeza que deseja cancelar este agendamento?')) return;
   try {
-    await update(ref(db, `barbearias/${state.barbeariaId}/agendamentos/${id}`), {
+    await updateDoc(doc(db, 'barbearias', state.barbeariaId, 'agendamentos', id), {
       status: 'cancelado',
       canceladoEm: new Date().toISOString()
     });
@@ -1046,18 +1052,18 @@ async function salvarNovoAgendamento() {
       return;
     }
 
-    const clienteRef = ref(db, `barbearias/${state.barbeariaId}/clientes/${whatsNorm}`);
-    const clienteSnap = await get(clienteRef);
+    const clienteRef = doc(db, 'barbearias', state.barbeariaId, 'clientes', whatsNorm);
+    const clienteSnap = await getDoc(clienteRef);
     if (clienteSnap.exists()) {
-      const atual = clienteSnap.val();
-      await set(clienteRef, {
+      const atual = clienteSnap.data();
+      await setDoc(clienteRef, {
         ...atual,
         nome,
         totalAgendamentos: (atual.totalAgendamentos || 0) + 1,
         ultimoAgendamento: new Date().toISOString()
       });
     } else {
-      await set(clienteRef, {
+      await setDoc(clienteRef, {
         nome,
         whatsapp: whatsNorm,
         primeiraVisita: new Date().toISOString(),
@@ -1066,8 +1072,7 @@ async function salvarNovoAgendamento() {
       });
     }
 
-    const novoRef = push(ref(db, `barbearias/${state.barbeariaId}/agendamentos`));
-    await set(novoRef, {
+    await addDoc(collection(db, 'barbearias', state.barbeariaId, 'agendamentos'), {
       clienteWhatsapp: whatsNorm,
       clienteNome: nome,
       profissionalId: profId,
@@ -1202,11 +1207,10 @@ function modalServico(id = null) {
 
     try {
       if (id) {
-        await update(ref(db, `barbearias/${state.barbeariaId}/servicos/${id}`), dados);
+        await updateDoc(doc(db, 'barbearias', state.barbeariaId, 'servicos', id), dados);
         toast('Serviço atualizado', 'sucesso');
       } else {
-        const novoRef = push(ref(db, `barbearias/${state.barbeariaId}/servicos`));
-        await set(novoRef, dados);
+        await addDoc(collection(db, 'barbearias', state.barbeariaId, 'servicos'), dados);
         toast('Serviço criado', 'sucesso');
       }
       fecharModal();
@@ -1219,7 +1223,7 @@ function modalServico(id = null) {
 async function deletarServico(id) {
   if (!confirm(`Excluir o serviço "${state.servicos[id].nome}"?`)) return;
   try {
-    await remove(ref(db, `barbearias/${state.barbeariaId}/servicos/${id}`));
+    await deleteDoc(doc(db, 'barbearias', state.barbeariaId, 'servicos', id));
     toast('Serviço excluído', 'sucesso');
   } catch (err) {
     toast('Erro ao excluir', 'erro');
@@ -1356,11 +1360,10 @@ function modalProfissional(id = null) {
 
     try {
       if (id) {
-        await update(ref(db, `barbearias/${state.barbeariaId}/profissionais/${id}`), dados);
+        await updateDoc(doc(db, 'barbearias', state.barbeariaId, 'profissionais', id), dados);
         toast('Profissional atualizado', 'sucesso');
       } else {
-        const novoRef = push(ref(db, `barbearias/${state.barbeariaId}/profissionais`));
-        await set(novoRef, dados);
+        await addDoc(collection(db, 'barbearias', state.barbeariaId, 'profissionais'), dados);
         toast('Profissional criado', 'sucesso');
       }
       fecharModal();
@@ -1373,7 +1376,7 @@ function modalProfissional(id = null) {
 async function deletarProfissional(id) {
   if (!confirm(`Excluir o profissional "${state.profissionais[id].nome}"?`)) return;
   try {
-    await remove(ref(db, `barbearias/${state.barbeariaId}/profissionais/${id}`));
+    await deleteDoc(doc(db, 'barbearias', state.barbeariaId, 'profissionais', id));
     toast('Profissional excluído', 'sucesso');
   } catch (err) {
     toast('Erro ao excluir', 'erro');
@@ -1501,7 +1504,7 @@ async function salvarConfiguracoes(e) {
   });
 
   try {
-    await update(ref(db, `barbearias/${state.barbeariaId}/info`), dados);
+    await updateDoc(doc(db, 'barbearias', state.barbeariaId), dados);
     toast('Configurações salvas', 'sucesso');
   } catch (err) {
     toast('Erro ao salvar', 'erro');

@@ -9,8 +9,8 @@ import {
   createUserWithEmailAndPassword
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import {
-  ref, get, set
-} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+  doc, getDoc, setDoc, writeBatch
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { SERVICOS_SUGERIDOS } from './vocabulario.js';
 
 const auth = getAuth(getApp());
@@ -128,8 +128,8 @@ async function handleCadastro(e) {
   btn.textContent = 'Verificando...';
 
   try {
-    // 1. Verifica se slug já existe (só "info" é público p/ visitante anônimo)
-    const slugSnap = await get(ref(db, `barbearias/${dados.slug}/info`));
+    // 1. Verifica se slug já existe (doc público p/ visitante anônimo)
+    const slugSnap = await getDoc(doc(db, 'barbearias', dados.slug));
     if (slugSnap.exists()) {
       mostrarErro(`O link "${dados.slug}" já está em uso. Tente outro.`);
       btn.disabled = false;
@@ -161,45 +161,46 @@ async function handleCadastro(e) {
 
     // 3. Busca serviços sugeridos pro tipo
     const servicosSugeridos = SERVICOS_SUGERIDOS[dados.tipoNegocio] || SERVICOS_SUGERIDOS.outro;
-    const servicosObj = {};
-    servicosSugeridos.forEach((s, i) => {
-      servicosObj[`srv_00${i + 1}`] = { ...s, ativo: true, ordem: i + 1 };
+
+    // 4. Cria barbearia no banco — doc principal com os campos que antes
+    // ficavam em "info" (achatado direto no documento, sem sub-nó — não
+    // precisa mais, cada doc no Firestore já é sua própria unidade de
+    // segurança/leitura). Serviços/profissionais/clientes/agendamentos são
+    // sub-coleções, que não precisam ser "criadas vazias".
+    await setDoc(doc(db, 'barbearias', dados.slug), {
+      nome: dados.nomeNeg,
+      slug: dados.slug,
+      tipoNegocio: dados.tipoNegocio,
+      endereco: enderecoCompleto || 'Rio de Janeiro',
+      cidade: dados.cidade,
+      bairro: dados.bairro,
+      telefone: normalizarWhatsapp(dados.telefone),
+      status: 'aguardando_aprovacao',
+      plano: 'trial',
+      trialFim: null,
+      criadoEm: agora,
+      criadoPor: uid,
+      horarioFuncionamento: {
+        segunda: { ativo: true,  inicio: '09:00', fim: '19:00' },
+        terca:   { ativo: true,  inicio: '09:00', fim: '19:00' },
+        quarta:  { ativo: true,  inicio: '09:00', fim: '19:00' },
+        quinta:  { ativo: true,  inicio: '09:00', fim: '19:00' },
+        sexta:   { ativo: true,  inicio: '09:00', fim: '20:00' },
+        sabado:  { ativo: true,  inicio: '08:00', fim: '17:00' },
+        domingo: { ativo: false, inicio: '00:00', fim: '00:00' }
+      }
     });
 
-    // 4. Cria barbearia no banco
-    await set(ref(db, `barbearias/${dados.slug}`), {
-      info: {
-        nome: dados.nomeNeg,
-        slug: dados.slug,
-        tipoNegocio: dados.tipoNegocio,
-        endereco: enderecoCompleto || 'Rio de Janeiro',
-        cidade: dados.cidade,
-        bairro: dados.bairro,
-        telefone: normalizarWhatsapp(dados.telefone),
-        status: 'aguardando_aprovacao',
-        plano: 'trial',
-        trialFim: null,
-        criadoEm: agora,
-        criadoPor: uid,
-        horarioFuncionamento: {
-          segunda: { ativo: true,  inicio: '09:00', fim: '19:00' },
-          terca:   { ativo: true,  inicio: '09:00', fim: '19:00' },
-          quarta:  { ativo: true,  inicio: '09:00', fim: '19:00' },
-          quinta:  { ativo: true,  inicio: '09:00', fim: '19:00' },
-          sexta:   { ativo: true,  inicio: '09:00', fim: '20:00' },
-          sabado:  { ativo: true,  inicio: '08:00', fim: '17:00' },
-          domingo: { ativo: false, inicio: '00:00', fim: '00:00' }
-        }
-      },
-      // Serviços já pre-populados com sugestões do tipo escolhido
-      servicos: servicosObj,
-      profissionais: {},
-      clientes: {},
-      agendamentos: {}
+    // Serviços já pre-populados com sugestões do tipo escolhido
+    const batchServicos = writeBatch(db);
+    servicosSugeridos.forEach((s, i) => {
+      const servicoRef = doc(db, 'barbearias', dados.slug, 'servicos', `srv_00${i + 1}`);
+      batchServicos.set(servicoRef, { ...s, ativo: true, ordem: i + 1 });
     });
+    await batchServicos.commit();
 
     // 5. Cria vínculo usuário → negócio
-    await set(ref(db, `usuarios/${uid}`), {
+    await setDoc(doc(db, 'usuarios', uid), {
       email: dados.email,
       nome: dados.nomeResp,
       barbeariaId: dados.slug,
@@ -209,7 +210,7 @@ async function handleCadastro(e) {
     });
 
     // 6. Fila de aprovação pra você ver no painel super-admin
-    await set(ref(db, `cadastrosAguardando/${dados.slug}`), {
+    await setDoc(doc(db, 'cadastrosAguardando', dados.slug), {
       barbeariaId: dados.slug,
       nomeBarbearia: dados.nomeNeg,
       tipoNegocio: dados.tipoNegocio,
