@@ -6,7 +6,7 @@ import { firebaseConfig } from './firebase-config.js';
 import { escapeHtml, adicionarMostrarSenha } from './utils.js';
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
-  getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged
+  getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import {
   getFirestore, doc, collection, getDoc, getDocs, addDoc, updateDoc, deleteDoc,
@@ -134,6 +134,21 @@ $('#form-login').addEventListener('submit', async (e) => {
     else if (err.code==='auth/too-many-requests') msg='Muitas tentativas. Aguarde.';
     erro.textContent=msg; erro.classList.remove('hidden');
     btn.disabled=false; btn.textContent='Entrar';
+  }
+});
+
+// Recuperação de senha do super-admin: o e-mail com o link é enviado pelo
+// Firebase pro endereço da conta. A resposta é a mesma exista a conta ou não
+// (não revela quais e-mails têm acesso).
+$('#btn-esqueci').addEventListener('click', async () => {
+  const email=$('#login-email').value.trim(), erro=$('#erro-login');
+  if (!email) { erro.textContent='Digite seu e-mail no campo acima primeiro.'; erro.classList.remove('hidden'); return; }
+  erro.classList.add('hidden');
+  try {
+    await sendPasswordResetEmail(auth, email);
+    toast('Se esse e-mail tiver acesso, enviamos o link. Confira também o spam.','sucesso');
+  } catch (err) {
+    toast(err.code==='auth/too-many-requests'?'Muitas tentativas. Aguarde um pouco.':'Não foi possível enviar agora. Tente de novo.','erro');
   }
 });
 
