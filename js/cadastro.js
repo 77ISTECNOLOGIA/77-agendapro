@@ -13,6 +13,7 @@ import {
   createUserWithEmailAndPassword
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { SERVICOS_SUGERIDOS } from './vocabulario.js';
+import { adicionarMostrarSenha } from './utils.js';
 
 const auth = getAuth(getApp());
 
@@ -99,6 +100,8 @@ $('#slug').addEventListener('input', (e) => {
 $('#telefone').addEventListener('input', (e) => {
   e.target.value = formatarWhatsapp(e.target.value);
 });
+
+adicionarMostrarSenha($('#senha'));
 
 // ========================================
 // API

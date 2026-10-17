@@ -3,7 +3,7 @@
 // ========================================
 
 import { db } from './firebase-config.js';
-import { escapeHtml } from './utils.js';
+import { escapeHtml, adicionarMostrarSenha } from './utils.js';
 import { aplicarTema, resetarTema } from './vocabulario.js';
 import {
   initializeApp,
@@ -114,6 +114,7 @@ function toast(msg, tipo = '') {
 // AUTENTICAÇÃO
 // ========================================
 function inicializarAuth() {
+  adicionarMostrarSenha($('#login-senha'));
   onAuthStateChanged(auth, async (user) => {
     if (user) {
       state.user = user;

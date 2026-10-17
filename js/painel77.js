@@ -3,7 +3,7 @@
 // ========================================
 
 import { db } from './firebase-config.js';
-import { escapeHtml } from './utils.js';
+import { escapeHtml, adicionarMostrarSenha } from './utils.js';
 import { getApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
   getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged
@@ -76,6 +76,8 @@ function fecharModal() { $('#modal-overlay').classList.add('hidden'); }
 // ========================================
 // AUTH
 // ========================================
+adicionarMostrarSenha($('#login-senha'));
+
 onAuthStateChanged(auth, async (user) => {
   if (user) {
     state.user = user;
