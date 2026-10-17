@@ -2,17 +2,11 @@
 // 77 AGENDAPRO — Área Pública do Cliente
 // ========================================
 
-import { db } from './firebase-config.js';
+// Sem acesso direto ao Firestore: tudo passa pelas funções serverless
+// (/api/negocio, /api/criar-agendamento, /api/agendamento-cliente), que
+// validam no servidor e só devolvem o que o visitante pode ver.
 import { aplicarTema } from './vocabulario.js';
 import { escapeHtml } from './utils.js';
-import {
-  doc,
-  getDoc,
-  setDoc,
-  addDoc,
-  collection,
-  getDocs
-} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 // ========================================
 // ESTADO GLOBAL
@@ -145,6 +139,18 @@ async function inicializar() {
     }
 
     aplicarTema(state.barbearia.tipoNegocio);
+
+    // Negócio aguardando aprovação, suspenso ou com trial vencido: mostra o
+    // aviso em vez de deixar o cliente montar um agendamento que o servidor recusaria.
+    if (state.barbearia.aceitaAgendamentos === false) {
+      mostrarErroBarbearia(
+        state.barbearia.nome || 'Agendamento indisponível',
+        state.barbearia.motivoIndisponivel,
+        '🕒'
+      );
+      return;
+    }
+
     renderizarHeader();
     inicializarEventos();
     mostrarApp();
@@ -155,25 +161,18 @@ async function inicializar() {
 }
 
 async function carregarBarbearia(slug) {
-  // Lê info/servicos/profissionais separadamente (não o nó da barbearia
-  // inteiro) - agendamentos e clientes de outras pessoas contêm nome e
-  // WhatsApp e não devem ser lidos pelo visitante anônimo. A ocupação de
-  // horários vem de /api/agendamentos-ocupados, sem esses dados.
-  const [infoSnap, servicosSnap, profissionaisSnap] = await Promise.all([
-    getDoc(doc(db, 'barbearias', slug)),
-    getDocs(collection(db, 'barbearias', slug, 'servicos')),
-    getDocs(collection(db, 'barbearias', slug, 'profissionais')),
-  ]);
+  // Uma única chamada devolve info pública, serviços, profissionais e a
+  // ocupação futura — já filtrados no servidor (sem comissão, sem tokens,
+  // sem nome/WhatsApp de outros clientes).
+  const resp = await fetch(`/api/negocio?slug=${encodeURIComponent(slug)}`);
+  if (resp.status === 404 || resp.status === 400) return false;
+  if (!resp.ok) throw new Error('Falha ao carregar o estabelecimento');
 
-  if (!infoSnap.exists()) return false;
-
-  state.barbearia = infoSnap.data() || {};
-  state.servicos = {};
-  servicosSnap.forEach((d) => { state.servicos[d.id] = d.data(); });
-  state.profissionais = {};
-  profissionaisSnap.forEach((d) => { state.profissionais[d.id] = d.data(); });
-  state.agendamentos = await carregarOcupacao(slug);
-
+  const dados = await resp.json();
+  state.barbearia = dados.barbearia || {};
+  state.servicos = dados.servicos || {};
+  state.profissionais = dados.profissionais || {};
+  state.agendamentos = dados.ocupados || [];
   return true;
 }
 
@@ -195,8 +194,11 @@ function mostrarApp() {
   $('#app').classList.remove('hidden');
 }
 
-function mostrarErroBarbearia() {
+function mostrarErroBarbearia(titulo, mensagem, icone) {
   $('#loading').classList.add('hidden');
+  if (titulo) $('#erro-barbearia .erro-titulo').textContent = titulo;
+  if (mensagem) $('#erro-barbearia .erro-msg').textContent = mensagem;
+  if (icone) $('#erro-barbearia .erro-icone').textContent = icone;
   $('#erro-barbearia').classList.remove('hidden');
 }
 
@@ -278,13 +280,20 @@ async function verificarClienteExistente(whatsappFormatado) {
   const whatsNorm = normalizarWhatsapp(whatsappFormatado);
 
   try {
-    const snap = await getDoc(doc(db, 'barbearias', state.slug, 'clientes', whatsNorm));
-    if (snap.exists()) {
-      const cliente = snap.data();
-      $('#nome-reconhecido').textContent = cliente.nome.split(' ')[0];
+    // O servidor devolve só o PRIMEIRO nome (não expõe o nome completo de
+    // quem tem aquele WhatsApp pra qualquer visitante que digitar o número).
+    const resp = await fetch('/api/agendamento-cliente', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: state.slug, whatsapp: whatsNorm, action: 'identificar' })
+    });
+    if (!resp.ok) return;
+    const dados = await resp.json();
+    if (whatsNorm !== normalizarWhatsapp($('#input-whatsapp').value)) return; // usuário já mudou o número
+    if (dados.encontrado) {
+      $('#nome-reconhecido').textContent = dados.nome;
       $('#cliente-reconhecido').classList.remove('hidden');
-      $('#input-nome').value = cliente.nome;
-      state.cliente.nome = cliente.nome;
+      if (!$('#input-nome').value.trim()) $('#input-nome').value = dados.nome;
       state.cliente.novo = false;
     } else {
       $('#cliente-reconhecido').classList.add('hidden');
@@ -618,6 +627,8 @@ async function handleConfirmarAgendamento() {
   btn.textContent = 'Confirmando...';
 
   try {
+    // Pré-checagem só pra dar feedback rápido; quem decide de verdade é o
+    // servidor, dentro de uma transação (api/criar-agendamento.js).
     await recarregarAgendamentos();
     const horarios = calcularHorariosDisponiveis(state.profissionalId, state.dataSelecionada);
     const slotAlvo = horarios.find(s => s.hora === state.horarioSelecionado);
@@ -630,14 +641,38 @@ async function handleConfirmarAgendamento() {
       return;
     }
 
-    await salvarCliente();
+    const resp = await fetch('/api/criar-agendamento', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        slug: state.slug,
+        whatsapp: state.cliente.whatsapp,
+        nome: state.cliente.nome,
+        profissionalId: state.profissionalId,
+        servicosIds: state.servicosSelecionados,
+        dataChave: dataParaChave(state.dataSelecionada),
+        horario: state.horarioSelecionado
+      })
+    });
+    const corpo = await resp.json().catch(() => ({}));
 
-    const agendamentoId = await criarAgendamento();
+    if (resp.status === 409) {
+      toast(corpo.erro || 'Este horário acabou de ser reservado. Escolha outro.', 'erro');
+      btn.disabled = false;
+      btn.textContent = 'Confirmar ✓';
+      await recarregarAgendamentos();
+      mostrarTela(3);
+      renderizarHorarios();
+      return;
+    }
+    if (!resp.ok) {
+      toast(corpo.erro || 'Erro ao confirmar agendamento. Tente novamente.', 'erro');
+      btn.disabled = false;
+      btn.textContent = 'Confirmar ✓';
+      return;
+    }
 
-    // Notifica o dono do estabelecimento (não bloqueia o fluxo se falhar)
-    notificarNovoAgendamento(agendamentoId).catch(err => console.error('Erro ao notificar:', err));
-
-    renderizarTelaSucesso(agendamentoId);
+    renderizarTelaSucesso(corpo.id);
     mostrarTela(5);
 
   } catch (err) {
@@ -650,72 +685,6 @@ async function handleConfirmarAgendamento() {
 
 async function recarregarAgendamentos() {
   state.agendamentos = await carregarOcupacao(state.slug);
-}
-
-async function salvarCliente() {
-  const clienteRef = doc(db, 'barbearias', state.slug, 'clientes', state.cliente.whatsapp);
-  const snap = await getDoc(clienteRef);
-
-  if (snap.exists()) {
-    const atual = snap.data();
-    await setDoc(clienteRef, {
-      ...atual,
-      nome: state.cliente.nome,
-      totalAgendamentos: (atual.totalAgendamentos || 0) + 1,
-      ultimoAgendamento: new Date().toISOString()
-    });
-  } else {
-    await setDoc(clienteRef, {
-      nome: state.cliente.nome,
-      whatsapp: state.cliente.whatsapp,
-      primeiraVisita: new Date().toISOString(),
-      ultimoAgendamento: new Date().toISOString(),
-      totalAgendamentos: 1
-    });
-  }
-}
-
-async function criarAgendamento() {
-  const servicos = state.servicosSelecionados.map(id => ({
-    id,
-    nome: state.servicos[id].nome,
-    preco: state.servicos[id].preco,
-    duracaoMin: state.servicos[id].duracaoMin
-  }));
-  const total = servicos.reduce((sum, s) => sum + s.preco, 0);
-  const duracao = servicos.reduce((sum, s) => sum + s.duracaoMin, 0);
-
-  const agendamento = {
-    clienteWhatsapp: state.cliente.whatsapp,
-    clienteNome: state.cliente.nome,
-    profissionalId: state.profissionalId,
-    profissionalNome: state.profissionais[state.profissionalId].nome,
-    servicos: servicos,
-    dataChave: dataParaChave(state.dataSelecionada),
-    horario: state.horarioSelecionado,
-    duracaoMin: duracao,
-    valorTotal: total,
-    status: 'confirmado',
-    criadoEm: new Date().toISOString(),
-    origem: 'cliente'
-  };
-
-  const novoRef = await addDoc(collection(db, 'barbearias', state.slug, 'agendamentos'), agendamento);
-  return novoRef.id;
-}
-
-// ========================================
-// NOTIFICAÇÃO PUSH PRO DONO DO ESTABELECIMENTO
-// ========================================
-// O servidor busca o agendamento e os tokens diretamente no banco — o
-// navegador só informa qual agendamento notificar, nunca o conteúdo da
-// mensagem nem o destino (ver api/send-notification.js).
-async function notificarNovoAgendamento(agendamentoId) {
-  await fetch('/api/send-notification', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ slug: state.slug, agendamentoId })
-  });
 }
 
 // ========================================

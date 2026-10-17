@@ -2,59 +2,49 @@
 // 77 AGENDAPRO — API: Criar acesso do dono (automatiza Firebase Console)
 // Vercel Serverless Function (Node.js)
 // ========================================
+// Só super-admin da 77 IS chama (token verificado no servidor).
 
-const admin = require('firebase-admin');
-
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n')
-    })
-  });
-}
+const { db, auth } = require('./_lib/firebase');
+const { slugValido } = require('./_lib/negocio');
+const { dentroDoLimite, responder, ErroNegocio, tratarErro, corpoDe } = require('./_lib/http');
 
 module.exports = async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ erro: 'Método não permitido' });
-  }
+  if (req.method !== 'POST') return responder(res, 405, { erro: 'Método não permitido' });
+  if (!dentroDoLimite(req, 'criar-usuario', 20, 3600000)) return responder(res, 429, { erro: 'Muitas requisições.' });
 
-  const { idToken, email, senha, nome, barbeariaId } = req.body || {};
+  const { idToken, email, senha, nome, barbeariaId } = corpoDe(req);
 
   if (!idToken || !email || !senha || !barbeariaId) {
-    return res.status(400).json({ erro: 'Parâmetros obrigatórios: idToken, email, senha, barbeariaId' });
+    return responder(res, 400, { erro: 'Parâmetros obrigatórios: idToken, email, senha, barbeariaId' });
   }
-  if (senha.length < 6) {
-    return res.status(400).json({ erro: 'A senha precisa ter pelo menos 6 caracteres' });
+  if (typeof senha !== 'string' || senha.length < 6) {
+    return responder(res, 400, { erro: 'A senha precisa ter pelo menos 6 caracteres' });
   }
+  if (!slugValido(String(barbeariaId))) return responder(res, 400, { erro: 'Negócio inválido' });
 
   try {
-    const db = admin.firestore();
+    const firestore = db();
 
     // 1. Confirma que quem está chamando é mesmo um super-admin da 77 IS
-    const decoded = await admin.auth().verifyIdToken(idToken);
-    const adminSnap = await db.collection('admins77').doc(decoded.uid).get();
-    const adminData = adminSnap.data();
+    const decoded = await auth().verifyIdToken(idToken);
+    const adminData = (await firestore.collection('admins77').doc(decoded.uid).get()).data();
     if (!adminData || adminData.role !== 'super_admin') {
-      return res.status(403).json({ erro: 'Sem permissão de super-admin' });
+      throw new ErroNegocio(403, 'Sem permissão de super-admin');
     }
 
     // 2. Confirma que o negócio existe
-    const negocioSnap = await db.collection('barbearias').doc(barbeariaId).get();
-    if (!negocioSnap.exists) {
-      return res.status(404).json({ erro: 'Negócio não encontrado' });
-    }
+    const negocioSnap = await firestore.collection('barbearias').doc(barbeariaId).get();
+    if (!negocioSnap.exists) throw new ErroNegocio(404, 'Negócio não encontrado');
 
     // 3. Cria o usuário no Firebase Authentication
-    const userRecord = await admin.auth().createUser({
+    const userRecord = await auth().createUser({
       email,
       password: senha,
       displayName: nome || undefined
     });
 
     // 4. Cria o vínculo dono ↔ negócio no Firestore
-    await db.collection('usuarios').doc(userRecord.uid).set({
+    await firestore.collection('usuarios').doc(userRecord.uid).set({
       email,
       nome: nome || email,
       barbeariaId,
@@ -62,13 +52,16 @@ module.exports = async function handler(req, res) {
       precisaOnboarding: false
     });
 
-    return res.status(200).json({ sucesso: true, uid: userRecord.uid });
+    return responder(res, 200, { sucesso: true, uid: userRecord.uid });
   } catch (err) {
+    if (err instanceof ErroNegocio) return tratarErro(res, err, 'criar-usuario');
     console.error('Erro ao criar usuário:', err);
     let msg = 'Erro ao criar acesso.';
-    if (err.code === 'auth/email-already-exists') msg = 'Esse email já está cadastrado em outro acesso.';
-    else if (err.code === 'auth/invalid-password' || err.code === 'auth/weak-password') msg = 'Senha inválida (mínimo 6 caracteres).';
-    else if (err.code === 'auth/invalid-email') msg = 'Email inválido.';
-    return res.status(500).json({ erro: msg, detalhes: err.message });
+    let status = 500;
+    if (err.code === 'auth/email-already-exists') { msg = 'Esse email já está cadastrado em outro acesso.'; status = 409; }
+    else if (err.code === 'auth/invalid-password' || err.code === 'auth/weak-password') { msg = 'Senha inválida (mínimo 6 caracteres).'; status = 400; }
+    else if (err.code === 'auth/invalid-email') { msg = 'Email inválido.'; status = 400; }
+    else if (err.code && String(err.code).startsWith('auth/id-token')) { msg = 'Sessão expirada. Entre novamente.'; status = 401; }
+    return responder(res, status, { erro: msg });
   }
 };

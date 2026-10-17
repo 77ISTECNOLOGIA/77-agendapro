@@ -292,10 +292,10 @@ function renderAprovacoes() {
   const lista=Object.entries(state.cadastrosAguardando).map(([id,c])=>({id,...c}))
     .sort((a,b)=>new Date(a.criadoEm)-new Date(b.criadoEm));
 
-  $('#aprovacoes-total').textContent=`${lista.length} cadastro${lista.length!==1?'s':''} aguardando`;
+  $('#aprovacoes-total').textContent=`${lista.length} cadastro${lista.length!==1?'s':''} novo${lista.length!==1?'s':''} pra conferir`;
 
   if (lista.length===0) {
-    $('#lista-aprovacoes').innerHTML='<div class="vazio-msg">🎉 Nenhuma aprovação pendente</div>';
+    $('#lista-aprovacoes').innerHTML='<div class="vazio-msg">🎉 Nenhum cadastro novo pra conferir</div>';
     return;
   }
 
@@ -318,7 +318,7 @@ function renderAprovacoes() {
         <div class="det-mini"><span class="label">LINK</span><span class="valor" style="font-family:monospace;">/${escapeHtml(c.barbeariaId)}</span></div>
       </div>
       <div class="aprovacao-acoes">
-        <button class="btn-acao" data-acao="aprovar">✓ Aprovar (30d trial)</button>
+        <button class="btn-acao" data-acao="aprovar">✓ Marcar como visto</button>
         <button class="btn-acao-secundario" data-acao="whatsapp">💬 WhatsApp</button>
         <button class="btn-acao-perigo" data-acao="recusar">✕ Recusar</button>
       </div>
@@ -332,16 +332,24 @@ function renderAprovacoes() {
   });
 }
 
+// Cadastros novos já nascem em 'trial' com 30 dias (api/cadastrar-negocio.js) e
+// o dono já tem login — "Marcar como visto" só tira o cadastro da fila. Só
+// cadastros antigos (sem trialFim) ganham os 30 dias aqui.
 async function aprovar(c) {
-  if (!confirm(`Aprovar "${c.nomeBarbearia}" e iniciar trial de 30 dias?`)) return;
-  const agora=new Date(), trialFim=new Date(agora.getTime()+30*86400000);
-  await updateDoc(doc(db,'barbearias',c.barbeariaId),{status:'trial',aprovadaEm:agora.toISOString(),aprovadaPor:state.user.uid,trialFim:trialFim.toISOString()});
+  const atual=state.negocios[c.barbeariaId]||{};
+  const jaTemTrial=!!atual.trialFim;
+  if (!confirm(jaTemTrial?`Marcar "${c.nomeBarbearia}" como visto?`:`Aprovar "${c.nomeBarbearia}" e iniciar trial de 30 dias?`)) return;
+
+  const agora=new Date();
+  const mudancas={aprovadaEm:agora.toISOString(),aprovadaPor:state.user.uid};
+  if (!jaTemTrial) {
+    mudancas.status='trial';
+    mudancas.trialFim=new Date(agora.getTime()+30*86400000).toISOString();
+  }
+  await updateDoc(doc(db,'barbearias',c.barbeariaId),mudancas);
   await deleteDoc(doc(db,'cadastrosAguardando',c.barbeariaId));
   await log('aprovou',c.barbeariaId,c.nomeBarbearia);
-  toast(`${c.nomeBarbearia} aprovado! Trial até ${trialFim.toLocaleDateString('pt-BR')}`,'sucesso');
-
-  // Abre direto o modal de criar acesso, já preenchido com os dados do cadastro
-  setTimeout(() => abrirModalCriarAcesso(c.barbeariaId, { email: c.email, nome: c.nomeResponsavel }), 400);
+  toast(jaTemTrial?`${c.nomeBarbearia} marcado como visto`:`${c.nomeBarbearia} aprovado! Trial de 30 dias iniciado`,'sucesso');
 }
 
 async function recusar(c) {
@@ -354,7 +362,7 @@ async function recusar(c) {
 }
 
 function wppBoasVindas(c) {
-  const msg=encodeURIComponent(`Olá ${c.nomeResponsavel.split(' ')[0]}! 👋\n\nAqui é o Felipe, da 77 IS Tecnologia. Recebi seu cadastro de *${c.nomeBarbearia}* no 77 AgendaPro.\n\nVou liberar seu acesso agora. Em alguns minutos você pode entrar em:\n\n🔗 77-agendapro.vercel.app/admin\n📧 Email: ${c.email}\n\nQualquer dúvida é só chamar aqui! 🚀`);
+  const msg=encodeURIComponent(`Olá ${c.nomeResponsavel.split(' ')[0]}! 👋\n\nAqui é o Felipe, da 77 IS Tecnologia. Recebi seu cadastro de *${c.nomeBarbearia}* no 77 AgendaPro.\n\nSeu acesso já está liberado e seus 30 dias grátis já começaram. Pode entrar em:\n\n🔗 77-agendapro.vercel.app/admin\n📧 Email: ${c.email}\n\nQualquer dúvida é só chamar aqui! 🚀`);
   window.open(`https://wa.me/${c.telefone}?text=${msg}`,'_blank');
 }
 

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "agendapro-local-teste",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["tests/dev-local.js"],
+      "port": 3000
+    }
+  ]
+}
