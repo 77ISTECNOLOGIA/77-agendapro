@@ -83,6 +83,9 @@ onAuthStateChanged(auth, async (user) => {
     state.user = user;
     try {
       const snap = await getDoc(doc(db, 'admins77', user.uid));
+      // A tela de login precisa sumir também no login feito NESTA sessão
+      // (antes só sumia ao recarregar a página, e o botão ficava em "Entrando...").
+      $('#tela-login').classList.add('hidden');
       if (!snap.exists() || snap.data().role !== 'super_admin') {
         $('#loading').classList.add('hidden');
         $('#tela-negado').classList.remove('hidden');
@@ -108,6 +111,7 @@ function mostrarLogin(msg) {
   $('#loading').classList.add('hidden');
   ['#painel-app','#tela-negado'].forEach(s=>$(s).classList.add('hidden'));
   $('#tela-login').classList.remove('hidden');
+  const btn=$('#btn-login'); if (btn) { btn.disabled=false; btn.textContent='Entrar'; }  // não deixa o botão preso em "Entrando..."
   if (msg) { $('#erro-login').textContent=msg; $('#erro-login').classList.remove('hidden'); }
 }
 
