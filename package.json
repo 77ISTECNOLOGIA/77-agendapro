@@ -1,8 +1,14 @@
 {
   "name": "77-agendapro",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test tests/logica.test.js tests/api.test.js"
+  },
   "dependencies": {
-    "firebase-admin": "^12.1.0"
+    "firebase-admin": "^13.0.0"
   }
 }

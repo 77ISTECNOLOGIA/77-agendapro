@@ -18,7 +18,7 @@ O 77 AgendaPro é um sistema de marcação de horários focado em barbearias aut
 ✅ Re-validação anti-conflito no momento da confirmação
 ✅ Painel do dono do negócio — `admin.html` / `js/admin.js`: dashboard, agenda, CRUD de serviços/profissionais
 ✅ Auto-cadastro público de novo negócio — `cadastro.html` / `js/cadastro.js`
-✅ Painel administrativo interno da 77 IS — `painel77.html` / `js/painel77.js`: aprovação de cadastros, gestão de trials/assinaturas, todos os negócios
+✅ Painel administrativo interno da 77 IS — `painel77.html` / `js/painel77.js`: novos cadastros, gestão de trials/assinaturas, todos os negócios
 ✅ Notificação push (Web Push/FCM) pro dono a cada novo agendamento — `api/send-notification.js`
 ✅ Onboarding de dono via função serverless — `api/criar-usuario.js`
 ✅ Regras do Realtime Database versionadas (`database.rules.json`) e deployadas

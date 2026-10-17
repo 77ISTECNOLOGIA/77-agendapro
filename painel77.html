@@ -81,7 +81,7 @@
     <!-- ABAS HORIZONTAIS -->
     <nav class="tabs-nav">
       <button class="nav-item ativo" data-view="overview"><span class="nav-icon">📊</span><span class="nav-label">Visão Geral</span></button>
-      <button class="nav-item" data-view="aprovacoes"><span class="nav-icon">⏳</span><span class="nav-label">Aprovações</span><span class="nav-badge" id="badge-aprovacoes"></span></button>
+      <button class="nav-item" data-view="aprovacoes"><span class="nav-icon">⏳</span><span class="nav-label">Novos cadastros</span><span class="nav-badge" id="badge-aprovacoes"></span></button>
       <button class="nav-item" data-view="negocios"><span class="nav-icon">💈</span><span class="nav-label">Negócios</span></button>
       <button class="nav-item" data-view="atividade"><span class="nav-icon">⚡</span><span class="nav-label">Atividade</span></button>
     </nav>
@@ -106,7 +106,7 @@
           <div class="kpi-card">
             <div class="kpi-icon">⏳</div>
             <div class="kpi-info">
-              <div class="kpi-label">Aguardando aprovação</div>
+              <div class="kpi-label">Cadastros novos</div>
               <div class="kpi-valor" id="kpi-aguardando">0</div>
               <div class="kpi-extra">cadastros novos</div>
             </div>
@@ -147,7 +147,7 @@
       <!-- APROVAÇÕES -->
       <section class="view" id="view-aprovacoes">
         <div class="view-header">
-          <div><h1 class="view-titulo">Aprovações pendentes</h1><p class="view-sub" id="aprovacoes-total">—</p></div>
+          <div><h1 class="view-titulo">Novos cadastros</h1><p class="view-sub" id="aprovacoes-total">—</p></div>
         </div>
         <div id="lista-aprovacoes"><div class="vazio-msg">Carregando...</div></div>
       </section>

@@ -2,7 +2,7 @@
 
 ## O que é
 
-AgendaPro é um produto da **77 IS Tecnologia & Inteligência**, plataforma de agendamento online para barbearias e salões autônomos/pequenos (1 a 5 profissionais). Cliente final agenda sem login via link público/QR Code; dono do negócio tem painel próprio; a 77 IS tem um painel interno de super-admin pra aprovar cadastros e gerenciar trials.
+AgendaPro é um produto da **77 IS Tecnologia & Inteligência**, plataforma de agendamento online para barbearias e salões autônomos/pequenos (1 a 5 profissionais). Cliente final agenda sem login via link público/QR Code; dono do negócio tem painel próprio; a 77 IS tem um painel interno de super-admin pra acompanhar novos cadastros e gerenciar trials.
 
 ## Stack e workflow (regras fixas)
 
@@ -34,6 +34,16 @@ AgendaPro é um produto da **77 IS Tecnologia & Inteligência**, plataforma de a
    - **Identidade do cliente por WhatsApp preservada, não substituída** — `api/agendamento-cliente.js` continua autorizando por comparação de string (WhatsApp enviado vs. `agendamento.clienteWhatsapp`), sem Firebase Auth pro cliente final.
    - **Migração de dados** via `scripts/migrar-rtdb-para-firestore.js` (idempotente) + corte por janela curta de manutenção. RTDB fica dormente por 30 dias após o corte antes de qualquer exclusão.
 
+10. **Rearquitetura de segurança (2026-10): o Firestore não tem mais NENHUMA leitura/escrita pública.** Motivo: auditoria apontou que qualquer usuário logado podia gravar `usuarios/{seu-uid}` apontando pra qualquer negócio e virar "dono" dele (leitura de nome+WhatsApp de todos os clientes, escrita total), que o dono podia editar o próprio `status/plano/trialFim`, e que `agendamentos` aceitava qualquer texto (XSS armazenado no painel + faturamento falsificável + corrida entre dois clientes no mesmo horário). Decisões:
+   - **Visitante só fala com `api/*`.** `api/negocio.js` (GET, dados públicos já filtrados: sem comissão, sem tokens, sem PII + ocupação futura), `api/criar-agendamento.js` (POST, **transação**: recalcula preço/duração a partir dos serviços do banco, valida disponibilidade, cria agendamento e atualiza `clientes` atomicamente, notifica o dono), `api/agendamento-cliente.js` (identificar/listar/cancelar/remarcar; remarcar também em transação), `api/cadastrar-negocio.js` (auto-cadastro: o servidor cria negócio + serviços + `usuarios` + fila de aprovação; o negócio SEMPRE nasce em `trial` com 30 dias (`trialFim` definido pelo servidor — o link público já funciona no cadastro, sem aprovação); e-mail vem do token verificado), `api/agendamentos-ocupados.js` (só de hoje em diante).
+   - **`api/send-notification.js` foi removido** (endpoint público desnecessário): quem cria o agendamento notifica direto (`api/_lib/notificar.js`). Tokens push saíram do documento do negócio pra `barbearias/{slug}/dispositivos/{deviceId}` (privado; tokens inválidos são apagados no envio).
+   - **`firestore.rules` reescrito:** `usuarios` e `barbearias` (create/delete) só via servidor; o dono só atualiza `nome/endereco/telefone/horarioFuncionamento` do próprio negócio (`diff().affectedKeys().hasOnly`); `agendamentos` criado/editado só por dono/super-admin e com forma validada (regex de data/hora, enum de status); `clientes` só dono. `database.rules.json` (RTDB) **não foi alterado** — ver pendências.
+   - **Lógica de disponibilidade em um lugar só:** `api/_lib/disponibilidade.js` (`verificarSlot`, função pura). `app.js`/`admin.js` só pintam a grade; quem decide é o servidor. Também exige horário na grade de 30 min, antecedência de 30 min hoje e máximo de 90 dias.
+   - **Situação comercial é aplicada:** `api/_lib/negocio.js` (`situacaoNegocio`) — `suspensa` não aceita agendamento; `trial` vencido tem carência de 7 dias (`CARENCIA_TRIAL_DIAS`) e depois fecha; `aguardando_aprovacao` é só legado (cadastros antigos) e segue aceitando. **Fluxo de entrada:** o dono se cadastra → conta + negócio criados na hora com trial de 30 dias → link público já aceita agendamentos. A fila `cadastrosAguardando` virou só um aviso de "novos cadastros" no `/painel77` (conferir/recusar); recusar suspende o negócio. Banner em `admin.js` avisa o dono quando o trial está acabando/acabou ou a conta foi suspensa.
+   - **Anti-abuso:** limite de requisições por IP em memória (`api/_lib/http.js`, melhor esforço — cada instância Vercel tem a sua), máx. 5 agendamentos futuros confirmados por WhatsApp/negócio, validação estrita de entradas, respostas de erro sem `err.message`.
+   - **Limitação conhecida:** identidade do cliente final continua sendo só o WhatsApp (sem OTP). Código de confirmação por WhatsApp/SMS exige provedor pago — próximo passo de segurança.
+   - **Testes:** `npm test` (35 testes, `node:test`, sem dependências) com Firestore falso em memória (`tests/_helpers.js`). `node tests/dev-local.js` sobe o site + APIs com banco falso em `localhost:3000` pra testar o fluxo público no navegador sem tocar em produção. **As regras do Firestore não têm teste automatizado** (o emulador exige Java, não instalado).
+
 ## Módulos construídos
 
 | Módulo | Arquivo | Resumo |
@@ -41,12 +51,16 @@ AgendaPro é um produto da **77 IS Tecnologia & Inteligência**, plataforma de a
 | Área pública | `index.html` / `js/app.js` | Agendamento em 4 passos, sem login, cliente identificado por WhatsApp. "Meus agendamentos" (Tela 6) permite cancelar/remarcar sozinho via `api/agendamento-cliente.js` |
 | Painel do dono | `admin.html` / `js/admin.js` | Dashboard, agenda do dia (com agendamento manual e remarcação), CRUD de serviços/profissionais, clientes, configurações, notificações push |
 | Auto-cadastro | `cadastro.html` / `js/cadastro.js` | Novo negócio se cadastra sozinho (cria conta + registro em `cadastrosAguardando`) |
-| Painel interno 77 IS | `painel77.html` / `js/painel77.js` | Aprovação de cadastros, gestão de trial/assinatura de todos os negócios, logs |
+| Painel interno 77 IS | `painel77.html` / `js/painel77.js` | Novos cadastros (conferir/recusar), gestão de trial/assinatura de todos os negócios, logs |
 
 ## Pendências conhecidas
 
 - **Corte de produção da migração Firestore ainda não feito** (ver decisão #9): código já reescrito e validado (sintaxe + regras compiladas), mas os dados reais ainda estão só no Realtime Database. Falta: (1) Felipe gerar a service account key em Firebase Console e configurar as env vars no Vercel, (2) rodar `scripts/migrar-rtdb-para-firestore.js` a seco, (3) testar os fluxos localmente, (4) executar o corte numa janela curta de manutenção. RTDB deve ficar dormente (não excluído) por 30 dias depois do corte.
-- Regras do Firestore cobrem os casos principais mas não foram auditadas path a path por completo — revisar antes de adicionar coleções novas.
+- **Deploy da rearquitetura (decisão #10) — ordem importa:** (1) migrar dados (`scripts/migrar-rtdb-para-firestore.js`, que agora também move `fcmTokens` → `dispositivos`); (2) deploy do código na Vercel; (3) `firebase deploy --only firestore:rules --project agendapro-179cb`. Rules antes do código quebra o link público; código antes das rules deixa o furo aberto por mais tempo. Dono precisa reativar notificações push uma vez (tokens antigos ficavam em outro lugar).
+- **Realtime Database antigo segue com regras abertas** (`database.rules.json`: `clientes` com `.write: true`, criação de `agendamentos` sem auth) enquanto estiver "dormente". Depois do corte, trocar por deny-all (`{"rules":{".read":false,".write":false}}`) — não foi feito aqui porque derrubaria a produção se ela ainda estiver no código antigo.
+- Regras do Firestore reescritas mas **sem teste automatizado** (precisa do emulador + Java) — testar manualmente após o deploy: dono lendo/editando o próprio negócio, dono NÃO lendo outro negócio, visitante anônimo sem acesso a nada.
+- 8 vulnerabilidades moderadas no `npm audit` (cadeia `uuid` dentro do `firebase-admin`); só resolve com `firebase-admin@14` (mudança que quebra compatibilidade) — avaliar depois.
+- Sem CSP no `vercel.json` (as páginas usam estilos/scripts inline e CDNs); `X-Frame-Options`, HSTS e `Permissions-Policy` já estão.
 - Painel interno 77 IS (`painel77.js`) não mostra mais alguns agregados que dependiam de ler a árvore inteira em tempo real (ver decisão #9) — se algum número específico fizer falta, avaliar contador pré-agregado antes de simplesmente voltar a ler tudo.
 - Sem suíte de testes automatizados.
 

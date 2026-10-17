@@ -130,6 +130,7 @@ function inicializarAuth() {
         aplicarTema(state.barbearia.tipoNegocio);
         renderizarUserInfo(userData);
         mostrarApp();
+        avisarSituacaoConta();
         ativarListenersTempoReal();
         await renderizarTudo();
         ouvirNotificacoesEmPrimeiroPlano();
@@ -231,12 +232,11 @@ async function ativarNotificacoes() {
     // Salva o token deste dispositivo na lista, usando um ID fixo do navegador como chave
     // (não o token em si, que pode rotacionar e criar entradas duplicadas pro mesmo dispositivo)
     const deviceId = obterDeviceId();
-    await updateDoc(doc(db, 'barbearias', state.barbeariaId), { [`fcmTokens.${deviceId}`]: token });
-
-    // Atualiza o estado local imediatamente (o listener em tempo real também vai confirmar isso em seguida)
-    if (!state.barbearia.fcmTokens) state.barbearia.fcmTokens = {};
-    state.barbearia.fcmTokens[deviceId] = token;
-    const totalAtual = Object.keys(state.barbearia.fcmTokens).length;
+    // Tokens ficam numa sub-coleção privada (antes ficavam no documento do
+    // negócio, que era legível por qualquer visitante).
+    const dispositivosRef = collection(db, 'barbearias', state.barbeariaId, 'dispositivos');
+    await setDoc(doc(dispositivosRef, deviceId), { token, atualizadoEm: new Date().toISOString() });
+    const totalAtual = (await getDocs(dispositivosRef)).size;
 
     toast('Notificações ativadas neste dispositivo! 🔔', 'sucesso');
     atualizarStatusNotificacoes(true, totalAtual);
@@ -362,6 +362,46 @@ async function carregarBarbearia() {
 }
 
 // ========================================
+// SITUAÇÃO DA CONTA (trial / suspensão)
+// ========================================
+// O link público funciona desde o cadastro (trial de 30 dias já em andamento).
+// Aqui o dono só é avisado quando o trial está acabando/acabou ou a conta foi
+// suspensa — a regra de quando o link público para de aceitar agendamentos
+// vive no servidor (api/_lib/negocio.js).
+function avisarSituacaoConta() {
+  let el = document.getElementById('aviso-situacao');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'aviso-situacao';
+    el.setAttribute('role', 'status');
+    el.style.cssText = 'position:sticky;top:0;z-index:50;padding:10px 16px;font-size:14px;text-align:center;border-bottom:1px solid var(--border);';
+    document.body.prepend(el);
+  }
+
+  const status = state.barbearia.status || 'trial';
+  let texto = '';
+  let cor = '';
+
+  if (status === 'suspensa') {
+    texto = '⛔ Sua conta está suspensa: o link público não aceita novos agendamentos. Fale com o suporte da 77 IS para reativar.';
+    cor = 'background:#3a1414;color:#ffb4b4;';
+  } else if (status === 'trial' && state.barbearia.trialFim) {
+    const dias = Math.ceil((Date.parse(state.barbearia.trialFim) - Date.now()) / 86400000);
+    if (dias <= 7 && dias >= 0) {
+      texto = `🎁 Seu teste grátis termina em ${dias} dia${dias === 1 ? '' : 's'}. Fale com a 77 IS para continuar usando sem interrupção.`;
+      cor = 'background:#1f2e12;color:#d4ff3a;';
+    } else if (dias < 0) {
+      texto = '⚠️ Seu teste grátis terminou. Fale com a 77 IS para ativar o plano — em poucos dias o link público deixa de aceitar agendamentos.';
+      cor = 'background:#3a2410;color:#ffc58a;';
+    }
+  }
+
+  el.textContent = texto;
+  el.style.cssText = el.style.cssText.replace(/background:[^;]*;|color:[^;]*;/g, '') + cor;
+  el.style.display = texto ? 'block' : 'none';
+}
+
+// ========================================
 // LISTENERS EM TEMPO REAL
 // ========================================
 function ativarListenersTempoReal() {
@@ -370,6 +410,7 @@ function ativarListenersTempoReal() {
 
   state.listeners.push(onSnapshot(negocioRef, (snap) => {
     state.barbearia = snap.data() || {};
+    avisarSituacaoConta();
     renderizarViewAtual();
   }));
 
@@ -477,7 +518,7 @@ function renderizarDashboard() {
         <div class="proximo-detalhes">
           ${escapeHtml(proximo.profissionalNome)} • ${(proximo.servicos || []).map(s => escapeHtml(s.nome)).join(' + ')}
         </div>
-        <span class="proximo-horario">⏰ ${proximo.horario}</span>
+        <span class="proximo-horario">⏰ ${escapeHtml(proximo.horario)}</span>
       </div>
     `;
   } else {
@@ -564,8 +605,8 @@ function abrirModalLembretes(pendentes) {
     </p>
     <div style="display: flex; flex-direction: column; gap: 8px;">
       ${ordenados.map(a => `
-        <div class="lembrete-item" data-id="${a.id}" style="background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px; display: flex; gap: 12px; align-items: center;">
-          <div style="font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; color: var(--accent); min-width: 50px;">${a.horario}</div>
+        <div class="lembrete-item" data-id="${escapeHtml(a.id)}" style="background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px; display: flex; gap: 12px; align-items: center;">
+          <div style="font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; color: var(--accent); min-width: 50px;">${escapeHtml(a.horario)}</div>
           <div style="flex: 1; min-width: 0;">
             <div style="font-weight: 600; font-size: 14px; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(a.clienteNome)}</div>
             <div style="font-size: 11px; color: var(--text-muted);">${(a.servicos || []).map(s => escapeHtml(s.nome)).join(' + ')}</div>
@@ -625,8 +666,8 @@ function renderizarCardAgendamento(a) {
     ? '<span title="Lembrete enviado" style="color: var(--success); font-size: 11px; margin-right: 4px;">💬✓</span>'
     : '';
   return `
-    <div class="agendamento-card ${statusClass}" data-id="${a.id}">
-      <div class="agendamento-hora">${a.horario}</div>
+    <div class="agendamento-card ${statusClass}" data-id="${escapeHtml(a.id)}">
+      <div class="agendamento-hora">${escapeHtml(a.horario)}</div>
       <div class="agendamento-info">
         <div class="agendamento-cliente">${lembreteBadge}${escapeHtml(a.clienteNome)}</div>
         <div class="agendamento-detalhes">
@@ -700,10 +741,10 @@ function abrirDetalhesAgendamento(id) {
       <div class="det-linha"><span class="label">WhatsApp</span><span class="valor">${escapeHtml(formatarWhatsapp(a.clienteWhatsapp))}</span></div>
       <div class="det-linha"><span class="label">Profissional</span><span class="valor">${escapeHtml(a.profissionalNome)}</span></div>
       <div class="det-linha"><span class="label">Data</span><span class="valor">${dataStr}</span></div>
-      <div class="det-linha"><span class="label">Horário</span><span class="valor">${a.horario} — ${minutosParaHora(fimMin)}</span></div>
+      <div class="det-linha"><span class="label">Horário</span><span class="valor">${escapeHtml(a.horario)} — ${minutosParaHora(fimMin)}</span></div>
       <div class="det-linha"><span class="label">Serviços</span><span class="valor">${(a.servicos || []).map(s => escapeHtml(s.nome)).join(' + ')}</span></div>
       <div class="det-linha"><span class="label">Total</span><span class="valor" style="color:var(--accent);font-family:'Bricolage Grotesque';font-weight:700;font-size:16px;">${formatarMoeda(a.valorTotal)}</span></div>
-      <div class="det-linha"><span class="label">Status</span><span class="valor"><span class="agendamento-status status-${a.status}">${a.status}</span></span></div>
+      <div class="det-linha"><span class="label">Status</span><span class="valor"><span class="agendamento-status status-${escapeHtml(a.status)}">${escapeHtml(a.status)}</span></span></div>
       ${a.status === 'confirmado' ? `<div class="det-linha"><span class="label">Lembrete</span><span class="valor">${lembreteStr}</span></div>` : ''}
     </div>
     <div class="det-acoes">
@@ -734,12 +775,12 @@ function modalRemarcarAgendamento(id) {
       <div class="det-linha"><span class="label">Cliente</span><span class="valor">${escapeHtml(a.clienteNome)}</span></div>
       <div class="det-linha"><span class="label">Profissional</span><span class="valor">${escapeHtml(a.profissionalNome)}</span></div>
       <div class="det-linha"><span class="label">Serviços</span><span class="valor">${(a.servicos || []).map(s => escapeHtml(s.nome)).join(' + ')}</span></div>
-      <div class="det-linha"><span class="label">Atual</span><span class="valor">${formatarDataLonga(chaveParaData(a.dataChave))} — ${a.horario}</span></div>
+      <div class="det-linha"><span class="label">Atual</span><span class="valor">${formatarDataLonga(chaveParaData(a.dataChave))} — ${escapeHtml(a.horario)}</span></div>
     </div>
     <div class="form-grid">
       <div class="input-grupo">
         <label class="input-label">NOVA DATA</label>
-        <input type="date" id="rmc-data" class="input" min="${hojeStr}" value="${a.dataChave}">
+        <input type="date" id="rmc-data" class="input" min="${hojeStr}" value="${escapeHtml(a.dataChave)}">
       </div>
       <div class="input-grupo">
         <label class="input-label">NOVO HORÁRIO</label>
@@ -1110,7 +1151,7 @@ function enviarLembreteWhatsapp(a) {
     `👤 Com ${a.profissionalNome}\n\n` +
     `Te esperamos! Qualquer coisa, é só responder por aqui. 😊`
   );
-  const url = `https://wa.me/${a.clienteWhatsapp}?text=${msg}`;
+  const url = `https://wa.me/${encodeURIComponent(a.clienteWhatsapp)}?text=${msg}`;
   window.open(url, '_blank');
 
   // Marca lembrete como enviado se ainda não tiver sido (e se vier do modal de detalhes)
@@ -1444,8 +1485,9 @@ function renderizarConfiguracoes() {
   $('#link-publico').textContent = `${window.location.origin}/${state.barbeariaId}`;
 
   // Status das notificações push (verifica se há pelo menos 1 dispositivo ativado)
-  const totalDispositivos = state.barbearia.fcmTokens ? Object.keys(state.barbearia.fcmTokens).length : 0;
-  atualizarStatusNotificacoes(totalDispositivos > 0, totalDispositivos);
+  getDocs(collection(db, 'barbearias', state.barbeariaId, 'dispositivos'))
+    .then((snap) => atualizarStatusNotificacoes(snap.size > 0, snap.size))
+    .catch(() => atualizarStatusNotificacoes(false, 0));
 
   // Horários
   const dias = diasDaSemana();

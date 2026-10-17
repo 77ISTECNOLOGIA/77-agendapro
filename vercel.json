@@ -3,7 +3,7 @@
     { "source": "/admin",    "destination": "/admin.html"    },
     { "source": "/painel77", "destination": "/painel77.html" },
     { "source": "/cadastro", "destination": "/cadastro.html" },
-    { "source": "/((?!.*\\.).*)", "destination": "/index.html" }
+    { "source": "/((?!api/)(?!.*\\.).*)", "destination": "/index.html" }
   ],
   "headers": [
     {
@@ -11,7 +11,9 @@
       "headers": [
         { "key": "X-Content-Type-Options", "value": "nosniff" },
         { "key": "X-Frame-Options",        "value": "DENY"    },
-        { "key": "Referrer-Policy",        "value": "strict-origin-when-cross-origin" }
+        { "key": "Referrer-Policy",        "value": "strict-origin-when-cross-origin" },
+        { "key": "Strict-Transport-Security", "value": "max-age=31536000; includeSubDomains" },
+        { "key": "Permissions-Policy",     "value": "camera=(), microphone=(), geolocation=()" }
       ]
     }
   ]

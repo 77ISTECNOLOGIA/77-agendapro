@@ -62,12 +62,22 @@ async function commitEmLotes(operacoes) {
   let totalProfs = 0, profsGravados = 0;
   let totalClientes = 0, clientesGravados = 0;
   let totalAgs = 0, agsGravados = 0;
+  let totalDispositivos = 0;
 
   for (const slug of slugs) {
     const negocioRaw = raiz.barbearias[slug] || {};
     const info = negocioRaw.info || {};
 
-    await db.collection('barbearias').doc(slug).set(info, { merge: true });
+    // Tokens de notificação push saem do documento do negócio (que não é mais
+    // público, mas também não deve misturar dado interno) e vão pra sub-coleção
+    // privada barbearias/{slug}/dispositivos/{deviceId}.
+    const { fcmTokens, ...infoSemTokens } = info;
+    await db.collection('barbearias').doc(slug).set(infoSemTokens, { merge: true });
+    const dispositivos = Object.entries(fcmTokens || {});
+    await commitEmLotes(dispositivos.map(([deviceId, token]) => (batch) =>
+      batch.set(db.collection('barbearias').doc(slug).collection('dispositivos').doc(deviceId), { token, atualizadoEm: new Date().toISOString() }, { merge: true })
+    ));
+    totalDispositivos += dispositivos.length;
 
     const subcolecoes = [
       { chave: 'servicos', contarTotal: (n) => { totalServicos += n; }, contarGravado: (n) => { servicosGravados += n; } },
@@ -91,6 +101,7 @@ async function commitEmLotes(operacoes) {
   contagens.profissionais = { origem: totalProfs, gravados: profsGravados };
   contagens.clientes = { origem: totalClientes, gravados: clientesGravados };
   contagens.agendamentos = { origem: totalAgs, gravados: agsGravados };
+  contagens.dispositivos = { origem: totalDispositivos, gravados: totalDispositivos };
 
   console.log('\nConferência (origem RTDB vs. gravado no Firestore):');
   Object.entries(contagens).forEach(([nome, { origem, gravados }]) => {
