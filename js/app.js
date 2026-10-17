@@ -410,13 +410,14 @@ function atualizarResumoTela2() {
 // TELA 3: PROFISSIONAL + HORÁRIO
 // ========================================
 function renderizarTela3() {
+  // Zera a escolha ANTES de montar as datas (a lista de datas depende do profissional)
+  state.profissionalId = null;
+  state.dataSelecionada = null;
+  state.horarioSelecionado = null;
   renderizarProfissionais();
   renderizarSeletorDeData();
   $('#grid-horarios').innerHTML = '<div class="horario-placeholder">Selecione um profissional e data</div>';
   $('#btn-continuar-3').disabled = true;
-  state.profissionalId = null;
-  state.dataSelecionada = null;
-  state.horarioSelecionado = null;
 }
 
 function renderizarProfissionais() {
@@ -453,33 +454,70 @@ function selecionarProfissional(id) {
 
   $$('.prof-card').forEach(c => c.classList.toggle('selecionado', c.dataset.id === id));
 
-  if (state.dataSelecionada) {
+  // As datas oferecidas dependem do profissional: reconstrói a lista só com
+  // os dias em que ELE tem horário livre.
+  const datasOferecidas = renderizarSeletorDeData();
+  if (state.dataSelecionada && !datasOferecidas.includes(dataParaChave(state.dataSelecionada))) {
+    state.dataSelecionada = null;
+    $('#grid-horarios').innerHTML = '<div class="horario-placeholder">Selecione uma data</div>';
+  } else if (state.dataSelecionada) {
     renderizarHorarios();
   }
   validarBtnContinuar3();
 }
 
-function renderizarSeletorDeData() {
-  const container = $('#seletor-data');
+const DIAS_SEMANA_ABREV = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
+const MAX_DATAS_MOSTRADAS = 14;   // quantos dias com vaga mostrar no carrossel
+const JANELA_BUSCA_DIAS = 60;     // até onde procurar dias com vaga (servidor aceita até 90)
+
+// Monta o carrossel de datas mostrando SÓ os dias em que algum dos
+// profissionais informados tem ao menos um horário livre. Dia fechado, dia
+// lotado e "hoje depois do expediente" simplesmente não aparecem.
+// Devolve as chaves (AAAA-MM-DD) dos dias oferecidos.
+function renderizarDatasComHorarios({ container, profissionaisIds, opcoes = {}, aoSelecionar, selecionadaChave = null, mensagemVazia }) {
   container.innerHTML = '';
-
   const hoje = new Date();
-  const diasSemana = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
+  const oferecidas = [];
 
-  for (let i = 0; i < 14; i++) {
+  for (let i = 0; i < JANELA_BUSCA_DIAS && oferecidas.length < MAX_DATAS_MOSTRADAS; i++) {
     const data = new Date(hoje);
     data.setDate(hoje.getDate() + i);
 
+    const temVaga = profissionaisIds.some((profId) =>
+      calcularHorariosDisponiveis(profId, data, opcoes).some((slot) => !slot.indisponivel));
+    if (!temVaga) continue;
+
+    const chave = dataParaChave(data);
     const btn = document.createElement('div');
-    btn.className = 'data-btn';
-    btn.dataset.data = dataParaChave(data);
+    btn.className = `data-btn${chave === selecionadaChave ? ' selecionado' : ''}`;
+    btn.dataset.data = chave;
     btn.innerHTML = `
-      <div class="data-dia">${diasSemana[data.getDay()]}</div>
+      <div class="data-dia">${DIAS_SEMANA_ABREV[data.getDay()]}</div>
       <div class="data-num">${data.getDate()}</div>
     `;
-    btn.addEventListener('click', () => selecionarData(data));
+    btn.addEventListener('click', () => aoSelecionar(data));
     container.appendChild(btn);
+    oferecidas.push(chave);
   }
+
+  if (!oferecidas.length) {
+    container.innerHTML = `<div class="horario-placeholder">${mensagemVazia}</div>`;
+  }
+  return oferecidas;
+}
+
+function renderizarSeletorDeData() {
+  const profissionaisIds = state.profissionalId
+    ? [state.profissionalId]
+    : Object.entries(state.profissionais).filter(([, p]) => p.ativo !== false).map(([id]) => id);
+
+  return renderizarDatasComHorarios({
+    container: $('#seletor-data'),
+    profissionaisIds,
+    aoSelecionar: selecionarData,
+    selecionadaChave: state.dataSelecionada ? dataParaChave(state.dataSelecionada) : null,
+    mensagemVazia: 'Sem horários disponíveis nos próximos dias. Fale direto com o estabelecimento.'
+  });
 }
 
 function selecionarData(data) {
@@ -911,24 +949,15 @@ async function iniciarRemarcacao(agendamentoId) {
 }
 
 function renderizarRemarcarSeletorDeData() {
-  const container = $('#remarcar-seletor-data');
-  container.innerHTML = '';
-  const hoje = new Date();
-  const diasSemana = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
-
-  for (let i = 0; i < 14; i++) {
-    const data = new Date(hoje);
-    data.setDate(hoje.getDate() + i);
-    const btn = document.createElement('div');
-    btn.className = 'data-btn';
-    btn.dataset.data = dataParaChave(data);
-    btn.innerHTML = `
-      <div class="data-dia">${diasSemana[data.getDay()]}</div>
-      <div class="data-num">${data.getDate()}</div>
-    `;
-    btn.addEventListener('click', () => selecionarDataRemarcacao(data));
-    container.appendChild(btn);
-  }
+  // Mesma regra da tela de agendamento: só dias com horário livre (o próprio
+  // horário atual do agendamento conta como livre, por causa do ignorarId).
+  renderizarDatasComHorarios({
+    container: $('#remarcar-seletor-data'),
+    profissionaisIds: [state.remarcacao.profissionalId],
+    opcoes: { duracaoTotalOverride: state.remarcacao.duracaoMin, ignorarId: state.remarcacao.agendamentoId },
+    aoSelecionar: selecionarDataRemarcacao,
+    mensagemVazia: 'Sem horários disponíveis nos próximos dias. Fale direto com o estabelecimento.'
+  });
 }
 
 function selecionarDataRemarcacao(data) {
