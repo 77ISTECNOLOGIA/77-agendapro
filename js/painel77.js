@@ -2,18 +2,24 @@
 // 77 IS — Painel Super-Admin
 // ========================================
 
-import { db } from './firebase-config.js';
+import { firebaseConfig } from './firebase-config.js';
 import { escapeHtml, adicionarMostrarSenha } from './utils.js';
-import { getApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
   getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import {
-  doc, collection, getDoc, getDocs, addDoc, updateDoc, deleteDoc,
+  getFirestore, doc, collection, getDoc, getDocs, addDoc, updateDoc, deleteDoc,
   onSnapshot, query, orderBy, limit, getCountFromServer
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-const auth = getAuth(getApp());
+// App Firebase PRÓPRIA do painel da 77: a sessão de login fica isolada da do
+// painel do dono (/admin). Com a app padrão, os dois painéis compartilhavam o
+// mesmo login do navegador — entrar como dono num e abrir o outro mostrava
+// "sem permissão", e clicar em "Sair" ali derrubava o login do outro painel.
+const app77 = initializeApp(firebaseConfig, 'painel77');
+const auth = getAuth(app77);
+const db = getFirestore(app77);
 
 // ========================================
 // ESTADO
