@@ -18,19 +18,22 @@ export function adicionarMostrarSenha(input) {
   caixa.style.cssText = 'position:relative;display:block;';
   input.parentNode.insertBefore(caixa, input);
   caixa.appendChild(input);
-  input.style.paddingRight = '48px';
+  input.style.paddingRight = '86px';
 
+  // Botão de TEXTO (não emoji/ícone fino) na cor de destaque do tema, pra ser
+  // bem visível no fundo escuro. As cores vêm das variáveis CSS do tema, com
+  // fallback caso a página não as defina.
   const botao = document.createElement('button');
   botao.type = 'button';
-  botao.textContent = '👁';
+  botao.textContent = 'Mostrar';
   botao.setAttribute('aria-label', 'Mostrar senha');
   botao.setAttribute('aria-pressed', 'false');
-  botao.style.cssText = 'position:absolute;top:50%;right:8px;transform:translateY(-50%);background:none;border:0;cursor:pointer;font-size:18px;line-height:1;padding:6px 8px;color:inherit;opacity:.75;';
+  botao.style.cssText = 'position:absolute;top:50%;right:8px;transform:translateY(-50%);background:var(--surface-2,#1c1c1c);border:1px solid var(--border-light,#333);border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;line-height:1;font-family:inherit;letter-spacing:.3px;padding:7px 10px;color:var(--accent,#d4ff3a);';
 
   botao.addEventListener('click', () => {
     const mostrar = input.type === 'password';
     input.type = mostrar ? 'text' : 'password';
-    botao.textContent = mostrar ? '🙈' : '👁';
+    botao.textContent = mostrar ? 'Ocultar' : 'Mostrar';
     botao.setAttribute('aria-label', mostrar ? 'Ocultar senha' : 'Mostrar senha');
     botao.setAttribute('aria-pressed', String(mostrar));
     input.focus();
