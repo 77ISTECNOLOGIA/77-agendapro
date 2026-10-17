@@ -10,8 +10,7 @@ import './firebase-config.js';
 import { getApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
   getAuth,
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword
+  createUserWithEmailAndPassword
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { SERVICOS_SUGERIDOS } from './vocabulario.js';
 
@@ -134,24 +133,27 @@ async function enviarCadastro(idToken, dados) {
   }
 }
 
-// Cria a conta no Auth. Se o e-mail já existe (ex.: uma tentativa anterior
-// criou a conta mas o servidor falhou), tenta entrar com a mesma senha pra
-// retomar o cadastro em vez de deixar a pessoa presa.
-async function obterUsuarioAuth(email, senha) {
+// Cria a conta no Auth. E-mail que já tem conta é RECUSADO com aviso claro —
+// nunca entramos numa conta existente "por baixo dos panos" (isso fazia a
+// pessoa achar que estava criando uma conta nova e depois não lembrar a senha).
+async function criarUsuarioAuth(email, senha) {
   try {
     return (await createUserWithEmailAndPassword(auth, email, senha)).user;
   } catch (authErr) {
     if (authErr.code === 'auth/email-already-in-use') {
-      try {
-        return (await signInWithEmailAndPassword(auth, email, senha)).user;
-      } catch (_) {
-        throw new Error('Esse email já está cadastrado. Acesse o painel.');
-      }
+      throw new Error('Este e-mail já está em uso. Se a conta é sua, entre no painel (link abaixo do formulário) ou use "Esqueci minha senha". Para cadastrar outro negócio, use um e-mail diferente.');
     }
     if (authErr.code === 'auth/weak-password') throw new Error('Senha fraca. Use pelo menos 6 caracteres.');
     if (authErr.code === 'auth/invalid-email') throw new Error('Email inválido.');
+    if (authErr.code === 'auth/network-request-failed') throw new Error('Sem conexão. Verifique sua internet e tente de novo.');
     throw new Error('Erro ao criar conta.');
   }
+}
+
+// Se o servidor falhar DEPOIS de a conta ter sido criada, desfaz a conta pra o
+// e-mail não ficar "preso" (sem isso, a nova tentativa cairia em "e-mail já em uso").
+async function desfazerContaCriada(user) {
+  try { await user.delete(); } catch (e) { console.error('Não consegui desfazer a conta criada:', e); }
 }
 
 // ========================================
@@ -195,13 +197,18 @@ async function handleCadastro(e) {
       return;
     }
 
-    // 2. Conta no Firebase Authentication
+    // 2. Conta no Firebase Authentication (recusa e-mail que já existe)
     btn.textContent = 'Criando conta...';
-    const user = await obterUsuarioAuth(dados.email, dados.senha);
+    const user = await criarUsuarioAuth(dados.email, dados.senha);
 
     // 3. O servidor cria negócio + serviços + vínculo + fila de aprovação
     btn.textContent = 'Configurando...';
-    await enviarCadastro(await user.getIdToken(), { ...dados, telefone: normalizarWhatsapp(dados.telefone) });
+    try {
+      await enviarCadastro(await user.getIdToken(), { ...dados, telefone: normalizarWhatsapp(dados.telefone) });
+    } catch (erroServidor) {
+      await desfazerContaCriada(user);
+      throw erroServidor;
+    }
 
     // 4. Sucesso
     $('#nome-sucesso').textContent = dados.nomeResp.split(' ')[0];
