@@ -6,7 +6,7 @@
 // (/api/negocio, /api/criar-agendamento, /api/agendamento-cliente), que
 // validam no servidor e só devolvem o que o visitante pode ver.
 import { aplicarTema } from './vocabulario.js';
-import { escapeHtml } from './utils.js';
+import { escapeHtml, profissionalRealizaServico } from './utils.js';
 
 // ========================================
 // ESTADO GLOBAL
@@ -358,11 +358,14 @@ function renderizarTela2() {
     const card = document.createElement('div');
     card.className = `servico-card ${selecionado ? 'selecionado' : ''}`;
     card.dataset.id = id;
+    // Serviço restrito a certos profissionais: avisa com quem é feito
+    const quem = nomesQuemRealiza(s);
     card.innerHTML = `
       <div class="servico-foto">${escapeHtml(s.emoji) || '✂️'}</div>
       <div class="servico-info">
         <div class="servico-nome">${escapeHtml(s.nome)}</div>
         <div class="servico-detalhes">${s.duracaoMin} min • <span class="servico-preco">${formatarMoeda(s.preco)}</span></div>
+        ${quem ? `<div class="servico-detalhes">Com ${escapeHtml(quem)}</div>` : ''}
       </div>
       <div class="check-circle">✓</div>
     `;
@@ -420,15 +423,38 @@ function renderizarTela3() {
   $('#btn-continuar-3').disabled = true;
 }
 
+// Nomes (só o primeiro) de quem realiza um serviço restrito; '' se for livre.
+function nomesQuemRealiza(servico) {
+  const ids = servico && servico.profissionaisIds;
+  if (!Array.isArray(ids) || ids.length === 0) return '';
+  const nomes = ids
+    .map((id) => state.profissionais[id])
+    .filter((p) => p && p.ativo !== false)
+    .map((p) => String(p.nome || '').split(' ')[0]);
+  if (nomes.length <= 1) return nomes[0] || '';
+  return `${nomes.slice(0, -1).join(', ')} e ${nomes[nomes.length - 1]}`;
+}
+
+// Profissionais ativos que realizam TODOS os serviços escolhidos.
+function profissionaisElegiveis() {
+  return Object.entries(state.profissionais)
+    .filter(([id, p]) => p.ativo !== false)
+    .filter(([id]) => state.servicosSelecionados.every((sid) => profissionalRealizaServico(state.servicos[sid], id)));
+}
+
 function renderizarProfissionais() {
   const container = $('#grid-profissionais');
   container.innerHTML = '';
 
-  const profsArray = Object.entries(state.profissionais)
-    .filter(([id, p]) => p.ativo !== false);
+  const profsArray = profissionaisElegiveis();
 
   if (profsArray.length === 0) {
-    container.innerHTML = '<div class="horario-placeholder">Nenhum profissional disponível</div>';
+    const algumAtivo = Object.values(state.profissionais).some((p) => p.ativo !== false);
+    container.innerHTML = algumAtivo && state.servicosSelecionados.length > 1
+      ? '<div class="horario-placeholder">Nenhum profissional realiza todos esses serviços juntos. Volte e agende cada serviço separadamente.</div>'
+      : algumAtivo
+        ? '<div class="horario-placeholder">Nenhum profissional disponível para este serviço no momento.</div>'
+        : '<div class="horario-placeholder">Nenhum profissional disponível</div>';
     return;
   }
 
@@ -509,7 +535,7 @@ function renderizarDatasComHorarios({ container, profissionaisIds, opcoes = {}, 
 function renderizarSeletorDeData() {
   const profissionaisIds = state.profissionalId
     ? [state.profissionalId]
-    : Object.entries(state.profissionais).filter(([, p]) => p.ativo !== false).map(([id]) => id);
+    : profissionaisElegiveis().map(([id]) => id);
 
   return renderizarDatasComHorarios({
     container: $('#seletor-data'),

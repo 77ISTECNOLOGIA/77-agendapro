@@ -17,7 +17,7 @@ const {
   agoraBrasil, hojeChaveBrasil, dataChaveValida, horaValida, normalizarWhatsapp, whatsappValido
 } = require('./_lib/tempo');
 const { verificarSlot } = require('./_lib/disponibilidade');
-const { slugValido, situacaoNegocio } = require('./_lib/negocio');
+const { slugValido, situacaoNegocio, profissionalRealizaServico } = require('./_lib/negocio');
 const { dentroDoLimite, responder, ErroNegocio, tratarErro, corpoDe } = require('./_lib/http');
 const { notificarNovoAgendamento } = require('./_lib/notificar');
 
@@ -77,6 +77,11 @@ module.exports = async function handler(req, res) {
       const d = s.data();
       if (!s.exists || d.ativo === false || !Number.isFinite(d.preco) || !Number.isFinite(d.duracaoMin) || d.duracaoMin <= 0) {
         throw new ErroNegocio(409, 'Um dos serviços escolhidos não está mais disponível');
+      }
+      // Serviço restrito a certos profissionais: a regra vale aqui no servidor,
+      // não só na tela (um cliente mal-intencionado poderia burlar a tela).
+      if (!profissionalRealizaServico(d, profissionalId)) {
+        throw new ErroNegocio(409, `${d.nome} não é realizado por ${prof.nome || 'este profissional'}. Escolha outro profissional.`);
       }
       return { id: s.id, nome: d.nome, preco: d.preco, duracaoMin: d.duracaoMin };
     });

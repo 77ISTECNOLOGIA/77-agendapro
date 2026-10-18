@@ -361,3 +361,58 @@ test('cadastro: checagem de link livre', async () => {
   assert.equal((await chamar(cadastrarNegocio, req('GET', { query: { slug: SLUG } }))).body.disponivel, false);
   assert.equal((await chamar(cadastrarNegocio, req('GET', { query: { slug: 'painel77' } }))).body.disponivel, false);
 });
+
+// ---------------------------------------------------------------- serviços por profissional
+
+function semearSegundoProfissional() {
+  amb.fake.seed(`barbearias/${SLUG}/profissionais/prof2`, { nome: 'Carlos Lima', especialidade: 'Barbeiro', ativo: true, comissao: 35 });
+}
+function restringirServico(id, profissionaisIds) {
+  const caminho = `barbearias/${SLUG}/servicos/${id}`;
+  amb.fake.seed(caminho, { ...amb.fake.get(caminho), profissionaisIds });
+}
+
+test('serviço restrito: o profissional que NÃO faz o serviço é recusado no servidor', async () => {
+  semearSegundoProfissional();
+  restringirServico('srv2', ['prof2']);                       // Barba só com o Carlos
+  const r = await chamar(criarAgendamento, req('POST', { body: corpoAgendamento({ servicosIds: ['srv2'], profissionalId: 'prof1' }) }));
+  assert.equal(r.statusCode, 409);
+  assert.match(r.body.erro, /Barba não é realizado por João/);
+  assert.equal([...amb.fake.docs.keys()].filter(k => k.includes('/agendamentos/')).length, 0, 'nada foi gravado');
+});
+
+test('serviço restrito: o profissional certo consegue agendar', async () => {
+  semearSegundoProfissional();
+  restringirServico('srv2', ['prof2']);
+  const r = await chamar(criarAgendamento, req('POST', { body: corpoAgendamento({ servicosIds: ['srv2'], profissionalId: 'prof2' }) }));
+  assert.equal(r.statusCode, 201);
+  assert.equal(amb.fake.get(`barbearias/${SLUG}/agendamentos/${r.body.id}`).profissionalNome, 'Carlos Lima');
+});
+
+test('combo de serviços: precisa que o profissional faça TODOS (um livre + um restrito)', async () => {
+  semearSegundoProfissional();
+  restringirServico('srv2', ['prof2']);
+  const comJoao = await chamar(criarAgendamento, req('POST', { body: corpoAgendamento({ servicosIds: ['srv1', 'srv2'], profissionalId: 'prof1' }) }));
+  assert.equal(comJoao.statusCode, 409);
+  limparLimites();
+  const comCarlos = await chamar(criarAgendamento, req('POST', { body: corpoAgendamento({ servicosIds: ['srv1', 'srv2'], profissionalId: 'prof2' }) }));
+  assert.equal(comCarlos.statusCode, 201);
+});
+
+test('serviço sem restrição (ausente, vazio) continua valendo para qualquer profissional', async () => {
+  semearSegundoProfissional();
+  const semCampo = await chamar(criarAgendamento, req('POST', { body: corpoAgendamento({ servicosIds: ['srv1'], profissionalId: 'prof2' }) }));
+  assert.equal(semCampo.statusCode, 201);
+  restringirServico('srv2', []);
+  limparLimites();
+  const vazio = await chamar(criarAgendamento, req('POST', { body: corpoAgendamento({ servicosIds: ['srv2'], profissionalId: 'prof1', horario: '14:00' }) }));
+  assert.equal(vazio.statusCode, 201);
+});
+
+test('api/negocio expõe a restrição de cada serviço (a tela precisa dela pra filtrar profissionais)', async () => {
+  semearSegundoProfissional();
+  restringirServico('srv2', ['prof2']);
+  const r = await chamar(negocio, req('GET', { query: { slug: SLUG } }));
+  assert.deepEqual(r.body.servicos.srv2.profissionaisIds, ['prof2']);
+  assert.deepEqual(r.body.servicos.srv1.profissionaisIds, []);
+});

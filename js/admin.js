@@ -3,7 +3,7 @@
 // ========================================
 
 import { db } from './firebase-config.js';
-import { escapeHtml, adicionarMostrarSenha } from './utils.js';
+import { escapeHtml, adicionarMostrarSenha, profissionalRealizaServico } from './utils.js';
 import { aplicarTema, resetarTema } from './vocabulario.js';
 import {
   initializeApp,
@@ -968,6 +968,7 @@ function modalNovoAgendamento() {
         <option value="">Selecione...</option>
         ${profsAtivos.map(([id, p]) => `<option value="${id}">${escapeHtml(p.nome)}</option>`).join('')}
       </select>
+      <small id="nag-prof-ajuda" class="campo-help"></small>
     </div>
     <div class="form-grid">
       <div class="input-grupo">
@@ -1020,11 +1021,38 @@ function modalNovoAgendamento() {
     });
   });
 
-  $$('#modal-body .nag-servico-check').forEach(chk => chk.addEventListener('change', atualizarHorariosNovoAgendamento));
+  $$('#modal-body .nag-servico-check').forEach(chk => chk.addEventListener('change', () => {
+    atualizarProfissionaisNovoAgendamento();   // só quem realiza TODOS os serviços marcados
+    atualizarHorariosNovoAgendamento();
+  }));
   $('#nag-profissional').addEventListener('change', atualizarHorariosNovoAgendamento);
   $('#nag-data').addEventListener('change', atualizarHorariosNovoAgendamento);
 
   $('#modal-salvar').addEventListener('click', salvarNovoAgendamento);
+}
+
+// Profissionais ativos que realizam todos os serviços marcados no modal.
+function profissionaisElegiveisNovoAgendamento() {
+  const servicoIds = $$('#modal-body .nag-servico-check:checked').map(c => c.value);
+  return Object.entries(state.profissionais)
+    .filter(([, p]) => p.ativo !== false)
+    .filter(([pid]) => servicoIds.every(sid => profissionalRealizaServico(state.servicos[sid], pid)));
+}
+
+function atualizarProfissionaisNovoAgendamento() {
+  const select = $('#nag-profissional');
+  const ajuda = $('#nag-prof-ajuda');
+  const atual = select.value;
+  const elegiveis = profissionaisElegiveisNovoAgendamento();
+
+  select.innerHTML = '<option value="">Selecione...</option>' +
+    elegiveis.map(([id, p]) => `<option value="${id}">${escapeHtml(p.nome)}</option>`).join('');
+  if (elegiveis.some(([id]) => id === atual)) select.value = atual;
+
+  const temServicoMarcado = $$('#modal-body .nag-servico-check:checked').length > 0;
+  ajuda.textContent = temServicoMarcado && elegiveis.length === 0
+    ? 'Nenhum profissional realiza todos esses serviços juntos. Crie agendamentos separados.'
+    : '';
 }
 
 function duracaoServicosSelecionadosNovoAgendamento() {
@@ -1070,6 +1098,9 @@ async function salvarNovoAgendamento() {
   if (whatsDigitos.length !== 11 || whatsDigitos[2] !== '9') { toast('Digite um WhatsApp válido com DDD', 'erro'); return; }
   if (servicoIds.length === 0) { toast('Selecione ao menos um serviço', 'erro'); return; }
   if (!profId) { toast('Selecione o profissional', 'erro'); return; }
+  if (!servicoIds.every(sid => profissionalRealizaServico(state.servicos[sid], profId))) {
+    toast('Esse profissional não realiza todos os serviços escolhidos', 'erro'); return;
+  }
   if (!dataStr || !horario) { toast('Selecione data e horário', 'erro'); return; }
 
   const whatsNorm = '55' + whatsDigitos;
@@ -1181,6 +1212,7 @@ function renderizarServicos() {
         <div style="flex:1;">
           <div class="item-card-titulo">${escapeHtml(s.nome)}</div>
           <div class="item-card-sub">${s.duracaoMin} min • ${formatarMoeda(s.preco)}</div>
+          ${textoQuemRealiza(s)}
         </div>
         ${s.ativo === false ? '<span class="tag-inativo">Inativo</span>' : ''}
       </div>
@@ -1198,8 +1230,32 @@ function renderizarServicos() {
   });
 }
 
+// Linha extra no card do serviço quando ele é restrito a certos profissionais.
+function textoQuemRealiza(s) {
+  const ids = Array.isArray(s.profissionaisIds) ? s.profissionaisIds : [];
+  if (ids.length === 0) return '';
+  const nomes = ids.map((pid) => state.profissionais[pid]).filter(Boolean).map((p) => String(p.nome || '').split(' ')[0]);
+  const texto = nomes.length ? `Só com ${nomes.join(', ')}` : '⚠️ Nenhum profissional ativo realiza este serviço';
+  return `<div class="item-card-sub" style="color:var(--accent);">${escapeHtml(texto)}</div>`;
+}
+
 function modalServico(id = null) {
   const s = id ? state.servicos[id] : { nome: '', duracaoMin: 30, preco: 0, emoji: '✂️', ativo: true, ordem: Object.keys(state.servicos).length + 1 };
+  const profsAtivos = Object.entries(state.profissionais).filter(([, p]) => p.ativo !== false);
+  const restritos = Array.isArray(s.profissionaisIds) ? s.profissionaisIds : [];
+  const marcado = (pid) => restritos.length === 0 || restritos.includes(pid);
+  const blocoProfissionais = profsAtivos.length === 0 ? '' : `
+    <div class="input-grupo">
+      <label class="input-label">QUEM REALIZA ESTE SERVIÇO?</label>
+      <div class="nag-servicos-lista">
+        ${profsAtivos.map(([pid, p]) => `
+          <label class="nag-servico-item">
+            <input type="checkbox" class="serv-prof-check" value="${escapeHtml(pid)}" ${marcado(pid) ? 'checked' : ''}>
+            <span>${escapeHtml(p.nome)}</span>
+          </label>`).join('')}
+      </div>
+      <small class="campo-help">Deixe todos marcados se qualquer profissional faz este serviço. Desmarque quem NÃO faz: o cliente só poderá agendar com quem estiver marcado.</small>
+    </div>`;
   const titulo = id ? 'Editar serviço' : 'Novo serviço';
   const corpo = `
     <div class="input-grupo">
@@ -1227,6 +1283,7 @@ function modalServico(id = null) {
         <span>Serviço ativo (visível pros clientes)</span>
       </label>
     </div>
+    ${blocoProfissionais}
   `;
   const rodape = `
     <button class="btn-acao-secundario" id="modal-cancel">Cancelar</button>
@@ -1236,16 +1293,21 @@ function modalServico(id = null) {
 
   $('#modal-cancel').addEventListener('click', fecharModal);
   $('#modal-salvar').addEventListener('click', async () => {
+    const marcados = $$('#modal-body .serv-prof-check:checked').map((c) => c.value);
     const dados = {
       nome: $('#serv-nome').value.trim(),
       duracaoMin: Number($('#serv-duracao').value),
       preco: Number($('#serv-preco').value),
       emoji: $('#serv-emoji').value.trim() || '✂️',
       ativo: $('#serv-ativo').checked,
-      ordem: s.ordem
+      ordem: s.ordem,
+      // Todos marcados (ou nenhum profissional cadastrado) = lista vazia = qualquer um faz.
+      // Assim, um profissional novo já entra automaticamente nos serviços sem restrição.
+      profissionaisIds: marcados.length === profsAtivos.length ? [] : marcados
     };
     if (!dados.nome) { toast('Digite o nome do serviço', 'erro'); return; }
     if (dados.duracaoMin < 5) { toast('Duração mínima de 5 minutos', 'erro'); return; }
+    if (profsAtivos.length > 0 && marcados.length === 0) { toast('Marque ao menos um profissional que realiza este serviço', 'erro'); return; }
 
     try {
       if (id) {

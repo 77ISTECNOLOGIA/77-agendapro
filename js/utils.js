@@ -7,6 +7,14 @@ export function escapeHtml(valor) {
   }[c]));
 }
 
+// Serviço com `profissionaisIds` preenchido só é feito por esses profissionais;
+// lista ausente/vazia = QUALQUER um (padrão, e é o que vale pros serviços
+// antigos). Mesma regra do servidor (api/_lib/negocio.js).
+export function profissionalRealizaServico(servico, profissionalId) {
+  const ids = servico && servico.profissionaisIds;
+  return !Array.isArray(ids) || ids.length === 0 || ids.includes(profissionalId);
+}
+
 // Coloca um botão "mostrar/ocultar senha" dentro do campo de senha.
 // Evita o erro clássico de digitar às cegas (e de o gerenciador de senhas do
 // navegador preencher a senha antiga sem a pessoa perceber).

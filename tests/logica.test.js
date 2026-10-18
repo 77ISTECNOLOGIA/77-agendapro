@@ -116,3 +116,13 @@ test('profissional público não vaza comissão nem bloqueios passados', () => {
   assert.equal('comissao' in p, false);
   assert.deepEqual(Object.keys(p.bloqueios), ['2030-06-01']);
 });
+
+test('profissionalRealizaServico: ausente/vazio = qualquer um; lista = só os listados', () => {
+  const { profissionalRealizaServico: faz } = require('../api/_lib/negocio');
+  assert.equal(faz({}, 'p1'), true);
+  assert.equal(faz({ profissionaisIds: [] }, 'p1'), true);
+  assert.equal(faz({ profissionaisIds: null }, 'p1'), true);
+  assert.equal(faz(undefined, 'p1'), true);
+  assert.equal(faz({ profissionaisIds: ['p2'] }, 'p1'), false);
+  assert.equal(faz({ profissionaisIds: ['p1', 'p2'] }, 'p1'), true);
+});

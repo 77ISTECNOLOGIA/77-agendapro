@@ -68,6 +68,14 @@ function profissionalPublico(id, p, hojeChave) {
   };
 }
 
+// Serviço pode ser restrito a certos profissionais (`profissionaisIds`).
+// Lista ausente ou vazia = QUALQUER profissional realiza (padrão; é também o
+// que vale pra todos os serviços criados antes dessa regra existir).
+function profissionalRealizaServico(servico, profissionalId) {
+  const ids = servico && servico.profissionaisIds;
+  return !Array.isArray(ids) || ids.length === 0 || ids.includes(profissionalId);
+}
+
 function servicoPublico(id, s) {
   return {
     id,
@@ -76,11 +84,12 @@ function servicoPublico(id, s) {
     preco: s.preco,
     emoji: s.emoji || '',
     ordem: s.ordem || 0,
-    ativo: s.ativo !== false
+    ativo: s.ativo !== false,
+    profissionaisIds: Array.isArray(s.profissionaisIds) ? s.profissionaisIds : []
   };
 }
 
 module.exports = {
   CARENCIA_TRIAL_DIAS, SLUGS_RESERVADOS, TIPOS_NEGOCIO,
-  slugValido, situacaoNegocio, infoPublica, profissionalPublico, servicoPublico
+  slugValido, situacaoNegocio, infoPublica, profissionalPublico, servicoPublico, profissionalRealizaServico
 };
