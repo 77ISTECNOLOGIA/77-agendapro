@@ -125,7 +125,7 @@ Cada negócio (`barbearia`) é identificado por um `slug` único, que é literal
 - **XSS**: todo texto vindo de usuário é escapado antes de entrar na tela (`escapeHtml`), inclusive `horario`, `status` e `id` do agendamento no painel do dono (que ficaram expostos pela escrita aberta e foram corrigidos em 16/10/2026); o servidor também só aceita `HH:MM` e `AAAA-MM-DD`.
 - **Erros**: as funções nunca devolvem `err.message` ao navegador — só mensagens genéricas ou de regra de negócio.
 - **Cabeçalhos** (`vercel.json`): nosniff, X-Frame-Options DENY, Referrer-Policy, HSTS, Permissions-Policy. Sem CSP ainda.
-- **Testes**: `npm test` (35 testes das APIs e da lógica de disponibilidade). As regras do Firestore ainda não têm teste automatizado.
+- **Testes**: `npm test` (51 testes das APIs, da exclusão de negócios e da lógica de disponibilidade). As regras do Firestore ainda não têm teste automatizado.
 
 ---
 
@@ -149,7 +149,7 @@ Depois de fazer login, o dono vê:
 
 - **Dashboard**: agendamentos de hoje, faturamento do dia (dos atendimentos já concluídos), ticket médio, horário previsto de término do expediente, próximo cliente, faturamento por serviço.
 - **Agenda**: visão diária dos agendamentos, com filtro por profissional e por status. Ações: marcar como concluído, cancelar, enviar lembrete manual pelo WhatsApp (abre uma conversa já com o texto pronto — o dono precisa clicar em enviar, não é automático).
-- **Serviços** e **Profissionais**: cadastro (CRUD completo), incluindo horário de trabalho por dia da semana de cada profissional.
+- **Serviços** e **Profissionais**: cadastro (CRUD completo), incluindo horário de trabalho por dia da semana de cada profissional. Cada serviço pode ser **restrito a certos profissionais** ("Quem realiza este serviço?"); sem restrição, qualquer profissional faz. O cliente só vê, para agendar, os profissionais que realizam todos os serviços escolhidos.
 - **Clientes**: listagem com busca, mostrando quantas visitas e quanto cada um já gastou.
 - **Configurações**: dados do negócio, horário de funcionamento, QR Code do link público (com download), ativação de notificações push no navegador.
 
@@ -167,6 +167,7 @@ Ferramenta de uso exclusivo da 77 IS pra operar o SaaS:
 - **Criar acesso do dono**: gera login/senha do dono via função serverless, sem precisar mexer no Console do Firebase.
 - **Gestão de negócios**: lista todos com filtro por status/tipo, métricas por negócio (agendamentos, faturamento, clientes), ações de suspender, reativar, estender trial, marcar como pagante.
 - **Visão geral**: negócios ativos, cadastros novos, MRR estimado (calculado por um valor fixo por negócio ativo, não uma cobrança real integrada), trials vencendo em 7 dias, negócios inativos há 14+ dias.
+- **Excluir negócio**: botão "Excluir" nos negócios **suspensos**, com confirmação digitando o link do negócio e a opção de apagar também o login do dono. É definitivo: apaga o negócio, serviços, profissionais, clientes e agendamentos. Fica registrado no log (sem dados pessoais).
 - **Log de atividade**: auditoria de todas as ações acima, com quem fez e quando.
 
 O que esse painel **não faz**: emissão de nota fiscal, cobrança automática de fato (o "marcar como pagante" é um registro manual de que a fatura foi paga por fora), relatório financeiro consolidado exportável.
@@ -198,6 +199,8 @@ O que esse painel **não faz**: emissão de nota fiscal, cobrança automática d
 **24/07/2026 — documentação do estado real.** README atualizado e criação do `CLAUDE.md` — nesse processo, identificada e corrigida uma inversão: a documentação descrevia `painel77.html` como painel do dono e `admin.html` como painel interno da 77 IS, quando na verdade é o contrário no código.
 
 **24/08/2026 — Fase 1 de um novo roadmap.** Cliente ganhou tela de "Meus agendamentos" pra cancelar/remarcar sozinho; dono ganhou agendamento manual pelo painel (antes só existia um "Em breve") e remarcação; texto de marketing que prometia "lembrete automático" (que na prática é um botão manual) foi corrigido pra não prometer o que o sistema ainda não faz. Commitado e publicado no mesmo dia.
+
+**17/10/2026 — serviços por profissional, exclusão de negócios e ajustes de uso.** Serviço pode ser restrito a certos profissionais (validado no servidor); super-admin pode excluir definitivamente negócios suspensos; link público só mostra dias com horário livre; cadastro avisa quando o e-mail já tem conta; botão mostrar senha; painel da 77 com sessão de login própria e "Esqueci minha senha".
 
 **16/10/2026 — rearquitetura de segurança.** Auditoria completa apontou: qualquer usuário logado podia virar "dono" de qualquer negócio (regra de `usuarios` aberta); o dono podia editar o próprio `status/plano/trialFim`; `agendamentos` aceitava qualquer texto (XSS armazenado reaberto no painel, faturamento falsificável); checagem de horário só no navegador (corrida entre dois clientes); `clientes` e tokens push legíveis/graváveis por qualquer um. Correções: Firestore fechado para visitantes (tudo via `api/*`), criação de agendamento e auto-cadastro em transação no servidor, regras reescritas, situação comercial (aprovação/trial/suspensão) aplicada no link público, endpoint público de notificação removido, `firebase-admin` 13, suíte de testes. Detalhes e ordem de deploy em `CLAUDE.md`.
 

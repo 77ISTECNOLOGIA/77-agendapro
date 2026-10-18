@@ -344,6 +344,13 @@
   background: rgba(255, 68, 68, 0.2);
   border-color: var(--danger);
 }
+/* Desabilitado até a confirmação (ex.: digitar o link pra excluir um negócio) */
+.btn-acao-perigo:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background: rgba(255, 68, 68, 0.06);
+  border-color: rgba(255, 68, 68, 0.2);
+}
 
 /* ====== KPIs ====== */
 .kpis-grid {

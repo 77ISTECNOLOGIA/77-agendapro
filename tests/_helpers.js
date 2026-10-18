@@ -18,6 +18,9 @@ class FakeDb {
   constructor() { this.docs = new Map(); this.seq = 0; }
   collection(p) { return new Col(this, p); }
   doc(p) { const i = p.lastIndexOf('/'); return new Doc(this, p.slice(0, i), p.slice(i + 1)); }
+  async recursiveDelete(ref) {
+    for (const k of [...this.docs.keys()]) if (k === ref.path || k.startsWith(ref.path + '/')) this.docs.delete(k);
+  }
   seed(p, dado) { this.docs.set(p, structuredClone(dado)); return this; }
   get(p) { return this.docs.get(p); }
   async runTransaction(fn) {
@@ -43,6 +46,7 @@ class Doc {
 class Query {
   constructor(db, colPath, filtros = []) { this.db = db; this.colPath = colPath; this.filtros = filtros; }
   where(campo, op, valor) { return new Query(this.db, this.colPath, [...this.filtros, { campo, op, valor }]); }
+  count() { const q = this; return { get: async () => { const n = (await q.get()).size; return { data: () => ({ count: n }) }; } }; }
   async get() {
     const docs = [];
     for (const [p, d] of this.db.docs) {
@@ -81,6 +85,7 @@ function montarAmbiente() {
   const fake = new FakeDb();
   const notificacoes = [];
   const tokensInvalidos = new Set();
+  const authRemovidos = new Set();
   const fakeFirebase = {
     db: () => fake,
     auth: () => ({
@@ -88,7 +93,8 @@ function montarAmbiente() {
         if (!String(t).startsWith('tok-')) { const e = new Error('inválido'); e.code = 'auth/argument-error'; throw e; }
         return { uid: t.slice(4), email: `${t.slice(4)}@teste.com` };
       },
-      createUser: async ({ email }) => ({ uid: `uid-${email}` })
+      createUser: async ({ email }) => ({ uid: `uid-${email}` }),
+      deleteUser: async (uid) => { if (uid === 'uid-inexistente') { const e = new Error('x'); e.code = 'auth/user-not-found'; throw e; } authRemovidos.add(uid); }
     }),
     messaging: () => ({
       send: async (m) => {
@@ -100,7 +106,7 @@ function montarAmbiente() {
   };
   const caminho = require.resolve(path.join(__dirname, '..', 'api', '_lib', 'firebase.js'));
   require.cache[caminho] = { id: caminho, filename: caminho, loaded: true, exports: fakeFirebase };
-  return { fake, notificacoes, tokensInvalidos };
+  return { fake, notificacoes, tokensInvalidos, authRemovidos };
 }
 
 function req(metodo, { body, query, ip = '1.1.1.1' } = {}) {

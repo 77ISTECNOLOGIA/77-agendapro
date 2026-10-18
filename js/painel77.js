@@ -523,6 +523,7 @@ function renderNegocios() {
           <button class="btn-mini" data-acao="criar-acesso">🔑 Criar acesso</button>
           ${s==='ativa'||s==='trial'?'<button class="btn-mini perigo" data-acao="suspender">Suspender</button>':''}
           ${s==='suspensa'?'<button class="btn-mini" data-acao="reativar">Reativar</button>':''}
+          ${s==='suspensa'?'<button class="btn-mini perigo" data-acao="excluir">🗑 Excluir…</button>':''}
           ${s==='trial'?'<button class="btn-mini" data-acao="estender">+30d trial</button>':''}
           ${s==='trial'?'<button class="btn-mini" data-acao="ativar">Marcar pagante</button>':''}
         </div>
@@ -551,6 +552,7 @@ async function acaoNegocio(id, acao) {
       if (!confirm(`Suspender "${info.nome}"?`)) return;
       await updateDoc(doc(db,'barbearias',id),{status:'suspensa',suspensaEm:new Date().toISOString()});
       await log('suspendeu',id,info.nome); toast('Suspenso','sucesso'); break;
+    case 'excluir': modalExcluir(id); break;
     case 'reativar':
       if (!confirm(`Reativar "${info.nome}"?`)) return;
       await updateDoc(doc(db,'barbearias',id),{status:info.trialFim?'trial':'ativa',reativadaEm:new Date().toISOString()});
@@ -609,14 +611,74 @@ async function modalDetalhes(id) {
 }
 
 // ========================================
+// EXCLUSÃO DEFINITIVA (só negócio suspenso; feita no servidor — api/excluir-negocio.js)
+// ========================================
+async function modalExcluir(id) {
+  const info=state.negocios[id]; if(!info) return;
+  abrirModal('Excluir definitivamente','<div class="vazio-msg">Carregando…</div>');
+
+  let c=null;
+  try {
+    const cont=(col)=>getCountFromServer(collection(db,'barbearias',id,col)).then(s=>s.data().count);
+    const [ags,cls,srv,prf]=await Promise.all(['agendamentos','clientes','servicos','profissionais'].map(cont));
+    c={ags,cls,srv,prf};
+  } catch(e) { console.error('contagens:',e); }
+
+  const corpo=`
+    <div style="background:rgba(255,68,68,.1);border:1px solid var(--danger);border-radius:12px;padding:14px;margin-bottom:16px;font-size:13px;line-height:1.6;">
+      <strong style="color:var(--danger);">Esta ação é irreversível e não pode ser desfeita.</strong><br>
+      Vai apagar para sempre <strong>${escapeHtml(info.nome||id)}</strong> (<span style="font-family:monospace;">/${escapeHtml(id)}</span>) e tudo que existe dentro dele:
+      <ul style="margin:8px 0 0 18px;padding:0;">
+        ${c?`<li>${c.ags} agendamento${c.ags!==1?'s':''}</li><li>${c.cls} cliente${c.cls!==1?'s':''}</li><li>${c.srv} serviço${c.srv!==1?'s':''}</li><li>${c.prf} profissiona${c.prf!==1?'is':'l'}</li>`:'<li>agendamentos, clientes, serviços e profissionais</li>'}
+      </ul>
+    </div>
+    <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;margin-bottom:16px;font-size:13px;line-height:1.5;">
+      <input type="checkbox" id="excl-logins" checked style="margin-top:3px;">
+      <span>Apagar também o <strong>login do dono</strong> — libera o e-mail dele para um novo cadastro.</span>
+    </label>
+    <div class="input-grupo">
+      <label class="input-label">PARA CONFIRMAR, DIGITE O LINK DO NEGÓCIO: <span style="font-family:monospace;color:var(--danger);text-transform:none;">${escapeHtml(id)}</span></label>
+      <input type="text" id="excl-confirma" class="input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${escapeHtml(id)}">
+    </div>`;
+  const rodape=`
+    <button class="btn-acao-secundario" id="excl-cancelar">Cancelar</button>
+    <button class="btn-acao-perigo" id="excl-ok" disabled>Excluir definitivamente</button>`;
+  abrirModal('Excluir definitivamente',corpo,rodape);
+
+  const ok=$('#excl-ok'), campo=$('#excl-confirma');
+  $('#excl-cancelar').addEventListener('click',fecharModal);
+  campo.addEventListener('input',()=>{ ok.disabled=campo.value.trim()!==id; });
+
+  ok.addEventListener('click', async ()=>{
+    ok.disabled=true; ok.textContent='Excluindo…';
+    try {
+      const idToken=await auth.currentUser.getIdToken();
+      const resp=await fetch('/api/excluir-negocio',{
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({idToken,slug:id,confirmacao:campo.value.trim(),apagarLogins:$('#excl-logins').checked})
+      });
+      const dados=await resp.json().catch(()=>({}));
+      if (!resp.ok) throw new Error(dados.erro||'Erro ao excluir');
+      delete state.contagens[id];
+      fecharModal();
+      toast(`${info.nome||id} excluído definitivamente`,'sucesso');
+      (dados.avisos||[]).forEach(a=>toast(a,''));
+    } catch(err) {
+      toast(err.message||'Erro ao excluir','erro');
+      ok.textContent='Excluir definitivamente'; ok.disabled=campo.value.trim()!==id;
+    }
+  });
+}
+
+// ========================================
 // ATIVIDADE
 // ========================================
 function renderAtividade() {
   const lista=Object.entries(state.logs).map(([id,l])=>({id,...l}))
     .sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp)).slice(0,50);
 
-  const icones={aprovou:'✓',recusou:'✕',suspendeu:'🚫',reativou:'🔄',estendeu_trial:'⏰',marcou_pagante:'💰',criou_acesso:'🔑'};
-  const labels={aprovou:'Aprovou cadastro',recusou:'Recusou cadastro',suspendeu:'Suspendeu',reativou:'Reativou',estendeu_trial:'Estendeu trial',marcou_pagante:'Marcou como pagante',criou_acesso:'Criou acesso do dono'};
+  const icones={aprovou:'✓',recusou:'✕',suspendeu:'🚫',reativou:'🔄',estendeu_trial:'⏰',marcou_pagante:'💰',criou_acesso:'🔑',excluiu:'🗑'};
+  const labels={aprovou:'Aprovou cadastro',recusou:'Recusou cadastro',suspendeu:'Suspendeu',reativou:'Reativou',estendeu_trial:'Estendeu trial',marcou_pagante:'Marcou como pagante',criou_acesso:'Criou acesso do dono',excluiu:'Excluiu definitivamente'};
 
   $('#lista-atividade').innerHTML=lista.length===0
     ? '<div class="vazio-msg">Nenhuma atividade ainda</div>'

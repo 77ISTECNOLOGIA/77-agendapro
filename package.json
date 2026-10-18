@@ -6,7 +6,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "node --test tests/logica.test.js tests/api.test.js"
+    "test": "node --test tests/logica.test.js tests/api.test.js tests/exclusao.test.js"
   },
   "dependencies": {
     "firebase-admin": "^13.0.0"
