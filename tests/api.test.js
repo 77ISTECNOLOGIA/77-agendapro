@@ -145,6 +145,11 @@ test('criar-agendamento: notifica o dono, remove token morto e nunca vaza erro i
   assert.equal(r.statusCode, 201);
   assert.equal(amb.notificacoes.length, 1);
   assert.match(amb.notificacoes[0].notification.body, /Maria — .* às 10:00 — Corte \+ Barba com João/);
+  // identificação única por agendamento (evita notificação duplicada) e link que abre o painel
+  assert.equal(amb.notificacoes[0].data.agendamentoId, r.body.id);
+  assert.equal(amb.notificacoes[0].webpush.notification.tag, `agendamento-${r.body.id}`);
+  assert.equal(amb.notificacoes[0].data.tag, `agendamento-${r.body.id}`);
+  assert.match(amb.notificacoes[0].webpush.fcmOptions.link, /^https:\/\/.+\/admin$/);
   assert.equal(amb.fake.get(`barbearias/${SLUG}/dispositivos/d2`), undefined);
   assert.equal(amb.fake.get(`barbearias/${SLUG}/dispositivos/d1`).token, 'tok-bom');
 

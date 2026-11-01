@@ -125,7 +125,7 @@ Cada negócio (`barbearia`) é identificado por um `slug` único, que é literal
 - **XSS**: todo texto vindo de usuário é escapado antes de entrar na tela (`escapeHtml`), inclusive `horario`, `status` e `id` do agendamento no painel do dono (que ficaram expostos pela escrita aberta e foram corrigidos em 16/10/2026); o servidor também só aceita `HH:MM` e `AAAA-MM-DD`.
 - **Erros**: as funções nunca devolvem `err.message` ao navegador — só mensagens genéricas ou de regra de negócio.
 - **Cabeçalhos** (`vercel.json`): nosniff, X-Frame-Options DENY, Referrer-Policy, HSTS, Permissions-Policy. Sem CSP ainda.
-- **Testes**: `npm test` (51 testes das APIs, da exclusão de negócios e da lógica de disponibilidade). As regras do Firestore ainda não têm teste automatizado.
+- **Testes**: `npm test` (60 testes das APIs, da exclusão de negócios e da lógica de disponibilidade). As regras do Firestore ainda não têm teste automatizado.
 
 ---
 
@@ -149,7 +149,7 @@ Depois de fazer login, o dono vê:
 
 - **Dashboard**: agendamentos de hoje, faturamento do dia (dos atendimentos já concluídos), ticket médio, horário previsto de término do expediente, próximo cliente, faturamento por serviço.
 - **Agenda**: visão diária dos agendamentos, com filtro por profissional e por status. Ações: marcar como concluído, cancelar, enviar lembrete manual pelo WhatsApp (abre uma conversa já com o texto pronto — o dono precisa clicar em enviar, não é automático).
-- **Serviços** e **Profissionais**: cadastro (CRUD completo), incluindo horário de trabalho por dia da semana de cada profissional. Cada serviço pode ser **restrito a certos profissionais** ("Quem realiza este serviço?"); sem restrição, qualquer profissional faz. O cliente só vê, para agendar, os profissionais que realizam todos os serviços escolhidos.
+- **Serviços** e **Profissionais**: cadastro (CRUD completo), incluindo horário de trabalho por dia da semana de cada profissional. Cada serviço pode ser **restrito a certos profissionais** ("Quem realiza este serviço?"); sem restrição, qualquer profissional faz. O cliente só vê, para agendar, os profissionais que realizam todos os serviços escolhidos. O mesmo vínculo pode ser marcado ao cadastrar o profissional ("Serviços que realiza").
 - **Clientes**: listagem com busca, mostrando quantas visitas e quanto cada um já gastou.
 - **Configurações**: dados do negócio, horário de funcionamento, QR Code do link público (com download), ativação de notificações push no navegador.
 

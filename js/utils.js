@@ -15,6 +15,41 @@ export function profissionalRealizaServico(servico, profissionalId) {
   return !Array.isArray(ids) || ids.length === 0 || ids.includes(profissionalId);
 }
 
+// Cadastro do profissional: calcula como ficam os serviços quando se marca/desmarca
+// "quais serviços ele realiza". O vínculo mora no SERVIÇO (profissionaisIds), então
+// aqui só se descobre quais serviços precisam mudar. Devolve { alteracoes, erro }.
+//  - servicos: { id: { nome, profissionaisIds } }
+//  - profissionaisAtivosIds: ativos DEPOIS do salvar (inclui este, se ficar ativo)
+//  - marcadosIds: serviços marcados no formulário
+// Nunca deixa um serviço sem ninguém que o realize (lista vazia significaria
+// "todos", o oposto do que foi pedido) e normaliza pra [] quando todos os
+// ativos fazem — assim um profissional novo entra sozinho no que é livre.
+export function calcularVinculosProfissional({ servicos, profissionaisAtivosIds, profissionalId, marcadosIds }) {
+  const alteracoes = [];
+  const ativos = profissionaisAtivosIds || [];
+
+  for (const [servicoId, s] of Object.entries(servicos || {})) {
+    const ids = Array.isArray(s.profissionaisIds) ? s.profissionaisIds : [];
+    const fazAntes = ids.length === 0 || ids.includes(profissionalId);
+    const marcado = (marcadosIds || []).includes(servicoId);
+    if (marcado === fazAntes) continue;
+
+    let novos;
+    if (marcado) {
+      novos = [...ids, profissionalId];
+      if (ativos.every((pid) => novos.includes(pid))) novos = [];
+    } else {
+      const restantes = ids.length === 0 ? ativos.filter((pid) => pid !== profissionalId) : ids.filter((pid) => pid !== profissionalId);
+      if (!restantes.some((pid) => ativos.includes(pid))) {
+        return { alteracoes: [], erro: `Nenhum outro profissional realiza "${s.nome}". Marque outro profissional nesse serviço antes de desmarcá-lo aqui.` };
+      }
+      novos = restantes;
+    }
+    alteracoes.push({ servicoId, profissionaisIds: novos });
+  }
+  return { alteracoes, erro: null };
+}
+
 // Coloca um botão "mostrar/ocultar senha" dentro do campo de senha.
 // Evita o erro clássico de digitar às cegas (e de o gerenciador de senhas do
 // navegador preencher a senha antiga sem a pessoa perceber).

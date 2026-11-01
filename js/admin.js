@@ -3,7 +3,7 @@
 // ========================================
 
 import { db } from './firebase-config.js';
-import { escapeHtml, adicionarMostrarSenha, profissionalRealizaServico } from './utils.js';
+import { escapeHtml, adicionarMostrarSenha, profissionalRealizaServico, calcularVinculosProfissional } from './utils.js';
 import { aplicarTema, resetarTema } from './vocabulario.js';
 import {
   initializeApp,
@@ -30,6 +30,7 @@ import {
   updateDoc,
   deleteDoc,
   addDoc,
+  writeBatch,
   onSnapshot
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
@@ -1394,6 +1395,22 @@ function modalProfissional(id = null) {
   const dias = diasDaSemana();
   const labelsDias = { domingo: 'Domingo', segunda: 'Segunda', terca: 'Terça', quarta: 'Quarta', quinta: 'Quinta', sexta: 'Sexta', sabado: 'Sábado' };
 
+  // Serviços que este profissional realiza. Profissional novo já vem marcado nos
+  // serviços sem restrição (que qualquer um faz); nos restritos a outros, não.
+  const servicosLista = Object.entries(state.servicos).sort((a, b) => (a[1].ordem || 0) - (b[1].ordem || 0));
+  const blocoServicos = servicosLista.length === 0 ? '' : `
+    <div class="input-grupo">
+      <label class="input-label">SERVIÇOS QUE REALIZA</label>
+      <div class="nag-servicos-lista">
+        ${servicosLista.map(([sid, s]) => `
+          <label class="nag-servico-item">
+            <input type="checkbox" class="prof-serv-check" value="${escapeHtml(sid)}" ${profissionalRealizaServico(s, id) || (!id && !(s.profissionaisIds && s.profissionaisIds.length)) ? 'checked' : ''}>
+            <span>${escapeHtml(s.nome)}${s.ativo === false ? ' (inativo)' : ''}</span>
+          </label>`).join('')}
+      </div>
+      <small class="campo-help">Marque o que este profissional faz. Os clientes só poderão agendar cada serviço com quem estiver marcado.</small>
+    </div>`;
+
   const corpo = `
     <div class="input-grupo">
       <label class="input-label">NOME</label>
@@ -1415,6 +1432,7 @@ function modalProfissional(id = null) {
         <span>Profissional ativo</span>
       </label>
     </div>
+    ${blocoServicos}
     <h4 style="margin:20px 0 12px;font-family:'Bricolage Grotesque';font-weight:700;font-size:14px;">Horário de trabalho</h4>
     <div class="horarios-conf">
       ${dias.map(dia => {
@@ -1462,14 +1480,32 @@ function modalProfissional(id = null) {
     };
     if (!dados.nome) { toast('Digite o nome', 'erro'); return; }
 
+    // Profissional + vínculos com os serviços são gravados juntos (tudo ou nada).
+    const profRef = id
+      ? doc(db, 'barbearias', state.barbeariaId, 'profissionais', id)
+      : doc(collection(db, 'barbearias', state.barbeariaId, 'profissionais'));
+    const ativosDepois = Object.entries(state.profissionais)
+      .filter(([pid, pr]) => pr.ativo !== false && pid !== profRef.id)
+      .map(([pid]) => pid);
+    if (dados.ativo) ativosDepois.push(profRef.id);
+
+    const { alteracoes, erro } = calcularVinculosProfissional({
+      servicos: state.servicos,
+      profissionaisAtivosIds: ativosDepois,
+      profissionalId: profRef.id,
+      marcadosIds: $$('#modal-body .prof-serv-check:checked').map(c => c.value)
+    });
+    if (erro) { toast(erro, 'erro'); return; }
+
     try {
-      if (id) {
-        await updateDoc(doc(db, 'barbearias', state.barbeariaId, 'profissionais', id), dados);
-        toast('Profissional atualizado', 'sucesso');
-      } else {
-        await addDoc(collection(db, 'barbearias', state.barbeariaId, 'profissionais'), dados);
-        toast('Profissional criado', 'sucesso');
-      }
+      const lote = writeBatch(db);
+      if (id) lote.update(profRef, dados); else lote.set(profRef, dados);
+      alteracoes.forEach(a => lote.update(
+        doc(db, 'barbearias', state.barbeariaId, 'servicos', a.servicoId),
+        { profissionaisIds: a.profissionaisIds }
+      ));
+      await lote.commit();
+      toast(id ? 'Profissional atualizado' : 'Profissional criado', 'sucesso');
       fecharModal();
     } catch (err) {
       toast('Erro ao salvar', 'erro');
