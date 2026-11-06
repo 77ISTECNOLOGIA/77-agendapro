@@ -17,8 +17,7 @@ firebase.initializeApp({
 });
 
 // Versão nova assume IMEDIATAMENTE. Sem isto, depois de uma atualização o navegador mantinha a
-// versão ANTIGA ativa enquanto houvesse uma aba do painel aberta — e a antiga mostrava a
-// notificação em dobro. (Foi exatamente o que aconteceu no notebook.)
+// versão ANTIGA ativa enquanto houvesse uma aba do painel aberta.
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
 
@@ -29,34 +28,55 @@ const ICONE_77 = 'data:image/svg+xml,' + encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="22" fill="#fb6464"/><text x="50" y="68" font-family="sans-serif" font-weight="800" font-size="48" text-anchor="middle" fill="#0a0a0a">77</text></svg>'
 );
 
-// A mensagem enviada pelo servidor já traz o campo "notification": o próprio Firebase MOSTRA a
-// notificação quando o painel está em segundo plano, e tocar nela abre o painel (link definido no
-// servidor). Este arquivo só mostra uma notificação PRÓPRIA se, por algum motivo, o Firebase não
-// mostrou nenhuma agora há pouco — assim nunca fica em branco (importante no iPhone, que exige
-// uma notificação visível a cada push) e nunca duplica.
+// A mensagem do servidor já traz o campo "notification": o próprio Firebase MOSTRA a notificação
+// quando o painel está em segundo plano (e, ao tocar, abre o link e avisa a página aberta).
+// Este arquivo só mostra uma notificação PRÓPRIA se o Firebase não mostrou a DESTA mensagem —
+// nunca fica em branco (o iPhone exige uma notificação visível a cada push) e nunca duplica.
+//
+// Como saber se o Firebase já mostrou a desta mensagem? Duas pistas, sem depender de recursos
+// que variam por navegador (o Safari, por exemplo, não preenche "timestamp"):
+//   1) alguma notificação exibida com a MESMA tag desta mensagem;
+//   2) alguma notificação criada pelo SDK (guarda a mensagem original em data.FCM_MSG) cuja
+//      mensagem tem a mesma tag.
 messaging.onBackgroundMessage(async (payload) => {
+  const tag = (payload.data && payload.data.tag) || undefined;
   await new Promise((resolver) => setTimeout(resolver, 700));
 
-  const agora = Date.now();
-  const mostradas = await self.registration.getNotifications();
-  if (mostradas.some((n) => agora - n.timestamp < 10000)) return;   // já apareceu uma agora há pouco
+  if (tag) {
+    const exibidas = await self.registration.getNotifications();
+    const jaMostrada = exibidas.some((n) => {
+      if (n.tag === tag) return true;
+      const original = n.data && n.data.FCM_MSG;
+      return !!(original && original.data && original.data.tag === tag);
+    });
+    if (jaMostrada) return;
+  }
 
-  const tag = (payload.data && payload.data.tag) || undefined;
   const titulo = (payload.notification && payload.notification.title) || '77 AgendaPro';
   const corpo = (payload.notification && payload.notification.body) || '';
   return self.registration.showNotification(titulo, {
-    body: corpo, icon: ICONE_77, badge: ICONE_77, tag, data: { reserva: true }
+    body: corpo, icon: ICONE_77, badge: ICONE_77, tag,
+    data: { reserva: true, agendamentoId: (payload.data && payload.data.agendamentoId) || null }
   });
 });
 
-// Toque na NOSSA notificação de reserva (a do Firebase tem o tratamento dela): abre o painel.
+// Toque na NOSSA notificação de reserva (a do Firebase tem o tratamento dela): abre o painel
+// já no agendamento. Painel aberto → foca e avisa a página; fechado → abre /admin?agendamento=ID.
 self.addEventListener('notificationclick', (event) => {
-  if (!event.notification.data || !event.notification.data.reserva) return;
+  const dados = event.notification.data;
+  if (!dados || !dados.reserva) return;
   event.notification.close();
+  const id = dados.agendamentoId;
   event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((janelas) => {
-      for (const janela of janelas) if ('focus' in janela) return janela.focus();
-      return self.clients.openWindow('/admin');
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (janelas) => {
+      for (const janela of janelas) {
+        if ('focus' in janela) {
+          const focada = await janela.focus();
+          if (id && focada) focada.postMessage({ messageType: 'notification-clicked', data: { agendamentoId: id } });
+          return;
+        }
+      }
+      return self.clients.openWindow(id ? '/admin?agendamento=' + encodeURIComponent(id) : '/admin');
     })
   );
 });

@@ -33,13 +33,13 @@ function montarCorpo(ag) {
  * Envia a MESMA notificação pra todos os aparelhos do dono (barbearias/{slug}/dispositivos).
  * Nunca lança. Remove tokens mortos. Devolve { total, enviadas, removidos, erros[] }.
  */
-async function enviarParaDispositivos(negocioRef, { titulo = '77 AgendaPro', corpo, tag, dados = {} }) {
+async function enviarParaDispositivos(negocioRef, { titulo = '77 AgendaPro', corpo, tag, dados = {}, link }) {
   const resultado = { total: 0, enviadas: 0, removidos: 0, erros: [] };
   const snap = await negocioRef.collection('dispositivos').get();
   resultado.total = snap.size;
   if (snap.empty) return resultado;
 
-  const urlPainel = `${process.env.APP_URL || 'https://77-agendapro.vercel.app'}/admin`;
+  const urlPainel = link || `${process.env.APP_URL || 'https://77-agendapro.vercel.app'}/admin`;
   await Promise.all(snap.docs.map(async (d) => {
     const token = d.data().token;
     if (!token) return;
@@ -73,7 +73,9 @@ async function notificarNovoAgendamento(negocioRef, agendamentoRef, agendamento)
     const r = await enviarParaDispositivos(negocioRef, {
       corpo: montarCorpo(agendamento),
       tag: `agendamento-${agendamentoRef.id}`,
-      dados: { agendamentoId: agendamentoRef.id }
+      dados: { agendamentoId: agendamentoRef.id },
+      // tocar na notificação abre direto ESTE agendamento no painel
+      link: `${process.env.APP_URL || 'https://77-agendapro.vercel.app'}/admin?agendamento=${encodeURIComponent(agendamentoRef.id)}`
     });
     if (r.total > 0) await agendamentoRef.update({ notificacaoEnviada: true });
     return { enviadas: r.enviadas };

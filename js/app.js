@@ -221,8 +221,11 @@ function inicializarEventos() {
   $('#btn-continuar-1').addEventListener('click', handleContinuarIdentificacao);
 
   $('#btn-voltar-2').addEventListener('click', () => mostrarTela(1));
-  $('#btn-continuar-2').addEventListener('click', () => {
+  $('#btn-continuar-2').addEventListener('click', async () => {
     if (state.servicosSelecionados.length === 0) return;
+    // Ocupação sempre FRESCA ao escolher o horário: sem isso a página guardava a foto de quando
+    // abriu, e um horário cancelado continuava aparecendo como ocupado até recarregar.
+    await recarregarAgendamentos();
     renderizarTela3();
     mostrarTela(3);
   });
@@ -934,6 +937,7 @@ async function confirmarCancelamento(agendamentoId) {
       return;
     }
     toast('Agendamento cancelado', 'sucesso');
+    await recarregarAgendamentos();            // o horário cancelado já volta a ficar livre na grade
     await carregarMeusAgendamentos();
   } catch (err) {
     console.error('Erro ao cancelar:', err);

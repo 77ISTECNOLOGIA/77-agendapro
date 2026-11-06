@@ -136,6 +136,7 @@ function inicializarAuth() {
         avisarSituacaoConta();
         ativarListenersTempoReal();
         await renderizarTudo();
+        tratarLinkDeNotificacao();     // aberto pelo toque numa notificação: já mostra o agendamento
         ouvirNotificacoesEmPrimeiroPlano();
         atualizarServiceWorker();
       } catch (err) {
@@ -343,6 +344,35 @@ async function enviarTesteNotificacao() {
     btn.disabled = false;
     btn.textContent = textoOriginal;
   }
+}
+
+// Toque numa notificação de novo agendamento: vai pra Agenda no dia certo e abre os detalhes.
+// Dois caminhos: (1) painel FECHADO → o navegador abre /admin?agendamento=ID (lido ao entrar);
+// (2) painel JÁ ABERTO → o service worker avisa a página por mensagem ("notification-clicked").
+function abrirAgendamentoDaNotificacao(id) {
+  const a = state.agendamentos[id];
+  if (!a) { toast('Não encontrei esse agendamento (pode ter sido excluído).', 'erro'); return; }
+  state.agendaDataAtual = chaveParaData(a.dataChave);
+  state.filtroProfissional = 'todos';
+  state.filtroStatus = 'todos';
+  irPara('agenda');
+  abrirDetalhesAgendamento(id);
+}
+
+function tratarLinkDeNotificacao() {
+  const id = new URLSearchParams(window.location.search).get('agendamento');
+  if (!id) return;
+  window.history.replaceState(null, '', window.location.pathname);   // limpa o ?agendamento= da barra
+  abrirAgendamentoDaNotificacao(id);
+}
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    const m = e.data;
+    if (m && m.messageType === 'notification-clicked' && m.data && m.data.agendamentoId) {
+      abrirAgendamentoDaNotificacao(m.data.agendamentoId);
+    }
+  });
 }
 
 // Pede ao navegador pra buscar a versão mais nova do service worker de notificações.

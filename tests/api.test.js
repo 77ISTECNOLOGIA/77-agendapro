@@ -149,7 +149,7 @@ test('criar-agendamento: notifica o dono, remove token morto e nunca vaza erro i
   assert.equal(amb.notificacoes[0].data.agendamentoId, r.body.id);
   assert.equal(amb.notificacoes[0].webpush.notification.tag, `agendamento-${r.body.id}`);
   assert.equal(amb.notificacoes[0].data.tag, `agendamento-${r.body.id}`);
-  assert.match(amb.notificacoes[0].webpush.fcmOptions.link, /^https:\/\/.+\/admin$/);
+  assert.equal(amb.notificacoes[0].webpush.fcmOptions.link, `https://77-agendapro.vercel.app/admin?agendamento=${r.body.id}`);   // tocar abre ESTE agendamento
   assert.equal(amb.fake.get(`barbearias/${SLUG}/dispositivos/d2`), undefined);
   assert.equal(amb.fake.get(`barbearias/${SLUG}/dispositivos/d1`).token, 'tok-bom');
 
