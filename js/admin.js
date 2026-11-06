@@ -3,7 +3,7 @@
 // ========================================
 
 import { db } from './firebase-config.js';
-import { escapeHtml, adicionarMostrarSenha, profissionalRealizaServico, calcularVinculosProfissional } from './utils.js';
+import { escapeHtml, adicionarMostrarSenha, profissionalRealizaServico, calcularVinculosProfissional, EMOJIS_SERVICO, sugerirEmoji } from './utils.js';
 import { aplicarTema, resetarTema } from './vocabulario.js';
 import {
   initializeApp,
@@ -1275,9 +1275,15 @@ function modalServico(id = null) {
       </div>
     </div>
     <div class="input-grupo">
-      <label class="input-label">EMOJI</label>
-      <input type="text" id="serv-emoji" class="input" value="${escapeHtml(s.emoji || '✂️')}" maxlength="2">
-      <small class="campo-help">Sugestões: ✂️ 🪒 💇 💆 💈 🧔 ✨</small>
+      <label class="input-label">ÍCONE DO SERVIÇO <span id="serv-emoji-atual" style="font-size:18px;margin-left:6px;">${escapeHtml(s.emoji || '✂️')}</span></label>
+      <div class="emoji-grade" id="serv-emoji-grade">
+        ${EMOJIS_SERVICO.map((e) => `<button type="button" class="emoji-op" data-emoji="${e}" aria-label="Escolher o ícone ${e}">${e}</button>`).join('')}
+      </div>
+      <input type="hidden" id="serv-emoji" value="${escapeHtml(s.emoji || '✂️')}">
+      <div style="display:flex;gap:10px;align-items:center;">
+        <input type="text" id="serv-emoji-outro" class="input" maxlength="8" placeholder="Outro" style="max-width:100px;">
+        <small class="campo-help" style="margin:0;">Escolha um ícone ou digite/cole outro emoji. Em serviço novo, o ícone é sugerido pelo nome.</small>
+      </div>
     </div>
     <div class="input-grupo">
       <label style="display:flex;gap:10px;align-items:center;cursor:pointer;">
@@ -1292,6 +1298,29 @@ function modalServico(id = null) {
     <button class="btn-acao" id="modal-salvar">Salvar</button>
   `;
   abrirModal(titulo, corpo, rodape);
+
+  // Escolha do ícone: grade clicável + campo "Outro". Em serviço NOVO o ícone acompanha o
+  // nome digitado (sugerirEmoji) até a pessoa escolher um manualmente; serviço existente
+  // mantém o ícone dele.
+  const emojiCampo = $('#serv-emoji');
+  let escolhidoManual = !!id;
+  const marcarEmoji = (e, { limparOutro = true } = {}) => {
+    emojiCampo.value = e;
+    $('#serv-emoji-atual').textContent = e;
+    $$('#serv-emoji-grade .emoji-op').forEach((b) => b.classList.toggle('selecionado', b.dataset.emoji === e));
+    if (limparOutro) $('#serv-emoji-outro').value = EMOJIS_SERVICO.includes(e) ? '' : e;
+  };
+  marcarEmoji(emojiCampo.value);
+  $$('#serv-emoji-grade .emoji-op').forEach((b) => b.addEventListener('click', () => { escolhidoManual = true; marcarEmoji(b.dataset.emoji); }));
+  $('#serv-emoji-outro').addEventListener('input', (ev) => {
+    const v = ev.target.value.trim();
+    if (v) { escolhidoManual = true; marcarEmoji(v, { limparOutro: false }); }
+  });
+  $('#serv-nome').addEventListener('input', (ev) => {
+    if (escolhidoManual) return;
+    const sugestao = sugerirEmoji(ev.target.value);
+    if (sugestao) marcarEmoji(sugestao);
+  });
 
   $('#modal-cancel').addEventListener('click', fecharModal);
   $('#modal-salvar').addEventListener('click', async () => {

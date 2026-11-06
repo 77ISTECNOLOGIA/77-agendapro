@@ -1035,3 +1035,26 @@
   .topbar-app { padding: 12px 14px; }
   .user-detalhes { display: none; }
 }
+
+/* ====== Grade de ícones (cadastro de serviço) ====== */
+.emoji-grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.emoji-op {
+  background: var(--surface-2);
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  font-size: 22px;
+  line-height: 1;
+  padding: 10px 0;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.emoji-op:hover { border-color: var(--border-light); }
+.emoji-op.selecionado {
+  border-color: var(--accent);
+  background: rgba(212, 255, 58, 0.12);
+}
