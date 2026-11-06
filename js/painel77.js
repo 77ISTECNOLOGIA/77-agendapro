@@ -35,7 +35,8 @@ const state = {
 // UTILS
 // ========================================
 const $ = (s) => document.querySelector(s);
-const $$ = (s) => document.querySelectorAll(s);
+// Array de verdade (e não NodeList): NodeList não tem .map/.filter/.reduce e quebrava em silêncio
+const $$ = (s) => Array.from(document.querySelectorAll(s));
 
 const TIPO_LABEL = { barbearia: 'Barbearia', salao: 'Salão de Beleza', estetica: 'Estética / Studio', nails: 'Nail Designer', outro: 'Outro' };
 const TIPO_EMOJI = { barbearia: '💈', salao: '💇', estetica: '✨', nails: '💅', outro: '📅' };

@@ -34,7 +34,8 @@ const state = {
 // UTILS
 // ========================================
 const $ = (sel) => document.querySelector(sel);
-const $$ = (sel) => document.querySelectorAll(sel);
+// Array de verdade (e não NodeList): NodeList não tem .map/.filter/.reduce e quebrava em silêncio
+const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
 function formatarMoeda(valor) {
   return `R$ ${valor.toFixed(2).replace('.', ',')}`;

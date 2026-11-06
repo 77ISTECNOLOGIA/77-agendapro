@@ -63,7 +63,8 @@ const state = {
 // UTILS
 // ========================================
 const $ = (sel) => document.querySelector(sel);
-const $$ = (sel) => document.querySelectorAll(sel);
+// Array de verdade (e não NodeList): NodeList não tem .map/.filter/.reduce e quebrava em silêncio
+const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
 function formatarMoeda(v) { return `R$ ${(v || 0).toFixed(2).replace('.', ',')}`; }
 function dataParaChave(d) {
