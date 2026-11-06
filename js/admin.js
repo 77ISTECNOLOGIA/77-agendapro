@@ -1681,6 +1681,11 @@ function fecharModal() {
   $('#modal-overlay').classList.add('hidden');
 }
 
+// ESC fecha a janela aberta (editar profissional/serviço, novo agendamento, detalhes...) sem salvar.
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !$('#modal-overlay').classList.contains('hidden')) fecharModal();
+});
+
 // ========================================
 // EVENTOS DAS VIEWS
 // ========================================

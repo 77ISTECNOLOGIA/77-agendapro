@@ -80,6 +80,11 @@ function abrirModal(titulo, corpo, rodape='') {
 }
 function fecharModal() { $('#modal-overlay').classList.add('hidden'); }
 
+// ESC fecha a janela aberta (detalhes, criar acesso, excluir negócio...) sem executar nada.
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !$('#modal-overlay').classList.contains('hidden')) fecharModal();
+});
+
 // ========================================
 // AUTH
 // ========================================

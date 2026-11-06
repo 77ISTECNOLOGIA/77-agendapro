@@ -52,3 +52,10 @@ test('a checagem de fato pega o defeito antigo (senão este teste não protegeri
   assert.equal(achados(`const $$ = (s) => Array.from(document.querySelectorAll(s)); $$('.a').map(x => x);`).length, 0);
   assert.equal(achados(`document.querySelectorAll('.a').map(x => x)`).length, 1);
 });
+
+test('admin e painel77: a tecla ESC fecha a janela (modal) aberta', () => {
+  for (const arq of ['admin.js', 'painel77.js']) {
+    const src = fs.readFileSync(path.join(pasta, arq), 'utf8');
+    assert.match(src, /addEventListener\('keydown'[\s\S]{0,200}e\.key === 'Escape'[\s\S]{0,200}fecharModal\(\)/, `js/${arq} sem atalho ESC`);
+  }
+});
