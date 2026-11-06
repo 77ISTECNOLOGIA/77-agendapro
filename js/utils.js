@@ -39,9 +39,12 @@ export function calcularVinculosProfissional({ servicos, profissionaisAtivosIds,
       novos = [...ids, profissionalId];
       if (ativos.every((pid) => novos.includes(pid))) novos = [];
     } else {
-      const restantes = ids.length === 0 ? ativos.filter((pid) => pid !== profissionalId) : ids.filter((pid) => pid !== profissionalId);
+      const outros = ativos.filter((pid) => pid !== profissionalId);
+      const restantes = ids.length === 0 ? outros : ids.filter((pid) => pid !== profissionalId);
       if (!restantes.some((pid) => ativos.includes(pid))) {
-        return { alteracoes: [], erro: `Nenhum outro profissional realiza "${s.nome}". Marque outro profissional nesse serviço antes de desmarcá-lo aqui.` };
+        return { alteracoes: [], erro: outros.length === 0
+          ? `"${s.nome}" ficaria sem ninguém para realizá-lo, pois este é o único profissional ativo. Para tirar o serviço do ar, desative-o na aba Serviços.`
+          : `Nenhum outro profissional realiza "${s.nome}". Marque outro profissional nesse serviço antes de desmarcá-lo aqui.` };
       }
       novos = restantes;
     }

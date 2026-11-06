@@ -658,7 +658,7 @@ input { font-family: inherit; }
   border-radius: var(--radius-md);
   font-size: 13px;
   font-weight: 500;
-  z-index: 200;
+  z-index: 1100; /* acima de janelas/modais (200) e do loading (1000): senão o aviso de erro some atrás do modal */
   transition: transform 0.3s cubic-bezier(0.68, -0.55, 0.27, 1.55);
   box-shadow: 0 10px 30px rgba(0,0,0,0.3);
 }

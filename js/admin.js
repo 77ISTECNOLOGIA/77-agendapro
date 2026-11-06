@@ -1408,7 +1408,11 @@ function modalProfissional(id = null) {
             <span>${escapeHtml(s.nome)}${s.ativo === false ? ' (inativo)' : ''}</span>
           </label>`).join('')}
       </div>
-      <small class="campo-help">Marque o que este profissional faz. Os clientes só poderão agendar cada serviço com quem estiver marcado.</small>
+      <small class="campo-help">Marque o que este profissional faz. Os clientes só poderão agendar cada serviço com quem estiver marcado.${
+        Object.entries(state.profissionais).some(([pid, pr]) => pr.ativo !== false && pid !== id)
+          ? ''
+          : ' <strong>Você é o único profissional ativo</strong>, então todos os serviços ficam com você — para tirar um serviço do ar, desative-o na aba Serviços.'
+      }</small>
     </div>`;
 
   const corpo = `
@@ -1508,7 +1512,8 @@ function modalProfissional(id = null) {
       toast(id ? 'Profissional atualizado' : 'Profissional criado', 'sucesso');
       fecharModal();
     } catch (err) {
-      toast('Erro ao salvar', 'erro');
+      console.error('Erro ao salvar profissional:', err);
+      toast(`Erro ao salvar profissional (${err.code || 'desconhecido'})`, 'erro');
     }
   });
 }

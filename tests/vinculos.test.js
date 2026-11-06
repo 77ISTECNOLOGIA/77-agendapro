@@ -65,9 +65,12 @@ test('recusa deixar um serviço sem NINGUÉM que o realize', () => {
   assert.match(r.erro, /Nenhum outro profissional realiza "Pigmentação"/);
   assert.deepEqual(r.alteracoes, []);
 
-  // único profissional ativo desmarcando um serviço livre
+  // único profissional ativo desmarcando um serviço livre: a mensagem explica o motivo certo
   r = calcular({ servicos: servicos(), profissionaisAtivosIds: ['joao'], profissionalId: 'joao', marcadosIds: ['soJoao', 'dupla'] });
   assert.match(r.erro, /Sobrancelha/);
+  assert.match(r.erro, /único profissional ativo/);
+  assert.match(r.erro, /desative-o na aba Serviços/);
+  assert.doesNotMatch(r.erro, /Marque outro profissional/);   // não manda marcar "outro" quando não existe outro
 });
 
 test('lista que só sobra com profissional inativo também conta como "ninguém"', () => {
