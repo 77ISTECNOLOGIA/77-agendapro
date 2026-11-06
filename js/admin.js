@@ -137,6 +137,7 @@ function inicializarAuth() {
         ativarListenersTempoReal();
         await renderizarTudo();
         ouvirNotificacoesEmPrimeiroPlano();
+        atualizarServiceWorker();
       } catch (err) {
         console.error('Erro ao carregar usuário:', err);
         mostrarLogin('Erro ao carregar dados. Tente novamente.');
@@ -204,23 +205,32 @@ async function ativarNotificacoes() {
   const ehStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 
   if (ehIOS && !ehStandalone) {
-    toast('No iPhone: toque em Compartilhar → "Adicionar à Tela de Início", abra o app por lá e tente de novo', 'erro');
+    toast('No iPhone as notificações só funcionam pelo ÍCONE do app: toque em Compartilhar → "Adicionar à Tela de Início", abra o AgendaPro pelo ícone, entre e ative por lá.', 'erro');
     return;
   }
 
   if (!('serviceWorker' in navigator) || !('Notification' in window)) {
-    toast('Seu navegador não suporta notificações push', 'erro');
+    toast(ehIOS ? 'Este iPhone não suporta notificações de app. É preciso o iOS 16.4 ou mais novo.' : 'Seu navegador não suporta notificações push', 'erro');
+    return;
+  }
+
+  if (Notification.permission === 'denied') {
+    toast(ehIOS
+      ? 'As notificações estão bloqueadas. Abra Ajustes do iPhone → Notificações → AgendaPro e permita.'
+      : 'As notificações estão bloqueadas para este site. Clique no cadeado ao lado do endereço e permita "Notificações".', 'erro');
     return;
   }
 
   try {
     const permissao = await Notification.requestPermission();
     if (permissao !== 'granted') {
-      toast('Permissão de notificação não concedida', 'erro');
+      toast('Você não permitiu as notificações. Toque de novo e escolha "Permitir".', 'erro');
       return;
     }
 
     const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+    await navigator.serviceWorker.ready;            // o iPhone precisa do worker ATIVO antes de gerar o token
+    registration.update().catch(() => {});
     const messaging = getMessaging(getApp());
     const token = await getToken(messaging, {
       vapidKey: VAPID_KEY,
@@ -233,20 +243,18 @@ async function ativarNotificacoes() {
     }
 
     // Salva o token deste dispositivo na lista, usando um ID fixo do navegador como chave
-    // (não o token em si, que pode rotacionar e criar entradas duplicadas pro mesmo dispositivo)
+    // (não o token em si, que pode rotacionar e criar entradas duplicadas pro mesmo dispositivo).
+    // Tokens ficam numa sub-coleção privada (antes ficavam no documento do negócio, legível por todos).
     const deviceId = obterDeviceId();
-    // Tokens ficam numa sub-coleção privada (antes ficavam no documento do
-    // negócio, que era legível por qualquer visitante).
     const dispositivosRef = collection(db, 'barbearias', state.barbeariaId, 'dispositivos');
-    await setDoc(doc(dispositivosRef, deviceId), { token, atualizadoEm: new Date().toISOString() });
-    const totalAtual = (await getDocs(dispositivosRef)).size;
+    await setDoc(doc(dispositivosRef, deviceId), { token, atualizadoEm: new Date().toISOString(), aparelho: descreverAparelho() });
 
-    toast('Notificações ativadas neste dispositivo! 🔔', 'sucesso');
-    atualizarStatusNotificacoes(true, totalAtual);
+    toast('Notificações ativadas neste aparelho! 🔔', 'sucesso');
+    await carregarStatusNotificacoes();
     ouvirNotificacoesEmPrimeiroPlano();
   } catch (err) {
     console.error('Erro ao ativar notificações:', err);
-    toast('Erro ao ativar notificações', 'erro');
+    toast('Não foi possível ativar as notificações (' + (err.code || err.name || 'erro') + '). Tente de novo.', 'erro');
   }
 }
 
@@ -262,23 +270,87 @@ function obterDeviceId() {
   return id;
 }
 
-function atualizarStatusNotificacoes(ativo, totalDispositivos = 0) {
+// "iPhone · Safari", "Windows · Chrome"... — só pra o dono reconhecer cada aparelho na lista.
+function descreverAparelho() {
+  const ua = navigator.userAgent;
+  const aparelho = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android'
+    : /Windows/.test(ua) ? 'Windows' : /Macintosh/.test(ua) ? 'Mac' : /Linux/.test(ua) ? 'Linux' : 'Aparelho';
+  const navegador = /Edg\//.test(ua) ? 'Edge' : /OPR\//.test(ua) ? 'Opera' : /Firefox/.test(ua) ? 'Firefox'
+    : /Chrome|CriOS/.test(ua) ? 'Chrome' : /Safari/.test(ua) ? 'Safari' : 'navegador';
+  const app = (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) ? ' (app)' : '';
+  return aparelho + ' · ' + navegador + app;
+}
+
+// Lê os aparelhos registrados e atualiza o texto/botões da tela de Configurações.
+async function carregarStatusNotificacoes() {
+  try {
+    const snap = await getDocs(collection(db, 'barbearias', state.barbeariaId, 'dispositivos'));
+    atualizarStatusNotificacoes(snap.size > 0, snap.size, snap.docs.map((d) => d.data().aparelho || 'Aparelho'));
+  } catch (err) {
+    console.error('Erro ao ler aparelhos de notificação:', err);
+    atualizarStatusNotificacoes(false, 0);
+  }
+}
+
+function atualizarStatusNotificacoes(ativo, totalDispositivos = 0, nomes = []) {
   const btn = $('#btn-ativar-notificacoes');
   const status = $('#status-notificacoes');
+  const btnTeste = $('#btn-testar-notificacao');
   if (!btn) return;
 
   if (ativo) {
     btn.textContent = '🔔 Ativar neste dispositivo também';
     btn.disabled = false;
     if (status) {
-      status.textContent = `${totalDispositivos} dispositivo${totalDispositivos !== 1 ? 's' : ''} recebendo notificações`;
+      status.textContent = totalDispositivos + ' aparelho' + (totalDispositivos !== 1 ? 's' : '') + ' recebendo notificações' + (nomes.length ? ': ' + nomes.join(', ') : '');
       status.classList.remove('hidden');
     }
+    if (btnTeste) btnTeste.classList.remove('hidden');
   } else {
     btn.textContent = '🔔 Ativar notificações push';
     btn.disabled = false;
     if (status) status.classList.add('hidden');
+    if (btnTeste) btnTeste.classList.add('hidden');
   }
+}
+
+// Manda uma notificação de teste pra TODOS os aparelhos registrados e mostra o resultado.
+async function enviarTesteNotificacao() {
+  const btn = $('#btn-testar-notificacao');
+  const textoOriginal = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Enviando…';
+  try {
+    const resp = await fetch('/api/testar-notificacao', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken: await auth.currentUser.getIdToken() })
+    });
+    const dados = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(dados.erro || 'Não foi possível enviar o teste');
+
+    if (dados.total === 0) {
+      toast('Nenhum aparelho registrado ainda. Ative as notificações primeiro.', 'erro');
+    } else if (dados.enviadas === dados.total) {
+      toast('Teste enviado para ' + dados.enviadas + ' aparelho' + (dados.enviadas !== 1 ? 's' : '') + '! Confira se chegou.', 'sucesso');
+    } else {
+      toast('Enviado para ' + dados.enviadas + ' de ' + dados.total + ' aparelhos.' + (dados.removidos ? ' Aparelho(s) antigo(s) foram removidos — ative de novo neles.' : ''), 'erro');
+    }
+    if (dados.removidos) await carregarStatusNotificacoes();
+  } catch (err) {
+    toast(err.message || 'Erro ao enviar o teste', 'erro');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = textoOriginal;
+  }
+}
+
+// Pede ao navegador pra buscar a versão mais nova do service worker de notificações.
+function atualizarServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js')
+    .then((r) => r && r.update())
+    .catch(() => {});
 }
 
 // Escuta notificações chegando ENQUANTO o painel está aberto e em primeiro plano.
@@ -1691,9 +1763,7 @@ function renderizarConfiguracoes() {
   $('#link-publico').textContent = `${window.location.origin}/${state.barbeariaId}`;
 
   // Status das notificações push (verifica se há pelo menos 1 dispositivo ativado)
-  getDocs(collection(db, 'barbearias', state.barbeariaId, 'dispositivos'))
-    .then((snap) => atualizarStatusNotificacoes(snap.size > 0, snap.size))
-    .catch(() => atualizarStatusNotificacoes(false, 0));
+  carregarStatusNotificacoes();
 
   // Horários
   const dias = diasDaSemana();
@@ -1840,6 +1910,8 @@ function inicializarEventosViews() {
   $('#btn-baixar-qr').addEventListener('click', baixarQR);
   const btnNotif = $('#btn-ativar-notificacoes');
   if (btnNotif) btnNotif.addEventListener('click', ativarNotificacoes);
+  const btnTesteNotif = $('#btn-testar-notificacao');
+  if (btnTesteNotif) btnTesteNotif.addEventListener('click', enviarTesteNotificacao);
 }
 
 // ========================================

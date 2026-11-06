@@ -29,45 +29,58 @@ function montarCorpo(ag) {
   return `${nomeCliente} — ${dataStr} às ${ag.horario} — ${servicosStr} com ${nomeProf}`;
 }
 
+/**
+ * Envia a MESMA notificação pra todos os aparelhos do dono (barbearias/{slug}/dispositivos).
+ * Nunca lança. Remove tokens mortos. Devolve { total, enviadas, removidos, erros[] }.
+ */
+async function enviarParaDispositivos(negocioRef, { titulo = '77 AgendaPro', corpo, tag, dados = {} }) {
+  const resultado = { total: 0, enviadas: 0, removidos: 0, erros: [] };
+  const snap = await negocioRef.collection('dispositivos').get();
+  resultado.total = snap.size;
+  if (snap.empty) return resultado;
+
+  const urlPainel = `${process.env.APP_URL || 'https://77-agendapro.vercel.app'}/admin`;
+  await Promise.all(snap.docs.map(async (d) => {
+    const token = d.data().token;
+    if (!token) return;
+    try {
+      await messaging().send({
+        token,
+        notification: { title: titulo, body: corpo },
+        data: { tag, ...dados },
+        webpush: {
+          notification: { icon: ICONE_77, badge: ICONE_77, tag },
+          // sem isso, tocar na notificação não abre nada
+          fcmOptions: { link: urlPainel }
+        }
+      });
+      resultado.enviadas++;
+    } catch (err) {
+      const codigo = (err && err.code) || 'desconhecido';
+      resultado.erros.push(codigo);
+      // Token expirado/desinstalado: remove para não acumular lixo
+      if (ERROS_TOKEN_INVALIDO.includes(codigo)) { await d.ref.delete(); resultado.removidos++; }
+    }
+  }));
+  return resultado;
+}
+
 /** Melhor esforço: nunca lança, nunca bloqueia o agendamento. */
 async function notificarNovoAgendamento(negocioRef, agendamentoRef, agendamento) {
   try {
-    const dispositivosSnap = await negocioRef.collection('dispositivos').get();
-    if (dispositivosSnap.empty) return { enviadas: 0 };
-
-    const corpo = montarCorpo(agendamento);
-    // Uma identificação por agendamento: se o navegador e o service worker
-    // tentarem mostrar a mesma notificação, ela aparece UMA vez só (mesma tag
-    // substitui a anterior), e agendamentos diferentes continuam empilhando.
-    const tag = `agendamento-${agendamentoRef.id}`;
-    const urlPainel = `${process.env.APP_URL || 'https://77-agendapro.vercel.app'}/admin`;
-    const resultados = await Promise.allSettled(dispositivosSnap.docs.map(async (d) => {
-      const token = d.data().token;
-      if (!token) return;
-      try {
-        await messaging().send({
-          token,
-          notification: { title: '77 AgendaPro', body: corpo },
-          data: { tag, agendamentoId: agendamentoRef.id },
-          webpush: {
-            notification: { icon: ICONE_77, badge: ICONE_77, tag },
-            // sem isso, tocar na notificação não abre nada
-            fcmOptions: { link: urlPainel }
-          }
-        });
-      } catch (err) {
-        // Token expirado/desinstalado: remove para não acumular lixo
-        if (ERROS_TOKEN_INVALIDO.includes(err && err.code)) await d.ref.delete();
-        throw err;
-      }
-    }));
-
-    await agendamentoRef.update({ notificacaoEnviada: true });
-    return { enviadas: resultados.filter(r => r.status === 'fulfilled').length };
+    // Uma identificação por agendamento: mesma tag substitui a anterior (nunca duplica),
+    // e agendamentos diferentes continuam empilhando.
+    const r = await enviarParaDispositivos(negocioRef, {
+      corpo: montarCorpo(agendamento),
+      tag: `agendamento-${agendamentoRef.id}`,
+      dados: { agendamentoId: agendamentoRef.id }
+    });
+    if (r.total > 0) await agendamentoRef.update({ notificacaoEnviada: true });
+    return { enviadas: r.enviadas };
   } catch (err) {
     console.error('Falha ao notificar dono:', err);
     return { enviadas: 0, erro: true };
   }
 }
 
-module.exports = { notificarNovoAgendamento, montarCorpo };
+module.exports = { notificarNovoAgendamento, enviarParaDispositivos, montarCorpo };

@@ -12,10 +12,14 @@ function ipDe(req) {
   return String(h).split(',')[0].trim() || 'desconhecido';
 }
 
-/** true = pode seguir; false = estourou o limite */
+/** true = pode seguir; false = estourou o limite (por IP) */
 function dentroDoLimite(req, nome, max, janelaMs) {
+  return dentroDoLimitePorChave(`${nome}:${ipDe(req)}`, max, janelaMs);
+}
+
+/** Mesmo limite, mas por uma chave qualquer (ex.: o usuário logado) */
+function dentroDoLimitePorChave(chave, max, janelaMs) {
   const agora = Date.now();
-  const chave = `${nome}:${ipDe(req)}`;
   const recentes = (janelas.get(chave) || []).filter(t => agora - t < janelaMs);
   if (recentes.length >= max) {
     janelas.set(chave, recentes);
@@ -60,4 +64,4 @@ function corpoDe(req) {
   return {};
 }
 
-module.exports = { dentroDoLimite, limparLimites, responder, ErroNegocio, tratarErro, corpoDe, ipDe };
+module.exports = { dentroDoLimite, dentroDoLimitePorChave, limparLimites, responder, ErroNegocio, tratarErro, corpoDe, ipDe };

@@ -16,6 +16,12 @@ firebase.initializeApp({
   appId: "1:229432793601:web:891c629da01a1bdb7c3e00"
 });
 
+// Versão nova assume IMEDIATAMENTE. Sem isto, depois de uma atualização o navegador mantinha a
+// versão ANTIGA ativa enquanto houvesse uma aba do painel aberta — e a antiga mostrava a
+// notificação em dobro. (Foi exatamente o que aconteceu no notebook.)
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
+
 const messaging = firebase.messaging();
 
 // Ícone institucional 77 IS (coral)
@@ -23,19 +29,19 @@ const ICONE_77 = 'data:image/svg+xml,' + encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="22" fill="#fb6464"/><text x="50" y="68" font-family="sans-serif" font-weight="800" font-size="48" text-anchor="middle" fill="#0a0a0a">77</text></svg>'
 );
 
-// Como a mensagem enviada pelo servidor já traz o campo "notification", o próprio
-// Firebase mostra a notificação quando o painel está em segundo plano — e tocar
-// nela abre o painel (link configurado no servidor). Antes, este arquivo mostrava
-// OUTRA notificação por cima, e o dono recebia duas por agendamento.
-// Agora só mostramos a nossa se, por algum motivo, a do Firebase não apareceu
-// (mesma "tag" = nunca duplica).
+// A mensagem enviada pelo servidor já traz o campo "notification": o próprio Firebase MOSTRA a
+// notificação quando o painel está em segundo plano, e tocar nela abre o painel (link definido no
+// servidor). Este arquivo só mostra uma notificação PRÓPRIA se, por algum motivo, o Firebase não
+// mostrou nenhuma agora há pouco — assim nunca fica em branco (importante no iPhone, que exige
+// uma notificação visível a cada push) e nunca duplica.
 messaging.onBackgroundMessage(async (payload) => {
+  await new Promise((resolver) => setTimeout(resolver, 700));
+
+  const agora = Date.now();
+  const mostradas = await self.registration.getNotifications();
+  if (mostradas.some((n) => agora - n.timestamp < 10000)) return;   // já apareceu uma agora há pouco
+
   const tag = (payload.data && payload.data.tag) || undefined;
-  await new Promise((resolver) => setTimeout(resolver, 500));
-
-  const jaMostradas = await self.registration.getNotifications(tag ? { tag } : {});
-  if (jaMostradas.length > 0) return;
-
   const titulo = (payload.notification && payload.notification.title) || '77 AgendaPro';
   const corpo = (payload.notification && payload.notification.body) || '';
   return self.registration.showNotification(titulo, {
