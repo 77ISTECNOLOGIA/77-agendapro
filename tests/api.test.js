@@ -421,3 +421,14 @@ test('api/negocio expõe a restrição de cada serviço (a tela precisa dela pra
   assert.deepEqual(r.body.servicos.srv2.profissionaisIds, ['prof2']);
   assert.deepEqual(r.body.servicos.srv1.profissionaisIds, []);
 });
+
+// ---------------------------------------------------------------- foto do serviço
+
+test('api/negocio: devolve a foto do serviço (e só se for um JPEG válido)', async () => {
+  const JPEG = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsL';
+  amb.fake.seed(`barbearias/${SLUG}/servicos/srv1`, { ...amb.fake.get(`barbearias/${SLUG}/servicos/srv1`), foto: JPEG });
+  amb.fake.seed(`barbearias/${SLUG}/servicos/srv2`, { ...amb.fake.get(`barbearias/${SLUG}/servicos/srv2`), foto: 'javascript:alert(1)' });
+  const r = await chamar(negocio, req('GET', { query: { slug: SLUG } }));
+  assert.equal(r.body.servicos.srv1.foto, JPEG);
+  assert.equal(r.body.servicos.srv2.foto, '', 'valor suspeito é descartado antes de chegar ao navegador do cliente');
+});

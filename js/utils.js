@@ -7,6 +7,13 @@ export function escapeHtml(valor) {
   }[c]));
 }
 
+// Foto do serviço: só aceitamos JPEG em "data URL" (gerado pelo próprio painel) e de tamanho
+// limitado. Qualquer outra coisa (svg, html, link externo, javascript:) é descartada, porque
+// o valor vai parar num <img src>. O servidor aplica a MESMA regra (api/_lib/negocio.js).
+export function fotoServicoValida(foto) {
+  return typeof foto === 'string' && foto.length <= 150000 && /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(foto);
+}
+
 // Ícones oferecidos na tela de cadastro do serviço (beleza, barbearia, estética, unhas...).
 export const EMOJIS_SERVICO = ['✂️', '🪒', '💈', '💇', '🧔', '💆', '💅', '💄', '🪄', '👁️', '🎨', '💧', '🧴', '🧖', '✨', '🌿', '🪮', '🧼', '👑', '💎', '⭐', '🔥', '💪', '🦶', '🌸', '🧘', '🎁', '❤️', '🌟', '🪞'];
 

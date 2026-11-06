@@ -3,7 +3,7 @@
 // ========================================
 
 import { db } from './firebase-config.js';
-import { escapeHtml, adicionarMostrarSenha, profissionalRealizaServico, calcularVinculosProfissional, EMOJIS_SERVICO, sugerirEmoji } from './utils.js';
+import { escapeHtml, adicionarMostrarSenha, profissionalRealizaServico, calcularVinculosProfissional, EMOJIS_SERVICO, sugerirEmoji, fotoServicoValida } from './utils.js';
 import { aplicarTema, resetarTema } from './vocabulario.js';
 import {
   initializeApp,
@@ -1210,7 +1210,9 @@ function renderizarServicos() {
   $('#lista-servicos-admin').innerHTML = lista.map(s => `
     <div class="item-card" data-id="${s.id}">
       <div class="item-card-header">
-        <div class="item-card-emoji">${escapeHtml(s.emoji || '✂️')}</div>
+        ${fotoServicoValida(s.foto)
+          ? `<div class="item-card-emoji"><img src="${s.foto}" alt="" class="item-card-foto"></div>`
+          : ((typeof s.emoji === 'string' ? s.emoji : '✂️') ? `<div class="item-card-emoji">${escapeHtml(s.emoji === undefined ? '✂️' : s.emoji)}</div>` : '')}
         <div style="flex:1;">
           <div class="item-card-titulo">${escapeHtml(s.nome)}</div>
           <div class="item-card-sub">${s.duracaoMin} min • ${formatarMoeda(s.preco)}</div>
@@ -1241,6 +1243,41 @@ function textoQuemRealiza(s) {
   return `<div class="item-card-sub" style="color:var(--accent);">${escapeHtml(texto)}</div>`;
 }
 
+// Prepara a foto no próprio navegador antes de guardar: recorte QUADRADO centralizado, 400x400,
+// JPEG, reduzindo a qualidade até caber no limite. Assim a foto fica leve (dezenas de KB) e dá
+// pra guardá-la junto do serviço no banco, sem serviço de armazenamento pago.
+async function prepararFotoServico(arquivo) {
+  if (!arquivo || !String(arquivo.type).startsWith('image/')) throw new Error('Escolha um arquivo de imagem (foto).');
+  if (arquivo.size > 15 * 1024 * 1024) throw new Error('A foto é grande demais (máximo 15 MB).');
+
+  const urlTemp = URL.createObjectURL(arquivo);
+  try {
+    const img = await new Promise((ok, falha) => {
+      const el = new Image();
+      el.onload = () => ok(el);
+      el.onerror = () => falha(new Error('Não consegui abrir essa imagem. Tente outra foto.'));
+      el.src = urlTemp;
+    });
+
+    const lado = 400;
+    const menor = Math.min(img.naturalWidth, img.naturalHeight);
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = lado;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';                 // fundo branco: PNG transparente não vira preto no JPEG
+    ctx.fillRect(0, 0, lado, lado);
+    ctx.drawImage(img, (img.naturalWidth - menor) / 2, (img.naturalHeight - menor) / 2, menor, menor, 0, 0, lado, lado);
+
+    for (let qualidade = 0.78; qualidade >= 0.38; qualidade -= 0.08) {
+      const dataUrl = canvas.toDataURL('image/jpeg', qualidade);
+      if (dataUrl.length <= 70000 && fotoServicoValida(dataUrl)) return dataUrl;
+    }
+    throw new Error('Essa foto ficou pesada demais mesmo reduzida. Tente outra.');
+  } finally {
+    URL.revokeObjectURL(urlTemp);
+  }
+}
+
 function modalServico(id = null) {
   const s = id ? state.servicos[id] : { nome: '', duracaoMin: 30, preco: 0, emoji: '✂️', ativo: true, ordem: Object.keys(state.servicos).length + 1 };
   const profsAtivos = Object.entries(state.profissionais).filter(([, p]) => p.ativo !== false);
@@ -1258,6 +1295,7 @@ function modalServico(id = null) {
       </div>
       <small class="campo-help">Deixe todos marcados se qualquer profissional faz este serviço. Desmarque quem NÃO faz: o cliente só poderá agendar com quem estiver marcado.</small>
     </div>`;
+  let fotoAtual = fotoServicoValida(s.foto) ? s.foto : '';
   const titulo = id ? 'Editar serviço' : 'Novo serviço';
   const corpo = `
     <div class="input-grupo">
@@ -1275,15 +1313,27 @@ function modalServico(id = null) {
       </div>
     </div>
     <div class="input-grupo">
-      <label class="input-label">ÍCONE DO SERVIÇO <span id="serv-emoji-atual" style="font-size:18px;margin-left:6px;">${escapeHtml(s.emoji || '✂️')}</span></label>
+      <label class="input-label">ÍCONE DO SERVIÇO <span id="serv-emoji-atual" style="font-size:18px;margin-left:6px;">${escapeHtml((typeof s.emoji === 'string' ? s.emoji : '✂️') || '— nenhum —')}</span></label>
       <div class="emoji-grade" id="serv-emoji-grade">
         ${EMOJIS_SERVICO.map((e) => `<button type="button" class="emoji-op" data-emoji="${e}" aria-label="Escolher o ícone ${e}">${e}</button>`).join('')}
+        <button type="button" class="emoji-op emoji-op-nenhum" data-emoji="" aria-label="Sem ícone">Sem ícone</button>
       </div>
-      <input type="hidden" id="serv-emoji" value="${escapeHtml(s.emoji || '✂️')}">
+      <input type="hidden" id="serv-emoji" value="${escapeHtml((typeof s.emoji === 'string' ? s.emoji : '✂️'))}">
       <div style="display:flex;gap:10px;align-items:center;">
         <input type="text" id="serv-emoji-outro" class="input" maxlength="8" placeholder="Outro" style="max-width:100px;">
-        <small class="campo-help" style="margin:0;">Escolha um ícone ou digite/cole outro emoji. Em serviço novo, o ícone é sugerido pelo nome.</small>
+        <small class="campo-help" style="margin:0;">Escolha um ícone, digite/cole outro emoji ou marque "Sem ícone". Em serviço novo, o ícone é sugerido pelo nome.</small>
       </div>
+    </div>
+    <div class="input-grupo">
+      <label class="input-label">FOTO DO SERVIÇO (OPCIONAL)</label>
+      <div style="display:flex;gap:14px;align-items:center;">
+        <div id="serv-foto-previa" class="foto-previa">${fotoAtual ? `<img src="${fotoAtual}" alt="">` : '<span>Sem foto</span>'}</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <label class="btn-acao-secundario" style="cursor:pointer;text-align:center;">📷 Escolher foto<input type="file" id="serv-foto-arquivo" accept="image/*" hidden></label>
+          <button type="button" class="btn-acao-perigo" id="serv-foto-remover" ${fotoAtual ? '' : 'hidden'}>Remover foto</button>
+        </div>
+      </div>
+      <small class="campo-help" id="serv-foto-ajuda">Mostre um trabalho bem feito! A foto tem prioridade sobre o ícone. Sem foto e sem ícone, o cliente vê só o nome, o tempo e o valor. A foto é recortada em quadrado e reduzida automaticamente.</small>
     </div>
     <div class="input-grupo">
       <label style="display:flex;gap:10px;align-items:center;cursor:pointer;">
@@ -1306,9 +1356,9 @@ function modalServico(id = null) {
   let escolhidoManual = !!id;
   const marcarEmoji = (e, { limparOutro = true } = {}) => {
     emojiCampo.value = e;
-    $('#serv-emoji-atual').textContent = e;
+    $('#serv-emoji-atual').textContent = e || '— nenhum —';
     $$('#serv-emoji-grade .emoji-op').forEach((b) => b.classList.toggle('selecionado', b.dataset.emoji === e));
-    if (limparOutro) $('#serv-emoji-outro').value = EMOJIS_SERVICO.includes(e) ? '' : e;
+    if (limparOutro) $('#serv-emoji-outro').value = (e === '' || EMOJIS_SERVICO.includes(e)) ? '' : e;
   };
   marcarEmoji(emojiCampo.value);
   $$('#serv-emoji-grade .emoji-op').forEach((b) => b.addEventListener('click', () => { escolhidoManual = true; marcarEmoji(b.dataset.emoji); }));
@@ -1322,6 +1372,27 @@ function modalServico(id = null) {
     if (sugestao) marcarEmoji(sugestao);
   });
 
+  // Foto: escolher (já recortada e reduzida) ou remover. Fica só na tela até clicar em Salvar.
+  const atualizarPreviaFoto = () => {
+    $('#serv-foto-previa').innerHTML = fotoAtual ? `<img src="${fotoAtual}" alt="">` : '<span>Sem foto</span>';
+    $('#serv-foto-remover').hidden = !fotoAtual;
+  };
+  $('#serv-foto-arquivo').addEventListener('change', async (ev) => {
+    const arquivo = ev.target.files && ev.target.files[0];
+    ev.target.value = '';                           // permite escolher o mesmo arquivo de novo
+    if (!arquivo) return;
+    $('#serv-foto-ajuda').textContent = 'Preparando a foto…';
+    try {
+      fotoAtual = await prepararFotoServico(arquivo);
+      atualizarPreviaFoto();
+      $('#serv-foto-ajuda').textContent = 'Foto pronta! Clique em Salvar para guardar.';
+    } catch (err) {
+      toast(err.message || 'Não foi possível usar essa foto', 'erro');
+      $('#serv-foto-ajuda').textContent = 'Mostre um trabalho bem feito! A foto aparece no lugar do ícone para o cliente. Ela é recortada em quadrado e reduzida automaticamente.';
+    }
+  });
+  $('#serv-foto-remover').addEventListener('click', () => { fotoAtual = ''; atualizarPreviaFoto(); });
+
   $('#modal-cancel').addEventListener('click', fecharModal);
   $('#modal-salvar').addEventListener('click', async () => {
     const marcados = $$('#modal-body .serv-prof-check:checked').map((c) => c.value);
@@ -1329,7 +1400,8 @@ function modalServico(id = null) {
       nome: $('#serv-nome').value.trim(),
       duracaoMin: Number($('#serv-duracao').value),
       preco: Number($('#serv-preco').value),
-      emoji: $('#serv-emoji').value.trim() || '✂️',
+      emoji: $('#serv-emoji').value.trim(),            // '' = sem ícone
+      foto: fotoAtual,                              // '' = sem foto (usa o ícone)
       ativo: $('#serv-ativo').checked,
       ordem: s.ordem,
       // Todos marcados (ou nenhum profissional cadastrado) = lista vazia = qualquer um faz.

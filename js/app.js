@@ -6,7 +6,7 @@
 // (/api/negocio, /api/criar-agendamento, /api/agendamento-cliente), que
 // validam no servidor e só devolvem o que o visitante pode ver.
 import { aplicarTema } from './vocabulario.js';
-import { escapeHtml, profissionalRealizaServico } from './utils.js';
+import { escapeHtml, profissionalRealizaServico, fotoServicoValida } from './utils.js';
 
 // ========================================
 // ESTADO GLOBAL
@@ -362,7 +362,9 @@ function renderizarTela2() {
     // Serviço restrito a certos profissionais: avisa com quem é feito
     const quem = nomesQuemRealiza(s);
     card.innerHTML = `
-      <div class="servico-foto">${escapeHtml(s.emoji) || '✂️'}</div>
+      ${fotoServicoValida(s.foto)
+        ? `<div class="servico-foto com-foto"><img src="${s.foto}" alt="${escapeHtml(s.nome)}" loading="lazy"></div>`
+        : (s.emoji ? `<div class="servico-foto">${escapeHtml(s.emoji)}</div>` : '')}
       <div class="servico-info">
         <div class="servico-nome">${escapeHtml(s.nome)}</div>
         <div class="servico-detalhes">${s.duracaoMin} min • <span class="servico-preco">${formatarMoeda(s.preco)}</span></div>

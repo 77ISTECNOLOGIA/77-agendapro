@@ -76,20 +76,28 @@ function profissionalRealizaServico(servico, profissionalId) {
   return !Array.isArray(ids) || ids.length === 0 || ids.includes(profissionalId);
 }
 
+// Foto do serviço: JPEG em data URL, tamanho limitado. O valor vai pra um <img src> no
+// navegador do cliente, então qualquer outra coisa é descartada aqui (mesma regra do painel).
+function fotoServicoValida(foto) {
+  return typeof foto === 'string' && foto.length <= 150000 && /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(foto);
+}
+
 function servicoPublico(id, s) {
   return {
     id,
     nome: s.nome || '',
     duracaoMin: s.duracaoMin,
     preco: s.preco,
-    emoji: s.emoji || '',
+    // ausente (serviço antigo) = ✂️ ; '' = o dono escolheu "sem ícone" e isso precisa chegar até a tela
+    emoji: typeof s.emoji === 'string' ? s.emoji : '✂️',
     ordem: s.ordem || 0,
     ativo: s.ativo !== false,
-    profissionaisIds: Array.isArray(s.profissionaisIds) ? s.profissionaisIds : []
+    profissionaisIds: Array.isArray(s.profissionaisIds) ? s.profissionaisIds : [],
+    foto: fotoServicoValida(s.foto) ? s.foto : ''
   };
 }
 
 module.exports = {
   CARENCIA_TRIAL_DIAS, SLUGS_RESERVADOS, TIPOS_NEGOCIO,
-  slugValido, situacaoNegocio, infoPublica, profissionalPublico, servicoPublico, profissionalRealizaServico
+  slugValido, situacaoNegocio, infoPublica, profissionalPublico, servicoPublico, profissionalRealizaServico, fotoServicoValida
 };
