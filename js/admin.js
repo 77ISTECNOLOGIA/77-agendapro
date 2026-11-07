@@ -128,6 +128,7 @@ function inicializarAuth() {
           return;
         }
         const userData = snap.data();
+        state.dadosCarregados = false;
         state.barbeariaId = userData.barbeariaId;
         await carregarBarbearia();
         aplicarTema(state.barbearia.tipoNegocio);
@@ -136,6 +137,7 @@ function inicializarAuth() {
         avisarSituacaoConta();
         ativarListenersTempoReal();
         await renderizarTudo();
+        state.dadosCarregados = true;
         tratarLinkDeNotificacao();     // aberto pelo toque numa notificação: já mostra o agendamento
         ouvirNotificacoesEmPrimeiroPlano();
         atualizarServiceWorker();
@@ -144,6 +146,7 @@ function inicializarAuth() {
         mostrarLogin('Erro ao carregar dados. Tente novamente.');
       }
     } else {
+      state.dadosCarregados = false;
       desativarListeners();
       mostrarLogin();
     }
@@ -349,9 +352,28 @@ async function enviarTesteNotificacao() {
 // Toque numa notificação de novo agendamento: vai pra Agenda no dia certo e abre os detalhes.
 // Dois caminhos: (1) painel FECHADO → o navegador abre /admin?agendamento=ID (lido ao entrar);
 // (2) painel JÁ ABERTO → o service worker avisa a página por mensagem ("notification-clicked").
-function abrirAgendamentoDaNotificacao(id) {
-  const a = state.agendamentos[id];
+// Com o painel FECHADO, o toque chega por DOIS caminhos quase juntos: a URL ?agendamento=ID (lida quando
+// o painel termina de carregar) e a mensagem "notification-clicked" do service worker (que pode chegar
+// ANTES de os dados carregarem). Os dois pedem a mesma coisa, então: esperam o painel carregar, não
+// se repetem, e só avisam "não encontrei" depois de procurar de verdade (inclusive direto no banco,
+// caso a lista em tempo real ainda não tenha o agendamento recém-criado).
+async function abrirAgendamentoDaNotificacao(id) {
+  if (!state.dadosCarregados) { state.notificacaoPendenteId = id; return; }   // ainda carregando: guarda e atende ao terminar
+
+  const agora = Date.now();
+  const ultima = state.ultimaNotificacao;
+  if (ultima && ultima.id === id && agora - ultima.em < 8000) return;         // o mesmo toque chegando pelos dois caminhos
+  state.ultimaNotificacao = { id, em: agora };
+
+  let a = state.agendamentos[id];
+  if (!a) {
+    try {
+      const snap = await getDoc(doc(db, 'barbearias', state.barbeariaId, 'agendamentos', id));
+      if (snap.exists()) { a = snap.data(); state.agendamentos[id] = a; }
+    } catch (err) { console.error('Erro ao buscar o agendamento da notificação:', err); }
+  }
   if (!a) { toast('Não encontrei esse agendamento (pode ter sido excluído).', 'erro'); return; }
+
   state.agendaDataAtual = chaveParaData(a.dataChave);
   state.filtroProfissional = 'todos';
   state.filtroStatus = 'todos';
@@ -359,11 +381,17 @@ function abrirAgendamentoDaNotificacao(id) {
   abrirDetalhesAgendamento(id);
 }
 
+// Chamado quando o painel termina de carregar: atende ao ?agendamento=ID da URL e a qualquer toque
+// que chegou por mensagem enquanto carregava.
 function tratarLinkDeNotificacao() {
   const id = new URLSearchParams(window.location.search).get('agendamento');
-  if (!id) return;
-  window.history.replaceState(null, '', window.location.pathname);   // limpa o ?agendamento= da barra
-  abrirAgendamentoDaNotificacao(id);
+  if (id) {
+    window.history.replaceState(null, '', window.location.pathname);   // limpa o ?agendamento= da barra
+    abrirAgendamentoDaNotificacao(id);
+  }
+  const pendente = state.notificacaoPendenteId;
+  state.notificacaoPendenteId = null;
+  if (pendente) abrirAgendamentoDaNotificacao(pendente);
 }
 
 if ('serviceWorker' in navigator) {

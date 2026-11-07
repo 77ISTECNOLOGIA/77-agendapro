@@ -183,7 +183,7 @@ test('painel: abre o agendamento da notificação (parâmetro na URL e mensagem 
   const admin = fs.readFileSync(path.join(__dirname, '..', 'js', 'admin.js'), 'utf8');
   assert.match(admin, /get\('agendamento'\)/);
   assert.match(admin, /messageType === 'notification-clicked'/);
-  assert.match(admin, /await renderizarTudo\(\);\s*\n\s*tratarLinkDeNotificacao\(\)/);
+  assert.match(admin, /await renderizarTudo\(\);\s*\n\s*state\.dadosCarregados = true;\s*\n\s*tratarLinkDeNotificacao\(\)/);
   assert.match(admin, /state\.agendaDataAtual = chaveParaData\(a\.dataChave\);[\s\S]{0,200}irPara\('agenda'\);\s*\n\s*abrirDetalhesAgendamento\(id\)/);
 });
 
@@ -191,4 +191,96 @@ test('link do cliente: horário cancelado volta a ficar livre (ocupação atuali
   const app = fs.readFileSync(path.join(__dirname, '..', 'js', 'app.js'), 'utf8');
   assert.match(app, /btn-continuar-2'\)\.addEventListener\('click', async \(\) => \{[\s\S]{0,500}await recarregarAgendamentos\(\);\s*\n\s*renderizarTela3\(\)/);
   assert.match(app, /toast\('Agendamento cancelado', 'sucesso'\);\s*\n\s*await recarregarAgendamentos\(\)/);
+});
+
+// ---------------------------------------------------------------- toque na notificação (painel do dono)
+// Executa as funções REAIS do admin.js. Defeito que isto impede: com o painel fechado, o toque chega
+// por DOIS caminhos (URL ?agendamento=ID e mensagem do service worker); a mensagem chegava antes dos
+// dados carregarem e mostrava "não encontrei" — e logo depois os detalhes abriam mesmo assim.
+const adminSrc = fs.readFileSync(path.join(__dirname, '..', 'js', 'admin.js'), 'utf8');
+function extrairFuncao(nome) {
+  const m = new RegExp('(async )?function ' + nome + '\\(').exec(adminSrc);
+  assert.ok(m, 'função ' + nome + ' não encontrada em admin.js');
+  let i = adminSrc.indexOf('{', adminSrc.indexOf(')', m.index)), n = 0;
+  for (; i < adminSrc.length; i++) { if (adminSrc[i] === '{') n++; else if (adminSrc[i] === '}' && --n === 0) break; }
+  return adminSrc.slice(m.index, i + 1);
+}
+function carregarPainel({ naLista = {}, noBanco = {}, busca = '' } = {}) {
+  const avisos = [], abertos = [];
+  let relogio = 1000000;
+  const state = { agendamentos: { ...naLista }, barbeariaId: 'b' };
+  const ctx = vm.createContext({
+    state, console, URLSearchParams,
+    toast: (m, t) => avisos.push('[' + t + '] ' + m),
+    window: { location: { search: busca, pathname: '/admin' }, history: { replaceState() {} } },
+    chaveParaData: () => new Date(), irPara() {}, abrirDetalhesAgendamento: (id) => abertos.push(id),
+    doc: (...a) => ({ id: a[a.length - 1] }), db: {},
+    getDoc: async (ref) => ({ exists: () => ref.id in noBanco, data: () => noBanco[ref.id] }),
+    Date: { now: () => relogio }
+  });
+  vm.runInContext(extrairFuncao('abrirAgendamentoDaNotificacao') + '\n' + extrairFuncao('tratarLinkDeNotificacao'), ctx);
+  const rodar = (js) => vm.runInContext(js, ctx);
+  return { state, avisos, abertos, rodar, passar: (ms) => { relogio += ms; } };
+}
+const A1 = { dataChave: '2026-11-06', horario: '10:00' };
+
+test('toque com o painel FECHADO: mensagem cedo + URL depois = abre UMA vez, sem aviso falso', async () => {
+  const p = carregarPainel({ busca: '?agendamento=A1' });
+  await p.rodar("abrirAgendamentoDaNotificacao('A1')");          // mensagem do service worker, antes de carregar
+  assert.deepEqual(p.abertos, []);                               // ainda carregando: só guarda
+  p.state.agendamentos.A1 = A1; p.state.dadosCarregados = true;  // painel termina de carregar
+  await p.rodar('tratarLinkDeNotificacao()');                    // lê a URL
+  assert.deepEqual(p.avisos, [], 'nenhum aviso vermelho');
+  assert.deepEqual(JSON.parse(JSON.stringify(p.abertos)), ['A1'], 'abriu uma única vez');
+});
+
+test('toque que chega SÓ por mensagem enquanto o painel carrega é atendido quando termina de carregar', async () => {
+  const p = carregarPainel();
+  await p.rodar("abrirAgendamentoDaNotificacao('A1')");
+  p.state.agendamentos.A1 = A1; p.state.dadosCarregados = true;
+  await p.rodar('tratarLinkDeNotificacao()');
+  assert.deepEqual(JSON.parse(JSON.stringify(p.abertos)), ['A1']);
+  assert.deepEqual(p.avisos, []);
+});
+
+test('painel JÁ aberto: o mesmo toque pelos dois caminhos abre só uma vez', async () => {
+  const p = carregarPainel({ naLista: { A1 }, busca: '?agendamento=A1' });
+  p.state.dadosCarregados = true;
+  await p.rodar("abrirAgendamentoDaNotificacao('A1')");
+  await p.rodar('tratarLinkDeNotificacao()');
+  assert.equal(p.abertos.length, 1);
+  assert.deepEqual(p.avisos, []);
+});
+
+test('agendamento recém-criado que a lista em tempo real ainda não trouxe: busca no banco e abre, sem aviso', async () => {
+  const p = carregarPainel({ naLista: {}, noBanco: { A1 } });
+  p.state.dadosCarregados = true;
+  await p.rodar("abrirAgendamentoDaNotificacao('A1')");
+  assert.deepEqual(JSON.parse(JSON.stringify(p.abertos)), ['A1']);
+  assert.deepEqual(p.avisos, []);
+});
+
+test('agendamento que de fato NÃO existe: avisa uma vez e NÃO abre nenhuma tela de detalhes', async () => {
+  const p = carregarPainel({ naLista: {}, noBanco: {} });
+  p.state.dadosCarregados = true;
+  await p.rodar("abrirAgendamentoDaNotificacao('FANTASMA')");
+  assert.equal(p.abertos.length, 0);
+  assert.equal(p.avisos.length, 1);
+  assert.match(p.avisos[0], /Não encontrei esse agendamento/);
+});
+
+test('toques em agendamentos DIFERENTES, ou no mesmo depois de um tempo, abrem normalmente', async () => {
+  const p = carregarPainel({ naLista: { A1, B2: A1 } });
+  p.state.dadosCarregados = true;
+  await p.rodar("abrirAgendamentoDaNotificacao('A1')");
+  await p.rodar("abrirAgendamentoDaNotificacao('B2')");
+  p.passar(20000);
+  await p.rodar("abrirAgendamentoDaNotificacao('A1')");
+  assert.deepEqual(JSON.parse(JSON.stringify(p.abertos)), ['A1', 'B2', 'A1']);
+});
+
+test('painel: só considera "carregado" depois de renderizar tudo, e zera ao entrar/sair', () => {
+  assert.match(adminSrc, /await renderizarTudo\(\);\s*\n\s*state\.dadosCarregados = true;\s*\n\s*tratarLinkDeNotificacao\(\)/);
+  assert.match(adminSrc, /state\.dadosCarregados = false;\s*\n\s*state\.barbeariaId = userData\.barbeariaId/);
+  assert.match(adminSrc, /state\.dadosCarregados = false;\s*\n\s*desativarListeners\(\);\s*\n\s*mostrarLogin\(\)/);
 });
