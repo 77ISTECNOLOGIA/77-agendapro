@@ -5,11 +5,14 @@
 // Protegida por senha: só roda se a variável de ambiente CRON_SECRET existir E a chamada trouxer
 // "Authorization: Bearer <CRON_SECRET>" (a Vercel envia isso sozinha para as rotinas dela).
 // Sem a variável configurada ela se recusa a rodar — nunca fica aberta ao público.
+// Também manda, 1x por dia, o aviso push de atendimentos esquecidos (confirmados que já passaram).
 // É só um reforço: o painel do dono também renova ao abrir, e cada renovação é idempotente.
 
 const { db } = require('./_lib/firebase');
 const { agoraBrasil, hojeChaveBrasil } = require('./_lib/tempo');
 const { renovarSeries } = require('./_lib/recorrencia');
+const { avisarPendentes } = require('./_lib/pendencias');
+const { situacaoNegocio } = require('./_lib/negocio');
 const { responder, tratarErro } = require('./_lib/http');
 
 module.exports = async function handler(req, res) {
@@ -21,11 +24,12 @@ module.exports = async function handler(req, res) {
     const firestore = db();
     const hojeChave = hojeChaveBrasil();
     const agora = agoraBrasil();
-    const total = { negocios: 0, series: 0, criadas: 0, puladas: 0, erros: 0, encerradas: 0 };
+    const total = { negocios: 0, series: 0, criadas: 0, puladas: 0, erros: 0, encerradas: 0, avisos: 0 };
 
     const negocios = await firestore.collection('barbearias').get();
     for (const n of negocios.docs) {
       try {
+        if (situacaoNegocio(n.data()).aceita && await avisarPendentes(n.ref, agora)) total.avisos++;   // push: atendimentos esquecidos
         const r = await renovarSeries({ firestore, negocioRef: n.ref, info: n.data(), hojeChave, agora });
         if (r.ignorado) continue;
         total.negocios++;

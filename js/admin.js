@@ -3,7 +3,7 @@
 // ========================================
 
 import { db } from './firebase-config.js';
-import { escapeHtml, adicionarMostrarSenha, profissionalRealizaServico, calcularVinculosProfissional, atendimentosParaResolver, EMOJIS_SERVICO, sugerirEmoji, fotoServicoValida } from './utils.js';
+import { escapeHtml, adicionarMostrarSenha, profissionalRealizaServico, calcularVinculosProfissional, atendimentosParaResolver, periodoPronto, resumoPeriodo, EMOJIS_SERVICO, sugerirEmoji, fotoServicoValida } from './utils.js';
 import { aplicarTema, resetarTema } from './vocabulario.js';
 import {
   initializeApp,
@@ -588,6 +588,7 @@ function renderizarViewAtual() {
     case 'agenda': renderizarAgenda(); break;
     case 'servicos': renderizarServicos(); break;
     case 'profissionais': renderizarProfissionais(); break;
+    case 'relatorios': renderizarRelatorios(); break;
     case 'clientes': renderizarClientes(); break;
     case 'configuracoes': renderizarConfiguracoes(); break;
   }
@@ -1003,6 +1004,50 @@ function modalRemarcarAgendamento(id) {
       btn.textContent = 'Confirmar nova data';
     }
   });
+}
+
+// ========================================
+// VIEW: RELATÓRIOS (análise por período)
+// ========================================
+function renderizarRelatorios() {
+  const pre = $('#rel-preset'), de = $('#rel-de'), ate = $('#rel-ate');
+  if (!pre.dataset.ligado) {
+    pre.dataset.ligado = '1';
+    const p = periodoPronto('mes');
+    de.value = p.de; ate.value = p.ate;
+    pre.addEventListener('change', () => {
+      if (pre.value !== 'custom') { const x = periodoPronto(pre.value); de.value = x.de; ate.value = x.ate; }
+      renderizarRelatorios();
+    });
+    [de, ate].forEach(i => i.addEventListener('change', () => { pre.value = 'custom'; renderizarRelatorios(); }));
+  }
+  if (!de.value || !ate.value || de.value > ate.value) return;
+  const r = resumoPeriodo(state.agendamentos, de.value, ate.value);
+  const plural = (n, s, p) => `${n} ${n === 1 ? s : p}`;
+  $('#rel-sub').textContent = `${formatarDataCurta(de.value)}/${de.value.slice(0, 4)} a ${formatarDataCurta(ate.value)}/${ate.value.slice(0, 4)}`;
+  $('#rel-faturamento').textContent = formatarMoeda(r.faturamento);
+  $('#rel-ticket').textContent = `ticket médio ${formatarMoeda(r.ticket)}`;
+  $('#rel-atendimentos').textContent = r.atendimentos;
+  $('#rel-clientes').textContent = r.clientes;
+  $('#rel-cancelados').textContent = r.cancelados;
+  $('#rel-faltas').textContent = plural(r.faltas, 'não compareceu', 'não compareceram');
+  const aviso = $('#rel-aviso');
+  aviso.hidden = !r.pendentes;
+  aviso.innerHTML = r.pendentes ? `<div class="pendencias-titulo">⚠️ ${plural(r.pendentes, 'agendamento ainda confirmado', 'agendamentos ainda confirmados')} neste período</div><div class="pendencias-sub">Não entram nos números acima até serem concluídos. Os que já passaram aparecem no Dashboard para resolver.</div>` : '';
+  const barras = (lista, vazio, legenda) => {
+    if (!lista.length) return `<div class="vazio-msg">${vazio}</div>`;
+    const max = Math.max(...lista.map(x => x.valor), 1);
+    return lista.map(x => `
+      <div class="fat-item"><div class="fat-info">
+        <div class="fat-nome-row">
+          <span class="fat-nome">${escapeHtml(x.nome)} <span class="fat-qtd" style="opacity:.7;font-weight:400">· ${x.qtd} ${legenda(x.qtd)}</span></span>
+          <span class="fat-valor">${formatarMoeda(x.valor)}</span>
+        </div>
+        <div class="fat-bar-bg"><div class="fat-bar" style="width: ${(x.valor / max) * 100}%"></div></div>
+      </div></div>`).join('');
+  };
+  $('#rel-servicos').innerHTML = barras(r.servicos, 'Nenhum serviço concluído no período', n => n === 1 ? 'realizado' : 'realizados');
+  $('#rel-profissionais').innerHTML = barras(r.profissionais, 'Nenhum atendimento concluído no período', n => n === 1 ? 'atendimento' : 'atendimentos');
 }
 
 // Aviso de atendimentos esquecidos (confirmados cujo horário de término + 30 min já passou)

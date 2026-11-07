@@ -101,6 +101,10 @@
         <span class="nav-icon">👥</span>
         <span class="nav-label">Profissionais</span>
       </button>
+      <button class="nav-item" data-view="relatorios">
+        <span class="nav-icon">📈</span>
+        <span class="nav-label">Relatórios</span>
+      </button>
       <button class="nav-item" data-view="clientes">
         <span class="nav-icon">👤</span>
         <span class="nav-label">Clientes</span>
@@ -269,6 +273,44 @@
 
         <div id="lista-profissionais-admin" class="tabela-cards">
           <div class="vazio-msg">Carregando profissionais...</div>
+        </div>
+      </section>
+
+      <!-- ============ VIEW: RELATÓRIOS ============ -->
+      <section class="view" id="view-relatorios">
+        <div class="view-header">
+          <div>
+            <h1 class="view-titulo">Relatórios</h1>
+            <p class="view-sub" id="rel-sub">Análise por período</p>
+          </div>
+        </div>
+        <div class="rel-filtros">
+          <select id="rel-preset">
+            <option value="mes">Este mês</option>
+            <option value="mes-passado">Mês passado</option>
+            <option value="30dias">Últimos 30 dias</option>
+            <option value="ano">Este ano</option>
+            <option value="custom">Personalizado</option>
+          </select>
+          <label>De <input type="date" id="rel-de"></label>
+          <label>até <input type="date" id="rel-ate"></label>
+        </div>
+        <div class="kpis-grid">
+          <div class="kpi-card destaque"><div class="kpi-icon">💰</div><div class="kpi-info"><div class="kpi-label">Faturamento</div><div class="kpi-valor" id="rel-faturamento">R$ 0</div><div class="kpi-extra" id="rel-ticket">—</div></div></div>
+          <div class="kpi-card"><div class="kpi-icon">✂️</div><div class="kpi-info"><div class="kpi-label">Atendimentos realizados</div><div class="kpi-valor" id="rel-atendimentos">0</div><div class="kpi-extra">concluídos no período</div></div></div>
+          <div class="kpi-card"><div class="kpi-icon">👤</div><div class="kpi-info"><div class="kpi-label">Clientes atendidos</div><div class="kpi-valor" id="rel-clientes">0</div><div class="kpi-extra">pessoas diferentes</div></div></div>
+          <div class="kpi-card"><div class="kpi-icon">🚫</div><div class="kpi-info"><div class="kpi-label">Cancelados</div><div class="kpi-valor" id="rel-cancelados">0</div><div class="kpi-extra" id="rel-faltas">—</div></div></div>
+        </div>
+        <div id="rel-aviso" class="pendencias-card" hidden></div>
+        <div class="dashboard-row">
+          <div class="card-grande">
+            <div class="card-header"><h3 class="card-titulo">Serviços realizados</h3></div>
+            <div id="rel-servicos" class="fat-servico-content"></div>
+          </div>
+          <div class="card-grande">
+            <div class="card-header"><h3 class="card-titulo">Por profissional</h3></div>
+            <div id="rel-profissionais" class="fat-servico-content"></div>
+          </div>
         </div>
       </section>
 

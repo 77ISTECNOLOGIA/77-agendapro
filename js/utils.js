@@ -138,3 +138,43 @@ export function atendimentosParaResolver(agendamentos, agora = new Date(), marge
   });
   return lista.sort((x, y) => x._inicio - y._inicio);
 }
+
+function chaveData(d) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+// Períodos prontos da tela Relatórios. Devolve { de, ate } como 'AAAA-MM-DD'.
+export function periodoPronto(nome, hoje = new Date()) {
+  const a = hoje.getFullYear(), m = hoje.getMonth();
+  if (nome === 'mes-passado') return { de: chaveData(new Date(a, m - 1, 1)), ate: chaveData(new Date(a, m, 0)) };
+  if (nome === '30dias') return { de: chaveData(new Date(a, m, hoje.getDate() - 29)), ate: chaveData(hoje) };
+  if (nome === 'ano') return { de: chaveData(new Date(a, 0, 1)), ate: chaveData(hoje) };
+  return { de: chaveData(new Date(a, m, 1)), ate: chaveData(new Date(a, m + 1, 0)) }; // este mês
+}
+
+// Resumo do período (datas inclusive). Só atendimentos CONCLUÍDOS contam como faturamento/serviço realizado.
+export function resumoPeriodo(agendamentos, de, ate) {
+  const r = { faturamento: 0, atendimentos: 0, clientes: 0, ticket: 0, cancelados: 0, faltas: 0, pendentes: 0, servicos: [], profissionais: [] };
+  const servicos = {}, profs = {}, clientes = new Set();
+  Object.values(agendamentos || {}).forEach((a) => {
+    if (!a || !a.dataChave || a.dataChave < de || a.dataChave > ate) return;
+    if (a.status === 'cancelado') { r.cancelados++; if (a.motivoCancelamento === 'nao-compareceu') r.faltas++; return; }
+    if (a.status === 'confirmado') { r.pendentes++; return; }
+    if (a.status !== 'concluido') return;
+    r.atendimentos++;
+    r.faturamento += Number(a.valorTotal) || 0;
+    clientes.add(a.clienteWhatsapp || a.clienteNome);
+    const nomeProf = a.profissionalNome || '—';
+    profs[nomeProf] = profs[nomeProf] || { nome: nomeProf, qtd: 0, valor: 0 };
+    profs[nomeProf].qtd++; profs[nomeProf].valor += Number(a.valorTotal) || 0;
+    (a.servicos || []).forEach((s) => {
+      servicos[s.nome] = servicos[s.nome] || { nome: s.nome, qtd: 0, valor: 0 };
+      servicos[s.nome].qtd++; servicos[s.nome].valor += Number(s.preco) || 0;
+    });
+  });
+  r.clientes = clientes.size;
+  r.ticket = r.atendimentos ? r.faturamento / r.atendimentos : 0;
+  r.servicos = Object.values(servicos).sort((x, y) => y.qtd - x.qtd || y.valor - x.valor);
+  r.profissionais = Object.values(profs).sort((x, y) => y.valor - x.valor);
+  return r;
+}
