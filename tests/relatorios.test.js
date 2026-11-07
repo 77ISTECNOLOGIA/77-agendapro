@@ -92,3 +92,11 @@ test('card "Agendamentos hoje": mostra cancelados (com faltas) e remarcados; rem
   assert.match(admin, /remarcadoDeDataChave: a\.dataChave/);
   assert.match(cli, /remarcadoDeDataChave: ag\.dataChave/);
 });
+
+test('remarcar pelo painel: horário atual não vem pré-selecionado e o mesmo dia/horário é recusado', () => {
+  const admin = fs.readFileSync(path.join(__dirname, '..', 'js', 'admin.js'), 'utf8');
+  const cli = fs.readFileSync(path.join(__dirname, '..', 'api', 'agendamento-cliente.js'), 'utf8');
+  assert.doesNotMatch(admin, /h === a\.horario && dataStr === a\.dataChave \? 'selected'/);
+  assert.match(admin, /novaData === a\.dataChave && novoHorario === a\.horario/);
+  assert.match(cli, /ag\.dataChave === novaDataChave && ag\.horario === novoHorario/);
+});

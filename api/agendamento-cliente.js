@@ -134,6 +134,10 @@ module.exports = async function handler(req, res) {
         throw new ErroNegocio(400, 'Esse agendamento já foi remarcado o número máximo de vezes permitido. Entre em contato direto com o estabelecimento.');
       }
 
+      if (ag.dataChave === novaDataChave && ag.horario === novoHorario) {
+        throw new ErroNegocio(400, 'Escolha um dia ou horário diferente do atual.');
+      }
+
       const profSnap = await tx.get(negocioRef.collection('profissionais').doc(ag.profissionalId));
       const prof = profSnap.exists ? { id: profSnap.id, ...profSnap.data() } : null;
 

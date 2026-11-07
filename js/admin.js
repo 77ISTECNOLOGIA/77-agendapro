@@ -933,6 +933,7 @@ function modalRemarcarAgendamento(id) {
       <div class="det-linha"><span class="label">Serviços</span><span class="valor">${(a.servicos || []).map(s => escapeHtml(s.nome)).join(' + ')}</span></div>
       <div class="det-linha"><span class="label">Atual</span><span class="valor">${formatarDataLonga(chaveParaData(a.dataChave))} — ${escapeHtml(a.horario)}</span></div>
     </div>
+    <p class="det-ajuda" style="margin:0 0 12px;font-size:13px;opacity:.75">Escolha o novo dia e o horário. O cliente continua com o mesmo profissional e os mesmos serviços.</p>
     <div class="form-grid">
       <div class="input-grupo">
         <label class="input-label">NOVA DATA</label>
@@ -969,7 +970,7 @@ function modalRemarcarAgendamento(id) {
       return;
     }
     selectHorario.innerHTML = '<option value="">Selecione...</option>' + slots.map(h =>
-      `<option value="${h}" ${h === a.horario && dataStr === a.dataChave ? 'selected' : ''}>${h}</option>`
+      `<option value="${h}">${h}${h === a.horario && dataStr === a.dataChave ? ' (horário atual)' : ''}</option>`
     ).join('');
     selectHorario.disabled = false;
   }
@@ -979,7 +980,8 @@ function modalRemarcarAgendamento(id) {
   $('#modal-salvar').addEventListener('click', async () => {
     const novaData = $('#rmc-data').value;
     const novoHorario = $('#rmc-horario').value;
-    if (!novaData || !novoHorario) { toast('Selecione data e horário', 'erro'); return; }
+    if (!novaData || !novoHorario) { toast('Selecione a nova data e o novo horário', 'erro'); return; }
+    if (novaData === a.dataChave && novoHorario === a.horario) { toast('Escolha um dia ou horário diferente do atual', 'erro'); return; }
 
     const btn = $('#modal-salvar');
     btn.disabled = true;
