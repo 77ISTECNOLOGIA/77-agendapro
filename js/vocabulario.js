@@ -12,9 +12,9 @@ export const VOCABULARIO = {
     cliente: 'Cliente',
     agenda: 'Agenda',
     emoji: '💈',
-    corAccent: '#d4ff3a',
-    corAccentDark: '#b8e024',
-    corAccentGlow: 'rgba(212, 255, 58, 0.2)'
+    corAccent: '#0077FF',
+    corAccentDark: '#0062D1',
+    corAccentGlow: 'rgba(0, 119, 255, 0.3)'
   },
   salao: {
     estabelecimento: 'Salão',
@@ -60,9 +60,9 @@ export const VOCABULARIO = {
     cliente: 'Cliente',
     agenda: 'Agenda',
     emoji: '📅',
-    corAccent: '#d4ff3a',
-    corAccentDark: '#b8e024',
-    corAccentGlow: 'rgba(212, 255, 58, 0.2)'
+    corAccent: '#0077FF',
+    corAccentDark: '#0062D1',
+    corAccentGlow: 'rgba(0, 119, 255, 0.3)'
   }
 };
 
@@ -123,6 +123,7 @@ export function aplicarTema(tipo) {
   root.style.setProperty('--accent', vocab.corAccent);
   root.style.setProperty('--accent-dark', vocab.corAccentDark);
   root.style.setProperty('--accent-glow', vocab.corAccentGlow);
+  root.style.setProperty('--on-accent', textoSobre(vocab.corAccent));
   aplicarFavicon(vocab.corAccent);
 }
 
@@ -137,6 +138,7 @@ export function resetarTema() {
   root.style.setProperty('--accent', '#fb6464');
   root.style.setProperty('--accent-dark', '#e84d4d');
   root.style.setProperty('--accent-glow', 'rgba(251, 100, 100, 0.2)');
+  root.style.setProperty('--on-accent', '#0a0a0a');
   aplicarFavicon('#fb6464');
 }
 
@@ -154,4 +156,12 @@ function aplicarFavicon() {
   }
   link.type = 'image/png';
   link.href = '/img/favicon-32.png';
+}
+
+/** Cor de texto (branco ou quase preto) que fica legível sobre a cor de destaque do tema. */
+function textoSobre(hex) {
+  const n = parseInt(String(hex).replace('#', ''), 16);
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); });
+  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return lum > 0.35 ? '#0a0a0a' : '#ffffff';
 }

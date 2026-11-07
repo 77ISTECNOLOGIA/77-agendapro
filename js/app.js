@@ -205,6 +205,7 @@ function mostrarErroBarbearia(titulo, mensagem, icone) {
 
 function renderizarHeader() {
   $('#header-nome').textContent = state.barbearia.nome || 'Barbearia';
+  $('#header-inicial').textContent = (String(state.barbearia.nome || 'B').trim().charAt(0) || 'B').toUpperCase();
   $('#header-passo').textContent = state.barbearia.endereco || '';
 }
 

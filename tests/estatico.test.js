@@ -111,3 +111,16 @@ test('painel do dono mantém as fontes originais por padrão; Orbitron/Raleway s
   assert.doesNotMatch(semComentarios.replace(/body\.tema-77\.fonte-77[^{]*\{[^}]*\}/g, ''), /Orbitron|Raleway/, 'fonte da marca vazou para o padrão');
   assert.doesNotMatch(fs2.readFileSync(path2.join(__dirname, '..', 'admin.html'), 'utf8'), /<body class="[^"]*fonte-77/);
 });
+
+test('tela do cliente: tema 77, inicial do negócio no cabeçalho, crédito da 77 e destaque azul na barbearia', () => {
+  const fs2 = require('node:fs'), path2 = require('node:path');
+  const ler = (f) => fs2.readFileSync(path2.join(__dirname, '..', f), 'utf8');
+  assert.match(ler('index.html'), /<body class="cliente-77">/);
+  assert.match(ler('index.html'), /id="header-inicial"/);
+  assert.match(ler('index.html'), /Agendamento por <strong>77 AgendaPro<\/strong>/);
+  assert.match(ler('js/app.js'), /\$\('#header-inicial'\)\.textContent/);
+  assert.doesNotMatch(ler('js/vocabulario.js'), /d4ff3a/, 'sem o verde-limão antigo nos temas');
+  assert.match(ler('js/vocabulario.js'), /--on-accent/);
+  assert.doesNotMatch(ler('css/style.css'), /color: #0a0a0a;/, 'texto sobre o destaque usa var(--on-accent)');
+  assert.match(ler('css/marca77.css'), /body\.tema-77 \.sidebar-barbearia \{[^}]*font-weight: 700/);
+});
