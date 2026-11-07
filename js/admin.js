@@ -663,20 +663,21 @@ function renderizarDashboard() {
   const fatPorServico = {};
   concluidos.forEach(a => {
     (a.servicos || []).forEach(s => {
-      if (!fatPorServico[s.nome]) fatPorServico[s.nome] = 0;
-      fatPorServico[s.nome] += s.preco || 0;
+      if (!fatPorServico[s.nome]) fatPorServico[s.nome] = { valor: 0, qtd: 0 };
+      fatPorServico[s.nome].valor += s.preco || 0;
+      fatPorServico[s.nome].qtd += 1;
     });
   });
-  const fatArr = Object.entries(fatPorServico).sort((a, b) => b[1] - a[1]);
+  const fatArr = Object.entries(fatPorServico).map(([nome, d]) => [nome, d.valor, d.qtd]).sort((a, b) => b[1] - a[1]);
   if (fatArr.length === 0) {
     $('#fat-por-servico').innerHTML = '<div class="vazio-msg">Sem faturamento registrado hoje</div>';
   } else {
     const max = fatArr[0][1];
-    $('#fat-por-servico').innerHTML = fatArr.map(([nome, valor]) => `
+    $('#fat-por-servico').innerHTML = fatArr.map(([nome, valor, qtd]) => `
       <div class="fat-item">
         <div class="fat-info">
           <div class="fat-nome-row">
-            <span class="fat-nome">${escapeHtml(nome)}</span>
+            <span class="fat-nome">${escapeHtml(nome)} <span class="fat-qtd" style="opacity:.7;font-weight:400">· ${qtd} ${qtd === 1 ? 'realizado' : 'realizados'}</span></span>
             <span class="fat-valor">${formatarMoeda(valor)}</span>
           </div>
           <div class="fat-bar-bg">
