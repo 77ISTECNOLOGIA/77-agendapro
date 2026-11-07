@@ -126,3 +126,13 @@ test('tela do cliente: tema 77, inicial do negócio no cabeçalho, crédito da 7
   assert.doesNotMatch(ler('css/style.css'), /color: #0a0a0a;/, 'texto sobre o destaque usa var(--on-accent)');
   assert.match(ler('css/marca77.css'), /body\.tema-77 \.sidebar-barbearia \{[^}]*font-weight: 700/);
 });
+
+test('login do super-admin: rodapé no modelo padrão da 77 e textos em destaque', () => {
+  const fs2 = require('node:fs'), path2 = require('node:path');
+  const html = fs2.readFileSync(path2.join(__dirname, '..', 'painel77.html'), 'utf8');
+  const css = fs2.readFileSync(path2.join(__dirname, '..', 'css', 'marca77.css'), 'utf8');
+  assert.match(html, /login-container login-super/);
+  assert.match(html, /<div class="credito-77">Acesso restrito · <strong>Apenas administradores da 77 IS<\/strong><\/div>/);
+  assert.match(css, /\.login-super \.login-sub \{[^}]*font-weight: 700/);
+  assert.match(css, /\.login-super \.btn-link \{[^}]*font-weight: 700/);
+});

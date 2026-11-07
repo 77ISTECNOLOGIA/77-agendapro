@@ -170,3 +170,8 @@ body.tema-77 { --on-accent: #fff; }
 
 /* tela do cliente: endereço/localidade do negócio em destaque (branco e negrito, igual ao nome no painel do dono) */
 body.cliente-77 .barbearia-end { color: #fff; font-weight: 700; font-size: 12px; }
+
+/* login do super-admin: subtítulo e "Esqueci minha senha" em destaque (branco e negrito) */
+.login-super .login-sub { color: #fff; font-weight: 700; font-size: 14px; }
+.login-super .btn-link { color: #E6E6E6; font-weight: 700; }
+.login-super .btn-link:hover { color: #00D2FF; }
