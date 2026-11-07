@@ -29,7 +29,6 @@
 .login-marca { margin-bottom: 4px; }
 .login-marca img {
   display: block; margin: 0 auto 10px; width: 120px; height: auto;
-  mix-blend-mode: screen;          /* o fundo preto da imagem some sobre o card */
   filter: drop-shadow(0 0 18px rgba(0, 119, 255, 0.45));
 }
 .login-marca .marca-nome {
