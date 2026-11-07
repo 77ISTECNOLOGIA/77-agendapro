@@ -386,7 +386,7 @@ function renderizarTela2() {
     card.innerHTML = `
       ${fotoServicoValida(s.foto)
         ? `<div class="servico-foto com-foto"><img src="${s.foto}" alt="${escapeHtml(s.nome)}" loading="lazy"></div>`
-        : (s.emoji ? `<div class="servico-foto">${escapeHtml(s.emoji)}</div>` : '')}
+        : ''}
       <div class="servico-info">
         <div class="servico-nome">${escapeHtml(s.nome)}</div>
         <div class="servico-detalhes">${s.duracaoMin} min • <span class="servico-preco">${formatarMoeda(s.preco)}</span></div>

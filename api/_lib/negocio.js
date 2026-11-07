@@ -88,8 +88,6 @@ function servicoPublico(id, s) {
     nome: s.nome || '',
     duracaoMin: s.duracaoMin,
     preco: s.preco,
-    // ausente (serviço antigo) = ✂️ ; '' = o dono escolheu "sem ícone" e isso precisa chegar até a tela
-    emoji: typeof s.emoji === 'string' ? s.emoji : '✂️',
     ordem: s.ordem || 0,
     ativo: s.ativo !== false,
     profissionaisIds: Array.isArray(s.profissionaisIds) ? s.profissionaisIds : [],

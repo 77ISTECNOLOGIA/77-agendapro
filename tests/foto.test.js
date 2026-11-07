@@ -48,17 +48,22 @@ test('servicoPublico entrega a foto válida e descarta qualquer valor suspeito',
   assert.equal(servicoPublico('s1', { nome: 'Barba' }).foto, '', 'sem foto = vazio');
 });
 
-test('ícone do serviço: ausente = ✂️ (serviço antigo), vazio = "sem ícone" chega até a tela', () => {
-  assert.equal(servicoPublico('s', { nome: 'X' }).emoji, '✂️');            // serviço antigo, sem o campo
-  assert.equal(servicoPublico('s', { nome: 'X', emoji: '' }).emoji, '');   // dono escolheu "Sem ícone"
-  assert.equal(servicoPublico('s', { nome: 'X', emoji: '🪒' }).emoji, '🪒');
+test('serviço sem ícone: a API pública não entrega emoji (só foto, ou nada)', () => {
+  const pub = servicoPublico('s', { nome: 'X', emoji: '🪒', foto: JPEG });
+  assert.equal('emoji' in pub, false);
+  assert.equal(pub.foto, JPEG);
+  assert.equal('emoji' in servicoPublico('s', { nome: 'X' }), false);
 });
 
-test('painel e link do cliente: foto > ícone > nada, e há o botão "Sem ícone"', () => {
+test('painel e link do cliente: só foto (ou nada); sem escolha de ícone no cadastro do serviço', () => {
   const admin = fs.readFileSync(path.join(__dirname, '..', 'js', 'admin.js'), 'utf8');
   const app = fs.readFileSync(path.join(__dirname, '..', 'js', 'app.js'), 'utf8');
-  assert.match(admin, /data-emoji=""[^>]*aria-label="Sem ícone">Sem ícone</);          // opção "Sem ícone" na grade
-  assert.match(admin, /emoji: \$\('#serv-emoji'\)\.value\.trim\(\),/);                 // não força mais ✂️ ao salvar
-  assert.doesNotMatch(admin, /serv-emoji'\)\.value\.trim\(\) \|\| '✂️'/);
-  assert.match(app, /s\.emoji \? `<div class="servico-foto">/);                        // sem emoji: nenhum bloco de ícone
+  const utils = fs.readFileSync(path.join(__dirname, '..', 'js', 'utils.js'), 'utf8');
+  for (const sobra of [/serv-emoji/, /emoji-grade/, /ÍCONE DO SERVIÇO/, /EMOJIS_SERVICO/, /sugerirEmoji/]) {
+    assert.doesNotMatch(admin, sobra, String(sobra));
+    assert.doesNotMatch(utils, sobra, String(sobra));
+  }
+  assert.doesNotMatch(app, /s\.emoji/, 'o link do cliente não mostra mais emoji de serviço');
+  assert.doesNotMatch(admin, /s\.emoji/, 'a lista do painel não mostra mais emoji de serviço');
+  assert.match(admin, /FOTO DO SERVIÇO \(OPCIONAL\)/);
 });

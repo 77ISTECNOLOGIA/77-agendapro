@@ -41,8 +41,7 @@ function sanitizarServicos(lista) {
   return lista.slice(0, 15).map((s) => ({
     nome: texto(s && s.nome, 60),
     duracaoMin: Math.round(Number(s && s.duracaoMin)),
-    preco: Math.round(Number(s && s.preco) * 100) / 100,
-    emoji: texto(s && s.emoji, 8)
+    preco: Math.round(Number(s && s.preco) * 100) / 100
   })).filter(s => s.nome && s.duracaoMin >= 5 && s.duracaoMin <= 480 && s.preco >= 0 && s.preco <= 10000);
 }
 
@@ -96,7 +95,7 @@ module.exports = async function handler(req, res) {
     const agora = new Date(agoraMs).toISOString();
     const trialFim = new Date(agoraMs + DIAS_TRIAL * 86400000).toISOString();
     const enderecoCompleto = [bairro, cidade].filter(Boolean).join(', ');
-    const servicosFinais = servicos.length ? servicos : [{ nome: 'Atendimento padrão', duracaoMin: 60, preco: 80, emoji: '⭐' }];
+    const servicosFinais = servicos.length ? servicos : [{ nome: 'Atendimento padrão', duracaoMin: 60, preco: 80 }];
 
     await firestore.runTransaction(async (tx) => {
       const [negocioSnap, usuarioSnap] = await Promise.all([tx.get(negocioRef), tx.get(usuarioRef)]);

@@ -14,33 +14,6 @@ export function fotoServicoValida(foto) {
   return typeof foto === 'string' && foto.length <= 150000 && /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(foto);
 }
 
-// Ícones oferecidos na tela de cadastro do serviço (beleza, barbearia, estética, unhas...).
-export const EMOJIS_SERVICO = ['✂️', '🪒', '💈', '💇', '🧔', '💆', '💅', '💄', '🪄', '👁️', '🎨', '💧', '🧴', '🧖', '✨', '🌿', '🪮', '🧼', '👑', '💎', '⭐', '🔥', '💪', '🦶', '🌸', '🧘', '🎁', '❤️', '🌟', '🪞'];
-
-// Sugere o ícone a partir do nome do serviço ("Barba Completa" → 🪒). null = sem palpite.
-// Ignora maiúsculas e acentos; a primeira regra que casar vence.
-export function sugerirEmoji(nome) {
-  const t = String(nome || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-  if (!t.trim()) return null;
-  const regras = [
-    [/\+|combo|pacote/, '💈'],
-    [/barba|bigode|navalha/, '🪒'],
-    [/sobrancelha|henna|design/, '🪄'],
-    [/cilio|lash/, '👁️'],
-    [/unha|manicure|pedicure|esmalt|\bgel\b|acrilic|nail/, '💅'],
-    [/pigment|luzes|mecha|color|tintura|tinta|descolor|platin|pintura/, '🎨'],
-    [/hidrata|cauteriz|reconstru|nutri|botox|umectac/, '💧'],
-    [/escova|penteado|chapinha|progressiva|alisa|cacho|ondula|babyliss/, '💇'],
-    [/massagem|relax|drenagem|limpeza de pele|shiatsu|reflexo/, '💆'],
-    [/maquiagem|makeup|\bmake\b/, '💄'],
-    [/depila|\bcera\b|laser|epila/, '✨'],
-    [/\bspa\b|banho|vapor|sauna|esfolia|peeling/, '🧖'],
-    [/corte|cabelo|degrade|navalhado|tesoura|franja/, '✂️']
-  ];
-  for (const [regra, emoji] of regras) if (regra.test(t)) return emoji;
-  return null;
-}
-
 // Serviço com `profissionaisIds` preenchido só é feito por esses profissionais;
 // lista ausente/vazia = QUALQUER um (padrão, e é o que vale pros serviços
 // antigos). Mesma regra do servidor (api/_lib/negocio.js).

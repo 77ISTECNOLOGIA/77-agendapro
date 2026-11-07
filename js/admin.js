@@ -3,7 +3,7 @@
 // ========================================
 
 import { db } from './firebase-config.js';
-import { escapeHtml, adicionarMostrarSenha, profissionalRealizaServico, calcularVinculosProfissional, atendimentosParaResolver, periodoPronto, resumoPeriodo, EMOJIS_SERVICO, sugerirEmoji, fotoServicoValida } from './utils.js';
+import { escapeHtml, adicionarMostrarSenha, profissionalRealizaServico, calcularVinculosProfissional, atendimentosParaResolver, periodoPronto, resumoPeriodo, fotoServicoValida } from './utils.js';
 import { aplicarTema, resetarTema } from './vocabulario.js';
 import {
   initializeApp,
@@ -1644,7 +1644,7 @@ function renderizarServicos() {
       <div class="item-card-header">
         ${fotoServicoValida(s.foto)
           ? `<div class="item-card-emoji"><img src="${s.foto}" alt="" class="item-card-foto"></div>`
-          : ((typeof s.emoji === 'string' ? s.emoji : '✂️') ? `<div class="item-card-emoji">${escapeHtml(s.emoji === undefined ? '✂️' : s.emoji)}</div>` : '')}
+          : ''}
         <div style="flex:1;">
           <div class="item-card-titulo">${escapeHtml(s.nome)}</div>
           <div class="item-card-sub">${s.duracaoMin} min • ${formatarMoeda(s.preco)}</div>
@@ -1711,7 +1711,7 @@ async function prepararFotoServico(arquivo) {
 }
 
 function modalServico(id = null) {
-  const s = id ? state.servicos[id] : { nome: '', duracaoMin: 30, preco: 0, emoji: '✂️', ativo: true, ordem: Object.keys(state.servicos).length + 1 };
+  const s = id ? state.servicos[id] : { nome: '', duracaoMin: 30, preco: 0, ativo: true, ordem: Object.keys(state.servicos).length + 1 };
   const profsAtivos = Object.entries(state.profissionais).filter(([, p]) => p.ativo !== false);
   const restritos = Array.isArray(s.profissionaisIds) ? s.profissionaisIds : [];
   const marcado = (pid) => restritos.length === 0 || restritos.includes(pid);
@@ -1745,27 +1745,15 @@ function modalServico(id = null) {
       </div>
     </div>
     <div class="input-grupo">
-      <label class="input-label">ÍCONE DO SERVIÇO <span id="serv-emoji-atual" style="font-size:18px;margin-left:6px;">${escapeHtml((typeof s.emoji === 'string' ? s.emoji : '✂️') || '— nenhum —')}</span></label>
-      <div class="emoji-grade" id="serv-emoji-grade">
-        ${EMOJIS_SERVICO.map((e) => `<button type="button" class="emoji-op" data-emoji="${e}" aria-label="Escolher o ícone ${e}">${e}</button>`).join('')}
-        <button type="button" class="emoji-op emoji-op-nenhum" data-emoji="" aria-label="Sem ícone">Sem ícone</button>
-      </div>
-      <input type="hidden" id="serv-emoji" value="${escapeHtml((typeof s.emoji === 'string' ? s.emoji : '✂️'))}">
-      <div style="display:flex;gap:10px;align-items:center;">
-        <input type="text" id="serv-emoji-outro" class="input" maxlength="8" placeholder="Outro" style="max-width:100px;">
-        <small class="campo-help" style="margin:0;">Escolha um ícone, digite/cole outro emoji ou marque "Sem ícone". Em serviço novo, o ícone é sugerido pelo nome.</small>
-      </div>
-    </div>
-    <div class="input-grupo">
       <label class="input-label">FOTO DO SERVIÇO (OPCIONAL)</label>
       <div style="display:flex;gap:14px;align-items:center;">
         <div id="serv-foto-previa" class="foto-previa">${fotoAtual ? `<img src="${fotoAtual}" alt="">` : '<span>Sem foto</span>'}</div>
         <div style="display:flex;flex-direction:column;gap:8px;">
-          <label class="btn-acao-secundario" style="cursor:pointer;text-align:center;">📷 Escolher foto<input type="file" id="serv-foto-arquivo" accept="image/*" hidden></label>
+          <label class="btn-acao-secundario" style="cursor:pointer;text-align:center;">Escolher foto<input type="file" id="serv-foto-arquivo" accept="image/*" hidden></label>
           <button type="button" class="btn-acao-perigo" id="serv-foto-remover" ${fotoAtual ? '' : 'hidden'}>Remover foto</button>
         </div>
       </div>
-      <small class="campo-help" id="serv-foto-ajuda">Mostre um trabalho bem feito! A foto tem prioridade sobre o ícone. Sem foto e sem ícone, o cliente vê só o nome, o tempo e o valor. A foto é recortada em quadrado e reduzida automaticamente.</small>
+      <small class="campo-help" id="serv-foto-ajuda">Mostre um trabalho bem feito! Sem foto, o cliente vê só o nome, o tempo e o valor. A foto é recortada em quadrado e reduzida automaticamente.</small>
     </div>
     <div class="input-grupo">
       <label style="display:flex;gap:10px;align-items:center;cursor:pointer;">
@@ -1780,29 +1768,6 @@ function modalServico(id = null) {
     <button class="btn-acao" id="modal-salvar">Salvar</button>
   `;
   abrirModal(titulo, corpo, rodape);
-
-  // Escolha do ícone: grade clicável + campo "Outro". Em serviço NOVO o ícone acompanha o
-  // nome digitado (sugerirEmoji) até a pessoa escolher um manualmente; serviço existente
-  // mantém o ícone dele.
-  const emojiCampo = $('#serv-emoji');
-  let escolhidoManual = !!id;
-  const marcarEmoji = (e, { limparOutro = true } = {}) => {
-    emojiCampo.value = e;
-    $('#serv-emoji-atual').textContent = e || '— nenhum —';
-    $$('#serv-emoji-grade .emoji-op').forEach((b) => b.classList.toggle('selecionado', b.dataset.emoji === e));
-    if (limparOutro) $('#serv-emoji-outro').value = (e === '' || EMOJIS_SERVICO.includes(e)) ? '' : e;
-  };
-  marcarEmoji(emojiCampo.value);
-  $$('#serv-emoji-grade .emoji-op').forEach((b) => b.addEventListener('click', () => { escolhidoManual = true; marcarEmoji(b.dataset.emoji); }));
-  $('#serv-emoji-outro').addEventListener('input', (ev) => {
-    const v = ev.target.value.trim();
-    if (v) { escolhidoManual = true; marcarEmoji(v, { limparOutro: false }); }
-  });
-  $('#serv-nome').addEventListener('input', (ev) => {
-    if (escolhidoManual) return;
-    const sugestao = sugerirEmoji(ev.target.value);
-    if (sugestao) marcarEmoji(sugestao);
-  });
 
   // Foto: escolher (já recortada e reduzida) ou remover. Fica só na tela até clicar em Salvar.
   const atualizarPreviaFoto = () => {
@@ -1820,7 +1785,7 @@ function modalServico(id = null) {
       $('#serv-foto-ajuda').textContent = 'Foto pronta! Clique em Salvar para guardar.';
     } catch (err) {
       toast(err.message || 'Não foi possível usar essa foto', 'erro');
-      $('#serv-foto-ajuda').textContent = 'Mostre um trabalho bem feito! A foto aparece no lugar do ícone para o cliente. Ela é recortada em quadrado e reduzida automaticamente.';
+      $('#serv-foto-ajuda').textContent = 'Mostre um trabalho bem feito! A foto aparece junto do serviço para o cliente. Ela é recortada em quadrado e reduzida automaticamente.';
     }
   });
   $('#serv-foto-remover').addEventListener('click', () => { fotoAtual = ''; atualizarPreviaFoto(); });
@@ -1832,7 +1797,6 @@ function modalServico(id = null) {
       nome: $('#serv-nome').value.trim(),
       duracaoMin: Number($('#serv-duracao').value),
       preco: Number($('#serv-preco').value),
-      emoji: $('#serv-emoji').value.trim(),            // '' = sem ícone
       foto: fotoAtual,                              // '' = sem foto (usa o ícone)
       ativo: $('#serv-ativo').checked,
       ordem: s.ordem,
