@@ -169,3 +169,6 @@ body.cliente-77 .mini-logo { font-size: 18px; }
 /* painel do dono: nome do negócio em destaque (continua branco, só em negrito) */
 body.tema-77 .sidebar-barbearia { color: #fff; font-weight: 700; font-size: 12px; }
 body.tema-77 { --on-accent: #fff; }
+
+/* tela do cliente: endereço/localidade do negócio em destaque (branco e negrito, igual ao nome no painel do dono) */
+body.cliente-77 .barbearia-end { color: #fff; font-weight: 700; font-size: 12px; }

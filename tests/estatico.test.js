@@ -117,7 +117,8 @@ test('tela do cliente: tema 77, inicial do negócio no cabeçalho, crédito da 7
   const ler = (f) => fs2.readFileSync(path2.join(__dirname, '..', f), 'utf8');
   assert.match(ler('index.html'), /<body class="cliente-77">/);
   assert.match(ler('index.html'), /id="header-inicial"/);
-  assert.match(ler('index.html'), /Agendamento por <strong>77 AgendaPro<\/strong>/);
+  assert.match(ler('index.html'), /<p class="credito-77">Sistema de agendamento criado por <strong>77 IS Tecnologia &amp; Inteligência<\/strong><\/p>\s*<button id="btn-continuar-1"/);
+  assert.match(ler('css/marca77.css'), /body\.cliente-77 \.barbearia-end \{[^}]*font-weight: 700/);
   assert.match(ler('js/app.js'), /\$\('#header-inicial'\)\.textContent/);
   assert.doesNotMatch(ler('js/vocabulario.js'), /d4ff3a/, 'sem o verde-limão antigo nos temas');
   assert.match(ler('js/vocabulario.js'), /--on-accent/);
