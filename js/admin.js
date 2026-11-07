@@ -138,7 +138,8 @@ function inicializarAuth() {
         ativarListenersTempoReal();
         await renderizarTudo();
         state.dadosCarregados = true;
-        tratarLinkDeNotificacao();     // aberto pelo toque numa notificação: já mostra o agendamento
+        tratarLinkDeNotificacao();
+        renovarHorariosFixos();       // reforço da rotina diária: gera o que faltar dos clientes fixos     // aberto pelo toque numa notificação: já mostra o agendamento
         ouvirNotificacoesEmPrimeiroPlano();
         atualizarServiceWorker();
       } catch (err) {
@@ -878,6 +879,7 @@ function abrirDetalhesAgendamento(id) {
       <div class="det-linha"><span class="label">Serviços</span><span class="valor">${(a.servicos || []).map(s => escapeHtml(s.nome)).join(' + ')}</span></div>
       <div class="det-linha"><span class="label">Total</span><span class="valor" style="color:var(--accent);font-family:'Bricolage Grotesque';font-weight:700;font-size:16px;">${formatarMoeda(a.valorTotal)}</span></div>
       <div class="det-linha"><span class="label">Status</span><span class="valor"><span class="agendamento-status status-${escapeHtml(a.status)}">${escapeHtml(a.status)}</span></span></div>
+      ${a.recorrenciaId ? `<div class="det-linha"><span class="label">Horário fixo</span><span class="valor">🔁 ${NOMES_DIA_FIXO[data.getDay()]} às ${escapeHtml(a.horario)}</span></div>` : ''}
       ${a.status === 'confirmado' ? `<div class="det-linha"><span class="label">Lembrete</span><span class="valor">${lembreteStr}</span></div>` : ''}
     </div>
     <div class="det-acoes">
@@ -885,6 +887,7 @@ function abrirDetalhesAgendamento(id) {
       ${a.status === 'confirmado' ? `<button class="btn-remarcar" id="acao-remarcar">🔁 Remarcar</button>` : ''}
       ${a.status === 'confirmado' ? `<button class="btn-whatsapp" id="acao-whatsapp">💬 ${a.lembreteEnviado ? 'Reenviar' : 'Enviar'} lembrete no WhatsApp</button>` : ''}
       ${a.status !== 'cancelado' && a.status !== 'concluido' ? `<button class="btn-cancelar" id="acao-cancelar">✕ Cancelar agendamento</button>` : ''}
+      ${a.recorrenciaId && a.status === 'confirmado' ? `<button class="btn-cancelar" id="acao-encerrar-fixo">🔁 Encerrar horário fixo a partir desta data</button>` : ''}
     </div>
   `;
 
@@ -895,6 +898,16 @@ function abrirDetalhesAgendamento(id) {
     $('#acao-remarcar').addEventListener('click', () => modalRemarcarAgendamento(id));
     $('#acao-whatsapp').addEventListener('click', () => enviarLembreteWhatsapp({ ...a, id }));
     $('#acao-cancelar').addEventListener('click', () => cancelarAgendamento(id));
+    const btnFixo = $('#acao-encerrar-fixo');
+    if (btnFixo) btnFixo.addEventListener('click', async () => {
+      if (!confirm('Encerrar o horário fixo de ' + a.clienteNome + ' a partir de ' + formatarDataCurta(a.dataChave) + '? Este e os próximos agendamentos da série serão cancelados.')) return;
+      btnFixo.disabled = true;
+      try {
+        const r = await chamarRecorrencia('encerrar', { serieId: a.recorrenciaId, aPartirDe: a.dataChave });
+        toast('Horário fixo encerrado. ' + r.canceladas + ' agendamento' + (r.canceladas !== 1 ? 's' : '') + ' cancelado' + (r.canceladas !== 1 ? 's' : '') + '.', 'sucesso');
+        fecharModal();
+      } catch (err) { toast(err.message, 'erro'); btnFixo.disabled = false; }
+    });
   }
 }
 
@@ -1114,6 +1127,26 @@ function modalNovoAgendamento() {
         </select>
       </div>
     </div>
+    <div class="input-grupo nag-fixo">
+      <label class="nag-servico-item" style="cursor:pointer;">
+        <input type="checkbox" id="nag-repetir">
+        <span>🔁 <strong>Cliente fixo</strong> — repetir toda semana neste dia e horário</span>
+      </label>
+      <div id="nag-repetir-opcoes" hidden style="margin-top:12px;">
+        <div class="campo-help" id="nag-repetir-resumo" style="margin-bottom:10px;"></div>
+        <label class="nag-servico-item" style="cursor:pointer;">
+          <input type="radio" name="nag-modo" value="mensal" checked>
+          <span>Todo mês, <strong>automaticamente</strong>, até eu encerrar</span>
+        </label>
+        <label class="nag-servico-item" style="cursor:pointer;">
+          <input type="radio" name="nag-modo" value="ate">
+          <span>Só até a data:</span>
+          <input type="date" id="nag-ate" class="input" style="max-width:170px;">
+        </label>
+        <button type="button" id="nag-ver-datas" class="btn-acao-secundario" style="margin-top:10px;">Ver as datas</button>
+        <div id="nag-datas-previa" style="margin-top:10px;"></div>
+      </div>
+    </div>
   `;
   const rodape = `
     <button class="btn-acao-secundario" id="modal-cancel">Cancelar</button>
@@ -1160,6 +1193,13 @@ function modalNovoAgendamento() {
   $('#nag-profissional').addEventListener('change', atualizarHorariosNovoAgendamento);
   $('#nag-data').addEventListener('change', atualizarHorariosNovoAgendamento);
 
+  $('#nag-repetir').addEventListener('change', (e) => {
+    $('#nag-repetir-opcoes').hidden = !e.target.checked;
+    $('#modal-salvar').textContent = e.target.checked ? 'Criar horário fixo' : 'Criar agendamento';
+    if (e.target.checked) atualizarResumoHorarioFixo();
+  });
+  ['#nag-data', '#nag-horario'].forEach((sel) => $(sel).addEventListener('change', () => { if ($('#nag-repetir').checked) atualizarResumoHorarioFixo(); }));
+  $('#nag-ver-datas').addEventListener('click', verDatasHorarioFixo);
   $('#modal-salvar').addEventListener('click', salvarNovoAgendamento);
 }
 
@@ -1218,6 +1258,13 @@ function atualizarHorariosNovoAgendamento() {
 }
 
 async function salvarNovoAgendamento() {
+  if ($('#nag-repetir') && $('#nag-repetir').checked) {
+    const f = lerFormularioNovoAgendamento();
+    if (f.erro) { toast(f.erro, 'erro'); return; }
+    await salvarHorarioFixo(f);
+    return;
+  }
+
   const nome = $('#nag-cliente-nome').value.trim();
   const whatsappRaw = $('#nag-cliente-whatsapp').value.trim();
   const servicoIds = $$('#modal-body .nag-servico-check:checked').map(c => c.value);
@@ -1300,6 +1347,163 @@ async function salvarNovoAgendamento() {
     btn.disabled = false;
     btn.textContent = 'Criar agendamento';
   }
+}
+
+
+// ========================================
+// CLIENTE FIXO (horário que se repete toda semana)
+// ========================================
+// Quem decide e grava tudo é o servidor (api/recorrencia.js): ele confere cada data contra
+// conflitos e renova sozinho todo mês. Aqui só se monta a tela.
+const NOMES_DIA_FIXO = ['Todo domingo', 'Toda segunda-feira', 'Toda terça-feira', 'Toda quarta-feira', 'Toda quinta-feira', 'Toda sexta-feira', 'Todo sábado'];
+
+async function chamarRecorrencia(action, dados = {}) {
+  const resp = await fetch('/api/recorrencia', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ idToken: await auth.currentUser.getIdToken(), action, ...dados })
+  });
+  const corpo = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(corpo.erro || 'Não foi possível concluir. Tente de novo.');
+  return corpo;
+}
+
+function formatarDataCurta(chave) {
+  const [, m, d] = chave.split('-');
+  return d + '/' + m;
+}
+
+// Lê e valida o formulário de novo agendamento. Devolve { erro } ou os dados já normalizados.
+function lerFormularioNovoAgendamento() {
+  const nome = $('#nag-cliente-nome').value.trim();
+  const whatsDigitos = $('#nag-cliente-whatsapp').value.replace(/\D/g, '');
+  const servicoIds = $$('#modal-body .nag-servico-check:checked').map((c) => c.value);
+  const profId = $('#nag-profissional').value;
+  const dataStr = $('#nag-data').value;
+  const horario = $('#nag-horario').value;
+
+  if (!nome) return { erro: 'Digite o nome do cliente' };
+  if (whatsDigitos.length !== 11 || whatsDigitos[2] !== '9') return { erro: 'Digite um WhatsApp válido com DDD' };
+  if (servicoIds.length === 0) return { erro: 'Selecione ao menos um serviço' };
+  if (!profId) return { erro: 'Selecione o profissional' };
+  if (!servicoIds.every((sid) => profissionalRealizaServico(state.servicos[sid], profId))) return { erro: 'Esse profissional não realiza todos os serviços escolhidos' };
+  if (!dataStr || !horario) return { erro: 'Selecione data e horário' };
+  return { nome, whatsNorm: '55' + whatsDigitos, servicoIds, profId, dataStr, horario };
+}
+
+function dadosDoHorarioFixo(f) {
+  const modo = ($('input[name="nag-modo"]:checked') || {}).value === 'ate' ? 'ate' : 'mensal';
+  return {
+    clienteNome: f.nome, clienteWhatsapp: f.whatsNorm, profissionalId: f.profId, servicosIds: f.servicoIds,
+    dataInicio: f.dataStr, horario: f.horario, modo, ate: modo === 'ate' ? $('#nag-ate').value : null
+  };
+}
+
+function atualizarResumoHorarioFixo() {
+  const dataStr = $('#nag-data').value;
+  const horario = $('#nag-horario').value;
+  const alvo = $('#nag-repetir-resumo');
+  if (!dataStr || !horario) { alvo.textContent = 'Escolha a data e o horário acima: eles viram o dia da semana e a hora fixos.'; return; }
+  alvo.innerHTML = '<strong>' + NOMES_DIA_FIXO[chaveParaData(dataStr).getDay()] + ' às ' + escapeHtml(horario) + '</strong>, a partir de ' + formatarDataCurta(dataStr) + '.';
+  $('#nag-datas-previa').innerHTML = '';
+}
+
+async function verDatasHorarioFixo() {
+  const f = lerFormularioNovoAgendamento();
+  if (f.erro) { toast(f.erro, 'erro'); return; }
+  const modo = dadosDoHorarioFixo(f);
+  if (modo.modo === 'ate' && !modo.ate) { toast('Escolha a data final', 'erro'); return; }
+
+  const btn = $('#nag-ver-datas');
+  btn.disabled = true;
+  btn.textContent = 'Conferindo…';
+  try {
+    const r = await chamarRecorrencia('previa', modo);
+    const linhas = r.datas.map((d) => d.ok
+      ? '<div style="color:var(--success);">✓ ' + formatarDataCurta(d.dataChave) + (d.jaExiste ? ' (já existe)' : '') + '</div>'
+      : '<div style="color:var(--warning);">⚠ ' + formatarDataCurta(d.dataChave) + ' — ' + escapeHtml(d.motivo) + ' (será pulada)</div>').join('');
+    $('#nag-datas-previa').innerHTML =
+      '<div style="background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:13px;line-height:1.7;">' + (linhas || 'Nenhuma data neste período.') + '</div>' +
+      '<div class="campo-help" style="margin-top:8px;">' + (r.renovaAutomatico
+        ? 'Depois disso, o sistema agenda o mês seguinte sozinho (a partir do dia 20). Datas puladas são tentadas de novo se o horário vagar.'
+        : 'O horário fixo termina na data escolhida.') + '</div>';
+  } catch (err) {
+    toast(err.message, 'erro');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Ver as datas';
+  }
+}
+
+async function salvarHorarioFixo(f) {
+  const btn = $('#modal-salvar');
+  const dados = dadosDoHorarioFixo(f);
+  if (dados.modo === 'ate' && !dados.ate) { toast('Escolha a data final', 'erro'); return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Criando…';
+  try {
+    const r = await chamarRecorrencia('criar', dados);
+    const puladas = r.puladas.length
+      ? ' ' + r.puladas.length + ' data' + (r.puladas.length > 1 ? 's' : '') + ' sem vaga ' + (r.puladas.length > 1 ? 'foram puladas' : 'foi pulada') + ' (' + r.puladas.map((p) => formatarDataCurta(p.dataChave)).join(', ') + ').'
+      : '';
+    toast('🔁 Horário fixo criado: ' + r.criadas.length + ' agendamento' + (r.criadas.length > 1 ? 's' : '') + '.' + puladas, 'sucesso');
+    fecharModal();
+  } catch (err) {
+    toast(err.message, 'erro');
+    btn.disabled = false;
+    btn.textContent = 'Criar agendamento';
+  }
+}
+
+// Lista dos clientes fixos, com opção de encerrar cada um.
+async function modalHorariosFixos() {
+  abrirModal('🔁 Horários fixos', '<div class="vazio-msg">Carregando…</div>');
+  try {
+    const { series } = await chamarRecorrencia('listar');
+    if (series.length === 0) {
+      abrirModal('🔁 Horários fixos', '<div class="vazio-msg">Nenhum cliente fixo ainda.<br><small>Em "+ Novo agendamento", marque "Cliente fixo".</small></div>');
+      return;
+    }
+    const corpo = series.map((s) => {
+      const prof = state.profissionais[s.profissionalId];
+      const quando = s.modo === 'ate' && s.ate ? 'até ' + formatarDataCurta(s.ate) : 'renova todo mês automaticamente';
+      const avisos = (s.alerta ? '<div style="color:var(--danger);font-size:12px;margin-top:6px;">⚠ ' + escapeHtml(s.alerta) + '</div>' : '') +
+        (s.puladas.length ? '<div style="color:var(--warning);font-size:12px;margin-top:6px;">⚠ Sem vaga em: ' + s.puladas.map((p) => formatarDataCurta(p.dataChave)).join(', ') + ' (tento de novo se vagar)</div>' : '');
+      return '<div class="item-card" data-serie="' + escapeHtml(s.id) + '" style="margin-bottom:10px;">' +
+        '<div class="item-card-header"><div style="flex:1;">' +
+        '<div class="item-card-titulo">' + escapeHtml(s.clienteNome) + '</div>' +
+        '<div class="item-card-sub">' + NOMES_DIA_FIXO[s.diaSemana] + ' às ' + escapeHtml(s.horario) + (prof ? ' • ' + escapeHtml(prof.nome.split(' ')[0]) : '') + '</div>' +
+        '<div class="item-card-sub">' + escapeHtml((s.servicos || []).join(' + ')) + '</div>' +
+        '<div class="item-card-sub">' + s.proximas + ' agendamento' + (s.proximas !== 1 ? 's' : '') + ' pela frente • ' + escapeHtml(quando) + '</div>' +
+        avisos + '</div></div>' +
+        '<div class="item-card-actions"><button class="btn-mini perigo" data-acao="encerrar-fixo">Encerrar horário fixo</button></div></div>';
+    }).join('');
+    abrirModal('🔁 Horários fixos', corpo);
+
+    $$('#modal-body [data-acao="encerrar-fixo"]').forEach((btn) => btn.addEventListener('click', async () => {
+      const id = btn.closest('[data-serie]').dataset.serie;
+      const s = series.find((x) => x.id === id);
+      if (!confirm('Encerrar o horário fixo de ' + s.clienteNome + '? Os ' + s.proximas + ' agendamento(s) que ainda não aconteceram serão cancelados.')) return;
+      btn.disabled = true;
+      try {
+        const r = await chamarRecorrencia('encerrar', { serieId: id });
+        toast('Horário fixo encerrado. ' + r.canceladas + ' agendamento' + (r.canceladas !== 1 ? 's' : '') + ' cancelado' + (r.canceladas !== 1 ? 's' : '') + '.', 'sucesso');
+        modalHorariosFixos();
+      } catch (err) { toast(err.message, 'erro'); btn.disabled = false; }
+    }));
+  } catch (err) {
+    abrirModal('🔁 Horários fixos', '<div class="vazio-msg">' + escapeHtml(err.message) + '</div>');
+  }
+}
+
+// Ao abrir o painel, renova os horários fixos (reforço da rotina diária; é idempotente).
+async function renovarHorariosFixos() {
+  try {
+    const r = await chamarRecorrencia('renovar');
+    if (r.criadas > 0) toast('🔁 Horários fixos renovados: ' + r.criadas + ' novo' + (r.criadas > 1 ? 's' : '') + ' agendamento' + (r.criadas > 1 ? 's' : ''), 'sucesso');
+    else if (r.erros > 0) toast('⚠ Um horário fixo precisa de atenção. Veja em "Horários fixos".', 'erro');
+  } catch (err) { console.error('Renovação dos horários fixos:', err.message); }
 }
 
 function enviarLembreteWhatsapp(a) {
@@ -1953,6 +2157,7 @@ function inicializarEventosViews() {
     renderizarAgenda();
   });
   $('#btn-novo-agendamento').addEventListener('click', () => modalNovoAgendamento());
+  $('#btn-horarios-fixos').addEventListener('click', () => modalHorariosFixos());
 
   // Serviços
   $('#btn-novo-servico').addEventListener('click', () => modalServico());
