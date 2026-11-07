@@ -67,3 +67,8 @@
 }
 .loading-overlay .loading-text { color: #A6A6A6; font-family: 'Raleway', sans-serif; letter-spacing: .08em; }
 @keyframes logo-pulso { 0%, 100% { opacity: .75; transform: scale(.98); } 50% { opacity: 1; transform: scale(1); } }
+
+/* login do dono: sem a linha do nome da empresa (já está no rodapé) → título mais perto da logo */
+.login-marca.sem-empresa img { margin-bottom: 0; width: 150px; }
+.login-marca.sem-empresa + .login-titulo { margin-top: 2px; }
+.login-container .login-header { margin-bottom: 26px; }
