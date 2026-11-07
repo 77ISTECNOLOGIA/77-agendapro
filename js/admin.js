@@ -623,8 +623,9 @@ function renderizarDashboard() {
 
   // Agendamentos
   $('#kpi-agendamentos').textContent = agsHoje.length - cancelados.length;
-  // remarcados = agendamentos de hoje que vieram de uma remarcação (feita pelo dono ou pelo cliente)
-  const remarcados = agsHoje.filter(a => a.remarcadoEm && a.status !== 'cancelado');
+  // remarcados = agendamentos que ERAM de hoje e foram movidos para outro dia/horário (pelo dono ou pelo cliente).
+  // Eles não estão mais em agsHoje (a data mudou), então vêm da data de origem guardada na remarcação.
+  const remarcados = Object.values(state.agendamentos).filter(a => a.remarcadoDeDataChave === hojeChave && a.dataChave !== hojeChave && a.status !== 'cancelado');
   const plural = (n, s, p) => `${n} ${n === 1 ? s : p}`;
   const faltas = cancelados.filter(a => a.motivoCancelamento === 'nao-compareceu').length;
   $('#kpi-agendamentos-extra').textContent =

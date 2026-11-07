@@ -89,6 +89,7 @@ test('card "Agendamentos hoje": mostra cancelados (com faltas) e remarcados; rem
   const cli = fs.readFileSync(path.join(__dirname, '..', 'api', 'agendamento-cliente.js'), 'utf8');
   assert.match(admin, /plural\(cancelados\.length, 'cancelado', 'cancelados'\)/);
   assert.match(admin, /plural\(remarcados\.length, 'remarcado', 'remarcados'\)/);
+  assert.match(admin, /a\.remarcadoDeDataChave === hojeChave && a\.dataChave !== hojeChave/);
   assert.match(admin, /remarcadoDeDataChave: a\.dataChave/);
   assert.match(cli, /remarcadoDeDataChave: ag\.dataChave/);
 });
