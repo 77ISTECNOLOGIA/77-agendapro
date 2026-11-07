@@ -1062,6 +1062,8 @@ async function confirmarNovaRemarcacao() {
 
     toast('Agendamento remarcado!', 'sucesso');
     await carregarMeusAgendamentos();
+    mostrarPainelLista();                       // volta sozinho para "Seus agendamentos", já com o novo horário
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   } catch (err) {
     console.error('Erro ao remarcar:', err);
     toast('Erro ao remarcar. Tente novamente.', 'erro');

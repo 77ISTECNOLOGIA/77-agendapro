@@ -26,6 +26,7 @@ const {
   agoraBrasil, hojeChaveBrasil, dataChaveValida, horaValida, normalizarWhatsapp, whatsappValido, somarDias
 } = require('./_lib/tempo');
 const { verificarSlot } = require('./_lib/disponibilidade');
+const { notificarAlteracaoCliente } = require('./_lib/notificar');
 const { slugValido, situacaoNegocio } = require('./_lib/negocio');
 const { dentroDoLimite, responder, ErroNegocio, tratarErro, corpoDe } = require('./_lib/http');
 
@@ -95,6 +96,7 @@ module.exports = async function handler(req, res) {
     const agRef = agsRef.doc(agendamentoId);
 
     if (action === 'cancelar') {
+      let cancelado = null;
       await firestore.runTransaction(async (tx) => {
         const ag = (await tx.get(agRef)).data();
         if (!ag || ag.clienteWhatsapp !== whatsNorm) throw new ErroNegocio(404, 'Agendamento não encontrado');
@@ -103,7 +105,10 @@ module.exports = async function handler(req, res) {
           throw new ErroNegocio(400, 'Esse agendamento está a menos de 1 dia da data marcada. Pra cancelar agora, entre em contato direto com o estabelecimento.');
         }
         tx.update(agRef, { status: 'cancelado', canceladoEm: new Date().toISOString(), canceladoPor: 'cliente' });
+        cancelado = ag;
       });
+      // avisa o dono (push); falha aqui nunca desfaz o cancelamento
+      await notificarAlteracaoCliente(negocioRef, agendamentoId, { tipo: 'cancelou', ag: cancelado });
       return responder(res, 200, { sucesso: true });
     }
 
@@ -118,6 +123,7 @@ module.exports = async function handler(req, res) {
     const situacao = situacaoNegocio(info);
     if (!situacao.aceita) throw new ErroNegocio(403, situacao.motivo);
 
+    let remarcado = null;
     await firestore.runTransaction(async (tx) => {
       const [agSnap, diaSnap] = await Promise.all([
         tx.get(agRef),
@@ -160,7 +166,9 @@ module.exports = async function handler(req, res) {
         remarcadoDeHorario: ag.horario,
         remarcacoesCliente: (ag.remarcacoesCliente || 0) + 1
       });
+      remarcado = { antes: { dataChave: ag.dataChave, horario: ag.horario }, depois: { ...ag, dataChave: novaDataChave, horario: novoHorario, remarcacoesCliente: (ag.remarcacoesCliente || 0) + 1 } };
     });
+    await notificarAlteracaoCliente(negocioRef, agendamentoId, { tipo: 'remarcou', ag: remarcado.depois, antes: remarcado.antes });
     return responder(res, 200, { sucesso: true });
   } catch (err) {
     return tratarErro(res, err, 'agendamento-cliente');

@@ -64,6 +64,46 @@ async function enviarParaDispositivos(negocioRef, { titulo = '77 AgendaPro', cor
   return resultado;
 }
 
+function dataHora(dataChave, horario) {
+  const [ano, mes, dia] = String(dataChave || '').split('-').map(Number);
+  const dow = ano ? new Date(Date.UTC(ano, mes - 1, dia)).getUTCDay() : null;
+  const dataStr = dow === null ? '' : `${DIAS_ABREV[dow]} ${String(dia).padStart(2, '0')}/${String(mes).padStart(2, '0')}`;
+  return `${dataStr} às ${horario}`;
+}
+
+/**
+ * Avisa o dono quando o CLIENTE cancela ou remarca pelo link (autoatendimento).
+ * tipo: 'cancelou' | 'remarcou'; ag = agendamento DEPOIS da alteração; antes = { dataChave, horario } (só na remarcação).
+ * Tag única por evento (um aviso não substitui o outro). Melhor esforço: nunca lança.
+ */
+async function notificarAlteracaoCliente(negocioRef, agendamentoId, { tipo, ag, antes }) {
+  try {
+    const nome = String(ag.clienteNome || '').split(' ')[0] || 'Cliente';
+    const servicos = (ag.servicos || []).map((s) => s.nome).join(' + ');
+    const nomeProf = String(ag.profissionalNome || '').split(' ')[0];
+    const com = nomeProf ? ` com ${nomeProf}` : '';
+    let titulo, corpo, tag;
+    if (tipo === 'remarcou') {
+      titulo = '🔁 Cliente remarcou';
+      corpo = `${nome} remarcou: ${dataHora(antes.dataChave, antes.horario)} → ${dataHora(ag.dataChave, ag.horario)} — ${servicos}${com}`;
+      tag = `remarcou-${agendamentoId}-${ag.remarcacoesCliente || Date.now()}`;
+    } else {
+      titulo = '❌ Cliente cancelou';
+      corpo = `${nome} cancelou: ${dataHora(ag.dataChave, ag.horario)} — ${servicos}${com}`;
+      tag = `cancelou-${agendamentoId}`;
+    }
+    const r = await enviarParaDispositivos(negocioRef, {
+      titulo, corpo, tag,
+      dados: { agendamentoId, tipo },
+      link: `${process.env.APP_URL || 'https://77-agendapro.vercel.app'}/admin?agendamento=${encodeURIComponent(agendamentoId)}`
+    });
+    return { enviadas: r.enviadas };
+  } catch (err) {
+    console.error('Falha ao avisar o dono da alteração do cliente:', err);
+    return { enviadas: 0, erro: true };
+  }
+}
+
 /** Melhor esforço: nunca lança, nunca bloqueia o agendamento. */
 async function notificarNovoAgendamento(negocioRef, agendamentoRef, agendamento) {
   try {
@@ -84,4 +124,4 @@ async function notificarNovoAgendamento(negocioRef, agendamentoRef, agendamento)
   }
 }
 
-module.exports = { notificarNovoAgendamento, enviarParaDispositivos, montarCorpo };
+module.exports = { notificarNovoAgendamento, notificarAlteracaoCliente, enviarParaDispositivos, montarCorpo };
