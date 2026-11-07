@@ -89,8 +89,6 @@ body.tema-77 {
   --accent-dark: #0062D1;
   --accent-glow: rgba(0, 119, 255, 0.3);
   --accent-texto: #00D2FF;           /* azul claro para texto pequeno sobre fundo escuro (contraste) */
-  font-family: 'Raleway', sans-serif;
-  font-variant-numeric: lining-nums;
   background:
     radial-gradient(900px 500px at 90% -10%, rgba(0, 210, 255, 0.10), transparent 60%),
     radial-gradient(800px 600px at -5% 105%, rgba(0, 119, 255, 0.12), transparent 60%),
@@ -99,13 +97,16 @@ body.tema-77 {
 }
 body.tema-77 .admin-app { background: transparent; }
 
-/* títulos e números em Orbitron */
-body.tema-77 .view-titulo, body.tema-77 .topbar-app-titulo, body.tema-77 .kpi-valor, body.tema-77 .card-titulo {
+/* TIPOGRAFIA — por padrão o painel mantém as fontes originais (Bricolage Grotesque + Geist).
+   Para usar a fonte do manual da marca (Orbitron + Raleway), basta colocar a classe "fonte-77" no <body>. */
+body.tema-77.fonte-77 { font-family: 'Raleway', sans-serif; font-variant-numeric: lining-nums; }
+body.tema-77.fonte-77 .view-titulo, body.tema-77.fonte-77 .topbar-app-titulo, body.tema-77.fonte-77 .kpi-valor, body.tema-77.fonte-77 .card-titulo {
   font-family: 'Orbitron', sans-serif; letter-spacing: .02em;
 }
-body.tema-77 .view-titulo { font-size: 24px; }
-body.tema-77 .topbar-app-titulo { font-size: 17px; font-weight: 700; }
-body.tema-77 .kpi-valor { font-size: 24px; }
+body.tema-77.fonte-77 .view-titulo { font-size: 24px; }
+body.tema-77.fonte-77 .topbar-app-titulo { font-size: 17px; font-weight: 700; }
+body.tema-77.fonte-77 .kpi-valor { font-size: 24px; }
+body.tema-77.fonte-77 .btn-acao, body.tema-77.fonte-77 .btn { font-family: 'Orbitron', sans-serif; letter-spacing: .06em; font-size: 13px; }
 body.tema-77 .topbar-logo { height: 34px; width: auto; filter: drop-shadow(0 0 10px rgba(0, 119, 255, 0.5)); }
 
 /* texto de destaque em azul claro (legível no escuro); preenchimentos continuam azul #0077FF */
@@ -134,7 +135,6 @@ body.tema-77 .btn-acao, body.tema-77 .btn, body.tema-77 .user-avatar, body.tema-
 body.tema-77 .det-acoes .btn-concluir, body.tema-77 .pendencia-acoes .pend-concluir { color: #fff; }
 body.tema-77 .btn-acao, body.tema-77 .btn { background: linear-gradient(135deg, #0077FF 0%, #0095F0 100%); }
 body.tema-77 .btn-acao:hover, body.tema-77 .btn:hover:not(:disabled) { background: linear-gradient(135deg, #0062D1 0%, #0082D6 100%); }
-body.tema-77 .btn-acao, body.tema-77 .btn { font-family: 'Orbitron', sans-serif; letter-spacing: .06em; font-size: 13px; }
 body.tema-77 .pendencia-acoes .pend-concluir { background: #0077FF; border-color: #0077FF; }
 body.tema-77 .pendencias-card { background: rgba(0, 119, 255, 0.08); border-color: rgba(0, 119, 255, 0.4); }
 body.tema-77 .nav-selo { background: #00D2FF; color: #0A0A0F; }

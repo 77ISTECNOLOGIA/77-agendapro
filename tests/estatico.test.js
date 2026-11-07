@@ -102,3 +102,12 @@ test('super-admin: conta sem permissão volta ao login com "Email ou senha incor
   assert.match(js, /await signOut\(auth\);\s*\n\s*mostrarLogin\(veioDoFormulario \? 'Email ou senha incorretos\.' : undefined\)/);
   assert.match(js, /state\.loginManual = true;/);
 });
+
+test('painel do dono mantém as fontes originais por padrão; Orbitron/Raleway só com a classe fonte-77', () => {
+  const fs2 = require('node:fs'), path2 = require('node:path');
+  const css = fs2.readFileSync(path2.join(__dirname, '..', 'css', 'marca77.css'), 'utf8');
+  const painel = css.slice(css.indexOf('PAINEL DO DONO'));
+  const semComentarios = painel.replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.doesNotMatch(semComentarios.replace(/body\.tema-77\.fonte-77[^{]*\{[^}]*\}/g, ''), /Orbitron|Raleway/, 'fonte da marca vazou para o padrão');
+  assert.doesNotMatch(fs2.readFileSync(path2.join(__dirname, '..', 'admin.html'), 'utf8'), /<body class="[^"]*fonte-77/);
+});
