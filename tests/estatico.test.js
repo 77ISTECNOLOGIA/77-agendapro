@@ -59,3 +59,17 @@ test('admin e painel77: a tecla ESC fecha a janela (modal) aberta', () => {
     assert.match(src, /addEventListener\('keydown'[\s\S]{0,200}e\.key === 'Escape'[\s\S]{0,200}fecharModal\(\)/, `js/${arq} sem atalho ESC`);
   }
 });
+
+test('páginas: ícones oficiais da 77 e nenhum resto de ícone antigo solto no <head>', () => {
+  const fs2 = require('node:fs'), path2 = require('node:path');
+  for (const f of ['admin.html', 'painel77.html', 'index.html', 'cadastro.html']) {
+    const h = fs2.readFileSync(path2.join(__dirname, '..', f), 'utf8');
+    const head = h.slice(0, h.indexOf('</head>'));
+    assert.match(head, /rel="icon"[^>]*href="\/img\/favicon-32\.png"/, f);
+    assert.match(head, /rel="apple-touch-icon"[^>]*href="\/img\/icon-180\.png"/, f);
+    assert.doesNotMatch(head, /<rect|<text|%22100%22/, f + ' tem resto do ícone antigo');
+  }
+  const m = JSON.parse(fs2.readFileSync(path2.join(__dirname, '..', 'manifest.json'), 'utf8'));
+  assert.ok(m.icons.every((i) => i.src.startsWith('/img/')));
+  assert.doesNotMatch(fs2.readFileSync(path2.join(__dirname, '..', 'css', 'marca77.css'), 'utf8') + fs2.readFileSync(path2.join(__dirname, '..', 'admin.html'), 'utf8'), /INTELLIGENT SYSTEMS/);
+});
