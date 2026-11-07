@@ -136,3 +136,14 @@ test('login do super-admin: rodapé no modelo padrão da 77 e textos em destaque
   assert.match(css, /\.login-super \.login-sub \{[^}]*font-weight: 700/);
   assert.match(css, /\.login-super \.btn-link \{[^}]*font-weight: 700/);
 });
+
+test('"Esqueci minha senha" em negrito nos logins do dono e do super-admin', () => {
+  const fs2 = require('node:fs'), path2 = require('node:path');
+  const css = fs2.readFileSync(path2.join(__dirname, '..', 'css', 'marca77.css'), 'utf8');
+  assert.match(css, /\.login-container \.btn-link \{[^}]*font-weight: 700/);
+  for (const f of ['admin.html', 'painel77.html']) {
+    const h = fs2.readFileSync(path2.join(__dirname, '..', f), 'utf8');
+    assert.match(h, /class="btn-link">Esqueci minha senha/, f);
+    assert.match(h, /css\/marca77\.css/, f);
+  }
+});

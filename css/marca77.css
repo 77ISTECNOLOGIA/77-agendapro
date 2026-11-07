@@ -175,3 +175,7 @@ body.cliente-77 .barbearia-end { color: #fff; font-weight: 700; font-size: 12px;
 .login-super .login-sub { color: #fff; font-weight: 700; font-size: 14px; }
 .login-super .btn-link { color: #E6E6E6; font-weight: 700; }
 .login-super .btn-link:hover { color: #00D2FF; }
+
+/* "Esqueci minha senha" em destaque (negrito) em todos os logins da 77 (dono e super-admin) */
+.login-container .btn-link { color: #E6E6E6; font-weight: 700; }
+.login-container .btn-link:hover { color: #00D2FF; }
