@@ -121,3 +121,20 @@ export function adicionarMostrarSenha(input) {
 
   caixa.appendChild(botao);
 }
+
+// Atendimentos "esquecidos": ainda como confirmado, mas o horário previsto de término
+// (horário + duração) já passou há mais de `margemMin` minutos. O dono precisa concluir
+// (vira faturamento) ou cancelar (cliente faltou). Devolve do mais antigo para o mais novo.
+export function atendimentosParaResolver(agendamentos, agora = new Date(), margemMin = 30) {
+  const lista = [];
+  Object.entries(agendamentos || {}).forEach(([id, a]) => {
+    if (!a || a.status !== 'confirmado') return;
+    const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(a.dataChave || '');
+    const h = /^(\d{2}):(\d{2})$/.exec(a.horario || '');
+    if (!d || !h) return;
+    const inicio = new Date(+d[1], +d[2] - 1, +d[3], +h[1], +h[2]);
+    const fim = new Date(inicio.getTime() + (Number(a.duracaoMin) || 30) * 60000);
+    if (agora.getTime() >= fim.getTime() + margemMin * 60000) lista.push({ ...a, id, _inicio: inicio.getTime() });
+  });
+  return lista.sort((x, y) => x._inicio - y._inicio);
+}

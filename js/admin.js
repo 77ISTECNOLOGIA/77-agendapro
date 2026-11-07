@@ -3,7 +3,7 @@
 // ========================================
 
 import { db } from './firebase-config.js';
-import { escapeHtml, adicionarMostrarSenha, profissionalRealizaServico, calcularVinculosProfissional, EMOJIS_SERVICO, sugerirEmoji, fotoServicoValida } from './utils.js';
+import { escapeHtml, adicionarMostrarSenha, profissionalRealizaServico, calcularVinculosProfissional, atendimentosParaResolver, EMOJIS_SERVICO, sugerirEmoji, fotoServicoValida } from './utils.js';
 import { aplicarTema, resetarTema } from './vocabulario.js';
 import {
   initializeApp,
@@ -582,6 +582,7 @@ function irPara(view) {
 }
 
 function renderizarViewAtual() {
+  renderizarPendencias();
   switch (state.viewAtual) {
     case 'dashboard': renderizarDashboard(); break;
     case 'agenda': renderizarAgenda(); break;
@@ -1004,6 +1005,41 @@ function modalRemarcarAgendamento(id) {
   });
 }
 
+// Aviso de atendimentos esquecidos (confirmados cujo horário de término + 30 min já passou)
+const MARGEM_PENDENCIA_MIN = 30;
+function renderizarPendencias() {
+  const lista = atendimentosParaResolver(state.agendamentos, new Date(), MARGEM_PENDENCIA_MIN);
+  const navDash = document.querySelector('.nav-item[data-view="dashboard"]');
+  if (navDash) {
+    let selo = navDash.querySelector('.nav-selo');
+    if (lista.length && !selo) { selo = document.createElement('span'); selo.className = 'nav-selo'; navDash.appendChild(selo); }
+    if (selo) { if (lista.length) selo.textContent = lista.length; else selo.parentNode.removeChild(selo); }
+  }
+  const box = $('#pendencias-resolver');
+  if (!box) return;
+  if (!lista.length) { box.hidden = true; box.innerHTML = ''; return; }
+  const hojeChave = dataParaChave(new Date());
+  box.hidden = false;
+  box.innerHTML = `
+    <div class="pendencias-titulo">⚠️ ${lista.length} atendimento${lista.length !== 1 ? 's' : ''} para resolver</div>
+    <div class="pendencias-sub">O horário já passou e ainda estão como "confirmado". Só os concluídos entram no faturamento.</div>
+    ${lista.map(a => `
+      <div class="pendencia-item">
+        <div class="pendencia-info">
+          <div class="pendencia-quando">${a.dataChave === hojeChave ? 'Hoje' : formatarDataCurta(a.dataChave)} às ${escapeHtml(a.horario)} · ${escapeHtml(a.clienteNome)}</div>
+          <div class="pendencia-det">${(a.servicos || []).map(x => escapeHtml(x.nome)).join(' + ')} · ${formatarMoeda(a.valorTotal)} · ${escapeHtml(a.profissionalNome || '')}</div>
+        </div>
+        <div class="pendencia-acoes">
+          <button class="pend-concluir" data-id="${escapeHtml(a.id)}">✓ Concluir</button>
+          <button class="pend-faltou" data-id="${escapeHtml(a.id)}">✕ Faltou</button>
+        </div>
+      </div>`).join('')}`;
+  $$('#pendencias-resolver .pend-concluir').forEach(b => b.addEventListener('click', () => concluirAgendamento(b.dataset.id)));
+  $$('#pendencias-resolver .pend-faltou').forEach(b => b.addEventListener('click', () => cancelarAgendamento(b.dataset.id, 'nao-compareceu')));
+}
+// o tempo passa mesmo sem nenhuma alteração no banco: reavalia a cada minuto
+setInterval(() => { if (state.dadosCarregados) renderizarPendencias(); }, 60000);
+
 async function concluirAgendamento(id) {
   try {
     await updateDoc(doc(db, 'barbearias', state.barbeariaId, 'agendamentos', id), {
@@ -1017,12 +1053,13 @@ async function concluirAgendamento(id) {
   }
 }
 
-async function cancelarAgendamento(id) {
-  if (!confirm('Tem certeza que deseja cancelar este agendamento?')) return;
+async function cancelarAgendamento(id, motivo = null) {
+  if (!confirm(motivo === 'nao-compareceu' ? 'Marcar que o cliente não compareceu? O agendamento será cancelado e não entra no faturamento.' : 'Tem certeza que deseja cancelar este agendamento?')) return;
   try {
     await updateDoc(doc(db, 'barbearias', state.barbeariaId, 'agendamentos', id), {
       status: 'cancelado',
-      canceladoEm: new Date().toISOString()
+      canceladoEm: new Date().toISOString(),
+      ...(motivo ? { motivoCancelamento: motivo } : {})
     });
     fecharModal();
     toast('Agendamento cancelado', 'sucesso');
