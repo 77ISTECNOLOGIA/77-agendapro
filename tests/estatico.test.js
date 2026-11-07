@@ -73,3 +73,14 @@ test('páginas: ícones oficiais da 77 e nenhum resto de ícone antigo solto no 
   assert.ok(m.icons.every((i) => i.src.startsWith('/img/')));
   assert.doesNotMatch(fs2.readFileSync(path2.join(__dirname, '..', 'css', 'marca77.css'), 'utf8') + fs2.readFileSync(path2.join(__dirname, '..', 'admin.html'), 'utf8'), /INTELLIGENT SYSTEMS/);
 });
+
+test('tela de carregamento usa a logo nova (nada do "77" antigo em texto nem do fundo azul antigo)', () => {
+  const fs2 = require('node:fs'), path2 = require('node:path');
+  for (const f of ['admin.html', 'painel77.html', 'index.html']) {
+    const h = fs2.readFileSync(path2.join(__dirname, '..', f), 'utf8');
+    assert.match(h, /class="loading-logo-img" src="\/img\/logo-77is\.png"/, f);
+    assert.doesNotMatch(h, /logo-mark loading-logo/, f);
+    assert.match(h, /css\/marca77\.css/, f);
+  }
+  assert.match(fs2.readFileSync(path2.join(__dirname, '..', 'css', 'marca77.css'), 'utf8'), /\.admin-body \.loading-overlay/);
+});

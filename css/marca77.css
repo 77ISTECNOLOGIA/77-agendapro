@@ -52,3 +52,18 @@
 .login-container .login-institucional p, .login-container .login-institucional strong { color: var(--text-dim); opacity: 1; }
 .login-container .login-institucional strong { color: #E6E6E6; }
 .login-container .login-institucional { font-family: 'Raleway', sans-serif; }
+
+/* ====== Tela de carregamento (aparece no F5, antes do login/dados) ====== */
+.loading-overlay, .admin-body .loading-overlay {
+  background:
+    radial-gradient(700px 420px at 85% -10%, rgba(0, 210, 255, 0.14), transparent 60%),
+    radial-gradient(700px 500px at 0% 110%, rgba(0, 119, 255, 0.18), transparent 60%),
+    #0A0A0F;
+}
+.loading-logo-img {
+  display: block; margin: 0 auto 14px; width: 110px; height: auto;
+  filter: drop-shadow(0 0 18px rgba(0, 119, 255, 0.5));
+  animation: logo-pulso 1.6s ease-in-out infinite;
+}
+.loading-overlay .loading-text { color: #A6A6A6; font-family: 'Raleway', sans-serif; letter-spacing: .08em; }
+@keyframes logo-pulso { 0%, 100% { opacity: .75; transform: scale(.98); } 50% { opacity: 1; transform: scale(1); } }
