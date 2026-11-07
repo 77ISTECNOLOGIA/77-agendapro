@@ -250,13 +250,21 @@ function inicializarEventos() {
     $('#seletor-data').scrollBy({ left: 160, behavior: 'smooth' });
   });
 
-  $('#btn-novo').addEventListener('click', () => {
-    resetarFluxo();
-    mostrarTela(1);
+  // novo agendamento: o cliente já se identificou (nome e WhatsApp ficam guardados), então vai direto para a escolha do serviço
+  $('#btn-novo').addEventListener('click', async () => {
+    try {
+      await resetarFluxo();
+      renderizarTela2();
+      mostrarTela(2);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (err) {
+      console.error('Erro ao iniciar novo agendamento:', err);
+      toast('Não foi possível carregar os serviços. Tente novamente.', 'erro');
+    }
   });
   // tela de sucesso: voltar ao início (mesma tela de entrada) ou conferir/alterar o que acabou de marcar
   $('#btn-inicio').addEventListener('click', () => {
-    resetarFluxo();
+    resetarFluxo().catch((err) => console.error('Erro ao recarregar:', err));
     mostrarTela(1);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });
@@ -841,7 +849,7 @@ function renderizarBotaoAgenda(data, fimMin, prof, servicos) {
   btnNovo.parentNode.insertBefore(btnAgenda, btnNovo);
 }
 
-function resetarFluxo() {
+async function resetarFluxo() {
   state.servicosSelecionados = [];
   state.profissionalId = null;
   state.dataSelecionada = null;
@@ -850,7 +858,7 @@ function resetarFluxo() {
   $('#btn-confirmar').disabled = false;
   $('#btn-confirmar').textContent = 'Confirmar ✓';
 
-  carregarBarbearia(state.slug);
+  await carregarBarbearia(state.slug);          // serviços e horários ocupados atualizados (inclui o agendamento que acabou de ser feito)
 }
 
 // ========================================

@@ -94,3 +94,12 @@ test('tela de sucesso: tem "Ver meus agendamentos" e "Voltar ao início" além d
   assert.match(app, /\$\('#btn-inicio'\)\.addEventListener\('click', \(\) => \{\s*\n\s*resetarFluxo\(\);\s*\n\s*mostrarTela\(1\);/);
   assert.match(app, /\$\('#btn-ver-meus'\)\.addEventListener\('click', async \(\) => \{\s*\n\s*mostrarTela\(6\);\s*\n\s*mostrarPainelLista\(\);/);
 });
+
+test('"Fazer novo agendamento" vai direto para a escolha do serviço (cliente já identificado)', () => {
+  const app = fs.readFileSync(path.join(__dirname, '..', 'js', 'app.js'), 'utf8');
+  assert.match(app, /\$\('#btn-novo'\)\.addEventListener\('click', async \(\) => \{\s*\n\s*try \{\s*\n\s*await resetarFluxo\(\);\s*\n\s*renderizarTela2\(\);\s*\n\s*mostrarTela\(2\);/);
+  assert.match(app, /async function resetarFluxo\(\)/);
+  assert.match(app, /await carregarBarbearia\(state\.slug\);/);
+  // "Voltar ao início" continua indo para a tela de entrada
+  assert.match(app, /\$\('#btn-inicio'\)[\s\S]{0,120}mostrarTela\(1\)/);
+});
