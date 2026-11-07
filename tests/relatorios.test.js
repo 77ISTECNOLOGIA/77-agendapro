@@ -83,3 +83,12 @@ test('telas: menu Relatórios, filtros e ligação no painel', () => {
   assert.match(admin, /case 'relatorios': renderizarRelatorios\(\); break;/);
   assert.match(fs.readFileSync(path.join(__dirname, '..', 'api', 'cron-recorrencias.js'), 'utf8'), /avisarPendentes\(n\.ref, agora\)/);
 });
+
+test('card "Agendamentos hoje": mostra cancelados (com faltas) e remarcados; remarcação grava a origem', () => {
+  const admin = fs.readFileSync(path.join(__dirname, '..', 'js', 'admin.js'), 'utf8');
+  const cli = fs.readFileSync(path.join(__dirname, '..', 'api', 'agendamento-cliente.js'), 'utf8');
+  assert.match(admin, /plural\(cancelados\.length, 'cancelado', 'cancelados'\)/);
+  assert.match(admin, /plural\(remarcados\.length, 'remarcado', 'remarcados'\)/);
+  assert.match(admin, /remarcadoDeDataChave: a\.dataChave/);
+  assert.match(cli, /remarcadoDeDataChave: ag\.dataChave/);
+});

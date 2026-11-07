@@ -152,6 +152,8 @@ module.exports = async function handler(req, res) {
         lembreteEnviado: false,
         remarcadoEm: new Date().toISOString(),
         remarcadoPor: 'cliente',
+        remarcadoDeDataChave: ag.dataChave,
+        remarcadoDeHorario: ag.horario,
         remarcacoesCliente: (ag.remarcacoesCliente || 0) + 1
       });
     });

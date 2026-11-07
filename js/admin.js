@@ -623,7 +623,14 @@ function renderizarDashboard() {
 
   // Agendamentos
   $('#kpi-agendamentos').textContent = agsHoje.length - cancelados.length;
-  $('#kpi-agendamentos-extra').textContent = `${concluidos.length} concluído${concluidos.length !== 1 ? 's' : ''}, ${confirmados.length} pendente${confirmados.length !== 1 ? 's' : ''}`;
+  // remarcados = agendamentos de hoje que vieram de uma remarcação (feita pelo dono ou pelo cliente)
+  const remarcados = agsHoje.filter(a => a.remarcadoEm && a.status !== 'cancelado');
+  const plural = (n, s, p) => `${n} ${n === 1 ? s : p}`;
+  const faltas = cancelados.filter(a => a.motivoCancelamento === 'nao-compareceu').length;
+  $('#kpi-agendamentos-extra').textContent =
+    `${plural(concluidos.length, 'concluído', 'concluídos')} · ${plural(confirmados.length, 'pendente', 'pendentes')} · ` +
+    `${plural(cancelados.length, 'cancelado', 'cancelados')}${faltas ? ` (${plural(faltas, 'falta', 'faltas')})` : ''} · ` +
+    plural(remarcados.length, 'remarcado', 'remarcados');
 
   // Ticket médio
   const ticket = concluidos.length > 0 ? faturamento / concluidos.length : 0;
@@ -993,7 +1000,9 @@ function modalRemarcarAgendamento(id) {
         horario: novoHorario,
         lembreteEnviado: false,
         remarcadoEm: new Date().toISOString(),
-        remarcadoPor: 'dono'
+        remarcadoPor: 'dono',
+        remarcadoDeDataChave: a.dataChave,
+        remarcadoDeHorario: a.horario
       });
       toast('Agendamento remarcado', 'sucesso');
       fecharModal();
