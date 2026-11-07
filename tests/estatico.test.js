@@ -84,3 +84,13 @@ test('tela de carregamento usa a logo nova (nada do "77" antigo em texto nem do 
   }
   assert.match(fs2.readFileSync(path2.join(__dirname, '..', 'css', 'marca77.css'), 'utf8'), /\.admin-body \.loading-overlay/);
 });
+
+test('painel do dono usa o tema 77 IS (classe tema-77) e o super-admin/cliente não são afetados', () => {
+  const fs2 = require('node:fs'), path2 = require('node:path');
+  const ler = (f) => fs2.readFileSync(path2.join(__dirname, '..', f), 'utf8');
+  assert.match(ler('admin.html'), /<body class="admin-body tema-77">/);
+  assert.doesNotMatch(ler('painel77.html'), /tema-77/);
+  assert.doesNotMatch(ler('index.html'), /tema-77/);
+  assert.match(ler('css/marca77.css'), /body\.tema-77 \{[\s\S]*--accent: #0077FF/);
+  assert.doesNotMatch(ler('js/admin.js'), /#d4ff3a|212, 255, 58/, 'admin.js não pode ter o verde-limão antigo');
+});

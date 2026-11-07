@@ -523,7 +523,7 @@ function avisarSituacaoConta() {
     const dias = Math.ceil((Date.parse(state.barbearia.trialFim) - Date.now()) / 86400000);
     if (dias <= 7 && dias >= 0) {
       texto = `🎁 Seu teste grátis termina em ${dias} dia${dias === 1 ? '' : 's'}. Fale com a 77 IS para continuar usando sem interrupção.`;
-      cor = 'background:#1f2e12;color:#d4ff3a;';
+      cor = 'background:#0e2238;color:#00D2FF;';
     } else if (dias < 0) {
       texto = '⚠️ Seu teste grátis terminou. Fale com a 77 IS para ativar o plano — em poucos dias o link público deixa de aceitar agendamentos.';
       cor = 'background:#3a2410;color:#ffc58a;';
@@ -726,7 +726,7 @@ function renderizarBotaoLembretesEmLote(pendentes) {
   const cardHeader = document.querySelector('#view-dashboard .lista-agendamentos').previousElementSibling;
   const container = document.createElement('div');
   container.id = 'btn-lembretes-lote-container';
-  container.style.cssText = 'margin: 12px 0; padding: 14px; background: rgba(212, 255, 58, 0.08); border: 1px solid rgba(212, 255, 58, 0.3); border-radius: 12px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;';
+  container.style.cssText = 'margin: 12px 0; padding: 14px; background: rgba(0, 119, 255, 0.10); border: 1px solid rgba(0, 119, 255, 0.4); border-radius: 12px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;';
   container.innerHTML = `
     <div style="flex:1; min-width: 200px;">
       <div style="font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 14px; color: var(--accent); margin-bottom: 2px;">
@@ -1885,7 +1885,7 @@ function renderizarProfissionais() {
     return `
       <div class="item-card" data-id="${p.id}">
         <div class="item-card-header">
-          <div class="item-card-emoji" style="background:linear-gradient(135deg,var(--accent),var(--accent-dark));color:#0a0a0a;font-family:'Bricolage Grotesque';font-weight:700;">${escapeHtml(iniciais(p.nome))}</div>
+          <div class="item-card-emoji" style="background:linear-gradient(135deg,var(--accent),var(--accent-dark));color:#fff;font-family:'Bricolage Grotesque';font-weight:700;">${escapeHtml(iniciais(p.nome))}</div>
           <div style="flex:1;">
             <div class="item-card-titulo">${escapeHtml(p.nome)}</div>
             <div class="item-card-sub">${escapeHtml(p.especialidade || 'Profissional')}</div>
@@ -2088,7 +2088,7 @@ function renderizarClientes() {
     return `
       <div class="item-card">
         <div class="item-card-header">
-          <div class="item-card-emoji" style="background:var(--accent);color:#0a0a0a;font-family:'Bricolage Grotesque';font-weight:700;">${escapeHtml(iniciais(c.nome))}</div>
+          <div class="item-card-emoji" style="background:var(--accent);color:#fff;font-family:'Bricolage Grotesque';font-weight:700;">${escapeHtml(iniciais(c.nome))}</div>
           <div style="flex:1;">
             <div class="item-card-titulo">${escapeHtml(c.nome)}</div>
             <div class="item-card-sub">${escapeHtml(formatarWhatsapp(c.whatsapp))}</div>
