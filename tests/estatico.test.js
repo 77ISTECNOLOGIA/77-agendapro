@@ -147,3 +147,19 @@ test('"Esqueci minha senha" em negrito nos logins do dono e do super-admin', () 
     assert.match(h, /css\/marca77\.css/, f);
   }
 });
+
+test('manifest (instalar o painel no Android/iPhone): ícones existem, 192 e 512, e o "maskable" é um arquivo próprio', () => {
+  const fs2 = require('node:fs'), path2 = require('node:path');
+  const raiz = path2.join(__dirname, '..');
+  const m = JSON.parse(fs2.readFileSync(path2.join(raiz, 'manifest.json'), 'utf8'));
+  for (const i of m.icons) assert.ok(fs2.existsSync(path2.join(raiz, i.src)), i.src + ' não existe');
+  for (const proposito of ['any', 'maskable']) {
+    const tamanhos = m.icons.filter((i) => i.purpose === proposito).map((i) => i.sizes).sort();
+    assert.deepEqual(tamanhos, ['192x192', '512x512'], proposito);
+  }
+  const maskable = m.icons.filter((i) => i.purpose === 'maskable').map((i) => i.src);
+  const any = m.icons.filter((i) => i.purpose === 'any').map((i) => i.src);
+  assert.ok(maskable.every((s) => !any.includes(s)), 'maskable não pode reaproveitar o ícone "any" (cantos transparentes cortam a logo)');
+  assert.equal(m.display, 'standalone');
+  assert.equal(m.start_url, '/admin');
+});
