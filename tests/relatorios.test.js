@@ -100,3 +100,9 @@ test('remarcar pelo painel: horário atual não vem pré-selecionado e o mesmo d
   assert.match(admin, /novaData === a\.dataChave && novoHorario === a\.horario/);
   assert.match(cli, /ag\.dataChave === novaDataChave && ag\.horario === novoHorario/);
 });
+
+test('card do agendamento remarcado mostra a etiqueta com a data de origem', () => {
+  const admin = fs.readFileSync(path.join(__dirname, '..', 'js', 'admin.js'), 'utf8');
+  assert.match(admin, /const remarcadoBadge = \(a\.remarcadoEm && a\.status !== 'cancelado'\)/);
+  assert.match(admin, /\$\{lembreteBadge\}\$\{escapeHtml\(a\.clienteNome\)\}\$\{remarcadoBadge\}/);
+});

@@ -809,11 +809,14 @@ function renderizarCardAgendamento(a) {
   const lembreteBadge = (a.status === 'confirmado' && a.lembreteEnviado)
     ? '<span title="Lembrete enviado" style="color: var(--success); font-size: 11px; margin-right: 4px;">💬✓</span>'
     : '';
+  const remarcadoBadge = (a.remarcadoEm && a.status !== 'cancelado')
+    ? `<span title="Este agendamento foi remarcado" style="color: var(--accent); font-size: 11px; margin-left: 6px;">🔁 Remarcado${a.remarcadoDeDataChave ? ' (era ' + formatarDataCurta(a.remarcadoDeDataChave) + ' às ' + escapeHtml(a.remarcadoDeHorario || '') + ')' : ''}</span>`
+    : '';
   return `
     <div class="agendamento-card ${statusClass}" data-id="${escapeHtml(a.id)}">
       <div class="agendamento-hora">${escapeHtml(a.horario)}</div>
       <div class="agendamento-info">
-        <div class="agendamento-cliente">${lembreteBadge}${escapeHtml(a.clienteNome)}</div>
+        <div class="agendamento-cliente">${lembreteBadge}${escapeHtml(a.clienteNome)}${remarcadoBadge}</div>
         <div class="agendamento-detalhes">
           ${escapeHtml(a.profissionalNome)} • ${(a.servicos || []).map(s => escapeHtml(s.nome)).join(' + ')}
         </div>
