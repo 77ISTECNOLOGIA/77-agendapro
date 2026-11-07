@@ -85,3 +85,12 @@ test('tela do cliente: depois de remarcar volta para a lista; botão da remarca�
   assert.match(app, /toast\('Agendamento remarcado!', 'sucesso'\);\s*\n\s*await carregarMeusAgendamentos\(\);\s*\n\s*mostrarPainelLista\(\);/);
   assert.match(html, /id="btn-cancelar-remarcacao"[^>]*>← Voltar</);
 });
+
+test('tela de sucesso: tem "Ver meus agendamentos" e "Voltar ao início" além de novo agendamento e agenda', () => {
+  const app = fs.readFileSync(path.join(__dirname, '..', 'js', 'app.js'), 'utf8');
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const tela5 = html.slice(html.indexOf('id="tela-5"'), html.indexOf('id="tela-6"'));
+  assert.match(tela5, /id="btn-novo"[\s\S]*id="btn-ver-meus"[\s\S]*id="btn-inicio"[^>]*>← Voltar ao início</);
+  assert.match(app, /\$\('#btn-inicio'\)\.addEventListener\('click', \(\) => \{\s*\n\s*resetarFluxo\(\);\s*\n\s*mostrarTela\(1\);/);
+  assert.match(app, /\$\('#btn-ver-meus'\)\.addEventListener\('click', async \(\) => \{\s*\n\s*mostrarTela\(6\);\s*\n\s*mostrarPainelLista\(\);/);
+});

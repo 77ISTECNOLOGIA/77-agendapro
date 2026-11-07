@@ -254,6 +254,17 @@ function inicializarEventos() {
     resetarFluxo();
     mostrarTela(1);
   });
+  // tela de sucesso: voltar ao início (mesma tela de entrada) ou conferir/alterar o que acabou de marcar
+  $('#btn-inicio').addEventListener('click', () => {
+    resetarFluxo();
+    mostrarTela(1);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+  $('#btn-ver-meus').addEventListener('click', async () => {
+    mostrarTela(6);
+    mostrarPainelLista();
+    await carregarMeusAgendamentos();
+  });
 
   $('#btn-meus-agendamentos').addEventListener('click', abrirMeusAgendamentos);
   $('#btn-voltar-6').addEventListener('click', () => mostrarTela(1));
