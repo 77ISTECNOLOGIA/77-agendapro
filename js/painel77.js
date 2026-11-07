@@ -99,8 +99,14 @@ onAuthStateChanged(auth, async (user) => {
       // (antes só sumia ao recarregar a página, e o botão ficava em "Entrando...").
       $('#tela-login').classList.add('hidden');
       if (!snap.exists() || snap.data().role !== 'super_admin') {
-        $('#loading').classList.add('hidden');
-        $('#tela-negado').classList.remove('hidden');
+        // Conta válida, mas sem permissão de super-admin (ex.: dono de negócio): não mostra "acesso negado".
+        // Sai da sessão e volta ao login com a mesma mensagem de e-mail/senha incorretos
+        // (igual à de senha errada, para não revelar quais e-mails existem).
+        const veioDoFormulario = state.loginManual;
+        state.loginManual = false;
+        state.user = null;
+        await signOut(auth);
+        mostrarLogin(veioDoFormulario ? 'Email ou senha incorretos.' : undefined);
         return;
       }
       state.adminData = snap.data();
@@ -132,12 +138,14 @@ $('#form-login').addEventListener('submit', async (e) => {
   const email=$('#login-email').value.trim(), senha=$('#login-senha').value;
   const btn=$('#btn-login'), erro=$('#erro-login');
   erro.classList.add('hidden'); btn.disabled=true; btn.textContent='Entrando...';
+  state.loginManual = true;
   try {
     await signInWithEmailAndPassword(auth, email, senha);
   } catch(err) {
     let msg='Erro ao fazer login.';
     if (err.code==='auth/invalid-credential'||err.code==='auth/wrong-password'||err.code==='auth/user-not-found') msg='Email ou senha incorretos.';
     else if (err.code==='auth/too-many-requests') msg='Muitas tentativas. Aguarde.';
+    state.loginManual = false;
     erro.textContent=msg; erro.classList.remove('hidden');
     btn.disabled=false; btn.textContent='Entrar';
   }

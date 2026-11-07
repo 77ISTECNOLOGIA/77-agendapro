@@ -94,3 +94,11 @@ test('painel do dono usa o tema 77 IS (classe tema-77) e o super-admin/cliente n
   assert.match(ler('css/marca77.css'), /body\.tema-77 \{[\s\S]*--accent: #0077FF/);
   assert.doesNotMatch(ler('js/admin.js'), /#d4ff3a|212, 255, 58/, 'admin.js não pode ter o verde-limão antigo');
 });
+
+test('super-admin: conta sem permissão volta ao login com "Email ou senha incorretos" (sem tela de acesso negado)', () => {
+  const fs2 = require('node:fs'), path2 = require('node:path');
+  const js = fs2.readFileSync(path2.join(__dirname, '..', 'js', 'painel77.js'), 'utf8');
+  assert.doesNotMatch(js, /#tela-negado'\)\.classList\.remove/);
+  assert.match(js, /await signOut\(auth\);\s*\n\s*mostrarLogin\(veioDoFormulario \? 'Email ou senha incorretos\.' : undefined\)/);
+  assert.match(js, /state\.loginManual = true;/);
+});
