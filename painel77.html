@@ -3,14 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#0a0a0a">
+  <meta name="theme-color" content="#0A0A0F">
   <title>77 IS — Painel Super-Admin</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;500;600;700;800&family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Raleway:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/admin.css">
   <link rel="stylesheet" href="css/painel77.css">
+  <link rel="stylesheet" href="css/marca77.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2222%22 fill=%22%23d4ff3a%22/><text x=%2250%22 y=%2268%22 font-family=%22sans-serif%22 font-weight=%22800%22 font-size=%2248%22 text-anchor=%22middle%22 fill=%22%230a0a0a%22>77</text></svg>">
 </head>
 <body class="admin-body">
@@ -26,8 +28,12 @@
   <div id="tela-login" class="hidden login-container">
     <div class="login-card">
       <div class="login-header">
-        <div class="logo-mark" style="width:56px;height:56px;font-size:22px;">77</div>
-        <h1 class="login-titulo">77 <span class="accent">IS</span></h1>
+        <div class="login-marca">
+          <img src="/img/logo-77is.png" alt="77 Intelligent Systems" width="120" height="89">
+          <div class="marca-nome"><b>77</b> INTELLIGENT</div>
+          <div class="marca-sub">SYSTEMS</div>
+        </div>
+        <h1 class="login-titulo">Super<span class="accent">Admin</span></h1>
         <p class="login-sub">Painel Super-Admin</p>
       </div>
       <form id="form-login" novalidate>
