@@ -23,10 +23,8 @@ self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim(
 
 const messaging = firebase.messaging();
 
-// Ícone institucional 77 IS (coral)
-const ICONE_77 = 'data:image/svg+xml,' + encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="22" fill="#fb6464"/><text x="50" y="68" font-family="sans-serif" font-weight="800" font-size="48" text-anchor="middle" fill="#0a0a0a">77</text></svg>'
-);
+// Ícone institucional 77 IS (símbolo azul/branco)
+const ICONE_77 = '/img/icon-192.png';
 
 // A mensagem do servidor já traz o campo "notification": o próprio Firebase MOSTRA a notificação
 // quando o painel está em segundo plano (e, ao tocar, abre o link e avisa a página aberta).

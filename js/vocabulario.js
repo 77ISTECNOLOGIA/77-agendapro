@@ -141,19 +141,17 @@ export function resetarTema() {
 }
 
 /**
- * Gera e aplica dinamicamente o favicon (ícone "77") na cor do tema atual.
+ * Aplica o favicon oficial da 77 IS (símbolo "77" azul/branco), igual em qualquer tema de negócio.
  * Substitui o conteúdo do <link rel="icon"> independente do que estava no HTML.
  * @param {string} cor - cor hexadecimal do accent (ex: '#ff6b9d')
  */
-function aplicarFavicon(cor) {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="22" fill="${cor}"/><text x="50" y="68" font-family="sans-serif" font-weight="800" font-size="48" text-anchor="middle" fill="#0a0a0a">77</text></svg>`;
-  const dataUri = `data:image/svg+xml,${encodeURIComponent(svg)}`;
-
+function aplicarFavicon() {
   let link = document.querySelector("link[rel='icon']");
   if (!link) {
     link = document.createElement('link');
     link.rel = 'icon';
     document.head.appendChild(link);
   }
-  link.href = dataUri;
+  link.type = 'image/png';
+  link.href = '/img/favicon-32.png';
 }

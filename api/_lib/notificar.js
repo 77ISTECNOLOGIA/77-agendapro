@@ -8,9 +8,8 @@
 
 const { messaging } = require('./firebase');
 
-const ICONE_77 = 'data:image/svg+xml,' + encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="22" fill="#fb6464"/><text x="50" y="68" font-family="sans-serif" font-weight="800" font-size="48" text-anchor="middle" fill="#0a0a0a">77</text></svg>'
-);
+const URL_BASE = process.env.APP_URL || 'https://77-agendapro.vercel.app';
+const ICONE_77 = `${URL_BASE}/img/icon-192.png`;
 
 const DIAS_ABREV = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
 
