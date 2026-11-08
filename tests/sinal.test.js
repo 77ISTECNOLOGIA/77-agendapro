@@ -288,3 +288,34 @@ test('nome longo do recebedor: aparece INTEIRO para o cliente; só o código Pix
   assert.equal(dados.body.recebedor, nomeLongo);
   assert.equal(dados.body.banco, 'Nubank');
 });
+
+test('banco: sempre "Banco X", sem duplicar; instituições que não são banco ficam como digitadas', () => {
+  const n = S.normalizarBanco;
+  for (const entrada of ['Inter', 'inter', 'INTER', 'Banco Inter', 'banco inter', 'BANCO INTER', ' Bco Inter ', 'Banco  Inter']) {
+    assert.equal(n(entrada), 'Banco Inter', JSON.stringify(entrada));
+  }
+  assert.equal(n('Itaú'), 'Banco Itaú');
+  assert.equal(n('banco do brasil'), 'Banco do Brasil');
+  assert.equal(n('do Brasil'), 'Banco do Brasil');
+  assert.equal(n('BB'), 'Banco BB');
+  assert.equal(n('Caixa Econômica Federal'), 'Caixa Econômica Federal');
+  assert.equal(n('mercado pago'), 'Mercado Pago');
+  assert.equal(n('Sicredi'), 'Sicredi');
+  assert.equal(n(''), '');
+  assert.equal(n('banco'), '');
+  assert.equal(n('   '), '');
+});
+
+test('banco: configurar normaliza ao salvar e o cliente recebe a instituição já no formato certo', async () => {
+  for (const digitado of ['Inter', 'Banco Inter']) {
+    const r = await chamar(configurar, req('POST', { body: { idToken: 'tok-dono1', limiteAgendamentosSemana: 0,
+      sinal: { ativo: true, percentual: 50, prazoHoras: 24, tipoChave: 'email', chavePix: 'dono@barbearia.com', nomeRecebedor: 'Felipe Gomes', cidadeRecebedor: 'Rio', banco: digitado } } }));
+    assert.equal(r.statusCode, 200);
+    assert.equal(r.body.sinal.banco, 'Banco Inter');
+    assert.equal(amb.fake.get(`barbearias/${SLUG}`).sinal.banco, 'Banco Inter');
+  }
+  // valor antigo salvo sem o prefixo também sai certo (normaliza na leitura)
+  amb.fake.seed(`barbearias/${SLUG}`, { ...amb.fake.get(`barbearias/${SLUG}`), sinal: { ...CONFIG_SINAL, banco: 'inter' } });
+  const a = await agendar();
+  assert.equal(a.body.sinal.banco, 'Banco Inter');
+});

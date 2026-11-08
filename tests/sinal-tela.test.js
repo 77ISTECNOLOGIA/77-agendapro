@@ -64,7 +64,9 @@ test('tela do cliente: pagamento do sinal (tela 7), botão único "Já paguei" e
   assert.match(app, /aguardando_sinal: 'Aguardando sinal', sinal_informado: 'Pagamento informado'/);
   assert.match(app, /data-acao="pagar"/);
   assert.match(app, /btn-sinal-meus'\)\.addEventListener/);
-  assert.match(app, /s\.banco \?/, 'mostra o banco quando informado');
+  assert.match(app, /Quem recebe: <strong>/);
+  assert.match(app, /Instituição: <strong>/);
+  assert.match(app, /s\.banco \?/, 'mostra a instituição quando informada');
   assert.match(app, /confira se este nome aparece como destinatário/);
 });
 

@@ -2234,6 +2234,7 @@ async function salvarRegrasAgendamento() {
     });
     const corpo = await resp.json().catch(() => ({}));
     if (!resp.ok) throw new Error(corpo.erro || 'Não foi possível salvar.');
+    if (corpo.sinal) $('#sinal-banco').value = corpo.sinal.banco || '';   // mostra já como ficou ("Banco Inter")
     toast('Regras de agendamento salvas', 'sucesso');
   } catch (err) {
     toast(err.message, 'erro');

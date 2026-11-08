@@ -10,6 +10,7 @@
 const { db, auth } = require('./_lib/firebase');
 const { dentroDoLimite, dentroDoLimitePorChave, responder, ErroNegocio, tratarErro, corpoDe } = require('./_lib/http');
 const { normalizarChavePix } = require('./_lib/pix');
+const { normalizarBanco } = require('./_lib/sinal');
 
 const texto = (v, max) => String(v || '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
 
@@ -32,7 +33,7 @@ function validarSinal(s) {
     // do BR Code é aplicado só na hora de gerar o Pix (api/_lib/pix.js).
     out.nomeRecebedor = texto(s.nomeRecebedor, 60);
     out.cidadeRecebedor = texto(s.cidadeRecebedor, 40);
-    out.banco = texto(s.banco, 40);
+    out.banco = normalizarBanco(texto(s.banco, 40));   // sempre "Banco X", sem duplicar
     if (!out.nomeRecebedor) throw new ErroNegocio(400, 'Informe o nome de quem recebe o Pix (como aparece no banco).');
     if (!out.cidadeRecebedor) throw new ErroNegocio(400, 'Informe a cidade de quem recebe o Pix.');
   }

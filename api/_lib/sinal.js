@@ -35,6 +35,37 @@ function ocupaHorario(ag, agoraMs = Date.now()) {
   return statusEfetivo(ag, agoraMs) !== 'cancelado';
 }
 
+// Instituições que NÃO são "banco" no nome: não recebem o prefixo (ficaria "Banco Caixa", "Banco Sicoob"...).
+const SEM_PREFIXO_BANCO = ['caixa', 'mercado pago', 'mercadopago', 'picpay', 'pagbank', 'pagseguro', 'sicoob', 'sicredi', 'cresol', 'unicred', 'cooperativa', 'nu pagamentos', 'nubank', 'inter&co', 'c6 bank', 'neon', 'next', 'will bank', 'agibank'];
+const CONECTORES = ['de', 'do', 'da', 'dos', 'das', 'e'];
+
+const semAcento = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+function capitalizar(t) {
+  return t.split(' ').map((p, i) => {
+    if (p.length <= 4 && p === p.toUpperCase() && /[A-Z]/.test(p)) return p;            // BB, BRB, XP: mantém
+    const baixa = p.toLowerCase();
+    if (i > 0 && CONECTORES.includes(baixa)) return baixa;
+    return baixa.charAt(0).toUpperCase() + baixa.slice(1);
+  }).join(' ');
+}
+
+/**
+ * Nome da instituição para mostrar ao cliente: sempre começa com "Banco" e nunca duplica
+ * ("Inter", "inter" e "Banco Inter" viram "Banco Inter"). Exceção: instituições que não são
+ * banco no nome (Caixa, Mercado Pago, PicPay, cooperativas...) ficam como digitadas, só capitalizadas.
+ */
+function normalizarBanco(entrada) {
+  let t = String(entrada || '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!t) return '';
+  const chave = semAcento(t).toLowerCase();
+  if (/^(banco|bco\.?)(\s|$)/.test(chave)) t = t.replace(/^\S+\s*/, '').trim();       // tira "Banco"/"Bco" do começo para recolocar uma vez só
+  if (!t) return '';
+  const base = semAcento(t).toLowerCase();
+  const ehSemPrefixo = SEM_PREFIXO_BANCO.some((n) => base === n || base.startsWith(n + ' '));
+  return capitalizar((ehSemPrefixo ? '' : 'Banco ') + t).slice(0, 40);   // capitaliza o nome completo ("Banco do Brasil", conector em minúscula)
+}
+
 /** Configuração do sinal do negócio, já validada/normalizada. */
 function configSinal(info) {
   const s = (info && info.sinal) || {};
@@ -47,7 +78,7 @@ function configSinal(info) {
     chavePix: s.chavePix || '',
     nomeRecebedor: s.nomeRecebedor || '',
     cidadeRecebedor: s.cidadeRecebedor || '',
-    banco: s.banco || ''
+    banco: normalizarBanco(s.banco)
   };
 }
 
@@ -91,5 +122,5 @@ function limiteSemanal(info) {
 module.exports = {
   STATUS_SINAL, PRAZO_PADRAO_HORAS, PERCENTUAL_PADRAO,
   instanteDoAgendamento, sinalExpirado, statusEfetivo, ocupaHorario,
-  configSinal, calcularSinal, calcularExpiracao, semanaDaChave, contarNaSemana, limiteSemanal
+  configSinal, normalizarBanco, calcularSinal, calcularExpiracao, semanaDaChave, contarNaSemana, limiteSemanal
 };
