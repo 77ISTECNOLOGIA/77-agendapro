@@ -89,7 +89,7 @@ test('painel do dono usa o tema 77 IS (classe tema-77) e o super-admin/cliente n
   const fs2 = require('node:fs'), path2 = require('node:path');
   const ler = (f) => fs2.readFileSync(path2.join(__dirname, '..', f), 'utf8');
   assert.match(ler('admin.html'), /<body class="admin-body tema-77">/);
-  assert.doesNotMatch(ler('painel77.html'), /tema-77/);
+  assert.match(ler('painel77.html'), /<body class="admin-body tema-77">/);   // o super-admin também usa o tema (etapa 3)
   assert.doesNotMatch(ler('index.html'), /tema-77/);
   assert.match(ler('css/marca77.css'), /body\.tema-77 \{[\s\S]*--accent: #0077FF/);
   assert.doesNotMatch(ler('js/admin.js'), /#d4ff3a|212, 255, 58/, 'admin.js não pode ter o verde-limão antigo');
@@ -176,4 +176,16 @@ test('cadastro de negócio: identidade 77 (logo, paleta azul, rodapé padrão) e
   assert.match(h, /<div class="credito-77"[^>]*>Sistema de agendamento criado por <strong>77 IS Tecnologia &amp; Inteligência<\/strong><\/div>/);
   assert.equal((h.match(/class="tipo-btn/g) || []).length, 4, 'os 4 tipos de negócio continuam');
   assert.match(fs2.readFileSync(path2.join(__dirname, '..', 'css', 'marca77.css'), 'utf8'), /body\.cadastro-77 \{[\s\S]*--accent: #0077FF/);
+});
+
+test('super-admin por dentro: tema 77 IS (paleta, logo na barra) e sem o verde-limão antigo', () => {
+  const fs2 = require('node:fs'), path2 = require('node:path');
+  const ler = (f) => fs2.readFileSync(path2.join(__dirname, '..', f), 'utf8');
+  const h = ler('painel77.html');
+  assert.match(h, /<body class="admin-body tema-77">/);
+  assert.match(h, /class="topbar-logo" src="\/img\/logo-77is\.png"/);
+  assert.doesNotMatch(h, /mini-logo/);
+  assert.doesNotMatch(ler('css/painel77.css'), /212,255,58/);
+  assert.doesNotMatch(ler('js/painel77.js'), /#d4ff3a/);
+  assert.doesNotMatch(h, /fonte-77/, 'mantém as fontes originais');
 });

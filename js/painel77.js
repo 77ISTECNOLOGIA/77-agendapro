@@ -314,7 +314,7 @@ function renderOverview() {
   // Status grid
   const items=[
     {label:'Aguardando',valor:cnt.aguardando_aprovacao,cor:'#fbbf24'},
-    {label:'Trial',valor:cnt.trial,cor:'#d4ff3a'},
+    {label:'Trial',valor:cnt.trial,cor:'#00D2FF'},
     {label:'Ativos',valor:cnt.ativa,cor:'#4ade80'},
     {label:'Suspensos',valor:cnt.suspensa,cor:'#ff4444'},
     {label:'Expirados',valor:cnt.expirada,cor:'#737373'}
