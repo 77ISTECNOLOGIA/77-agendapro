@@ -50,6 +50,7 @@ async function executarSinal({ firestore, negocioRef, agendamentoId, whatsNorm, 
     valor,
     expiraEm: ag.sinalExpiraEm || null,
     recebedor: cfg.nomeRecebedor,
+    banco: cfg.banco,
     telefoneNegocio: info.telefone || '',
     pixCopiaECola: montarPixCopiaECola({ chave: cfg.chavePix, valor, nome: cfg.nomeRecebedor, cidade: cfg.cidadeRecebedor, txid: agendamentoId }),
     agendamento: {

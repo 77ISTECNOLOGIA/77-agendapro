@@ -134,7 +134,7 @@ module.exports = async function handler(req, res) {
       agendamento.sinalExpiraEm = calcularExpiracao({ agoraMs, prazoHoras: cfgSinal.prazoHoras, dataChave, horario });
       sinal = {
         valor: valorSinal, percentual: cfgSinal.percentual, expiraEm: agendamento.sinalExpiraEm,
-        recebedor: cfgSinal.nomeRecebedor, telefoneNegocio: info.telefone || '',
+        recebedor: cfgSinal.nomeRecebedor, banco: cfgSinal.banco, telefoneNegocio: info.telefone || '',
         pixCopiaECola: montarPixCopiaECola({ chave: cfgSinal.chavePix, valor: valorSinal, nome: cfgSinal.nomeRecebedor, cidade: cfgSinal.cidadeRecebedor, txid: novoRef.id })
       };
     }

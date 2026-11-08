@@ -64,10 +64,12 @@ test('tela do cliente: pagamento do sinal (tela 7), botão único "Já paguei" e
   assert.match(app, /aguardando_sinal: 'Aguardando sinal', sinal_informado: 'Pagamento informado'/);
   assert.match(app, /data-acao="pagar"/);
   assert.match(app, /btn-sinal-meus'\)\.addEventListener/);
+  assert.match(app, /s\.banco \?/, 'mostra o banco quando informado');
+  assert.match(app, /confira se este nome aparece como destinatário/);
 });
 
 test('painel do dono: confirmar/recusar pagamento, configuração do sinal e limite semanal', () => {
-  for (const id of ['pagamentos-confirmar', 'sinal-ativo', 'sinal-percentual', 'sinal-prazo-horas', 'sinal-tipo-chave', 'sinal-chave', 'sinal-nome-recebedor', 'sinal-cidade-recebedor', 'limite-semana', 'btn-salvar-sinal']) {
+  for (const id of ['pagamentos-confirmar', 'sinal-ativo', 'sinal-percentual', 'sinal-prazo-horas', 'sinal-tipo-chave', 'sinal-chave', 'sinal-nome-recebedor', 'sinal-cidade-recebedor', 'sinal-banco', 'limite-semana', 'btn-salvar-sinal']) {
     assert.match(adminHtml, new RegExp('id="' + id + '"'), id);
   }
   assert.match(admin, /async function confirmarSinal\(id\)[\s\S]{0,260}status: 'confirmado'/);

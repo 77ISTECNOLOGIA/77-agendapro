@@ -835,3 +835,6 @@ input { font-family: inherit; }
 .meu-ag-status-aguardando_sinal { background: rgba(251, 191, 36, 0.14); color: #fbbf24; }
 .meu-ag-status-sinal_informado { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
 #tela-7 .tela-footer { display: flex; flex-direction: column; gap: 10px; }
+
+.sinal-recebedor-nome { font-size: 13px; color: var(--text); line-height: 1.5; overflow-wrap: anywhere; }
+.sinal-recebedor-dica { font-size: 11px; color: var(--text-muted); margin-top: 4px; line-height: 1.4; }

@@ -258,7 +258,7 @@ test('configurar: exige login do dono, valida a chave Pix e grava sinal + limite
   const ok = await chamar(configurar, req('POST', { body: corpo() }));
   assert.equal(ok.statusCode, 200);
   const salvo = amb.fake.get(`barbearias/${SLUG}`);
-  assert.deepEqual(salvo.sinal, { ativo: true, percentual: 40, prazoHoras: 12, tipoChave: 'cpf', chavePix: '12345678909', nomeRecebedor: 'JOAO DA SILVA', cidadeRecebedor: 'NITEROI' });
+  assert.deepEqual(salvo.sinal, { ativo: true, percentual: 40, prazoHoras: 12, tipoChave: 'cpf', chavePix: '12345678909', nomeRecebedor: 'João da Silva', cidadeRecebedor: 'Niterói', banco: '' });
   assert.equal(salvo.limiteAgendamentosSemana, 2);
 });
 
@@ -269,4 +269,22 @@ test('configurar: dá para desligar o sinal sem informar chave', async () => {
   assert.equal(amb.fake.get(`barbearias/${SLUG}`).sinal.ativo, false);
   const nova = await agendar();
   assert.equal(nova.body.agendamento.status, 'confirmado');
+});
+
+test('nome longo do recebedor: aparece INTEIRO para o cliente; só o código Pix corta em 25 letras; banco é guardado e mostrado', async () => {
+  const nomeLongo = 'Felipe Gomes do Nascimento';   // 26 letras: estourava o limite do BR Code
+  const r = await chamar(configurar, req('POST', { body: { idToken: 'tok-dono1', limiteAgendamentosSemana: 0,
+    sinal: { ativo: true, percentual: 50, prazoHoras: 24, tipoChave: 'email', chavePix: 'dono@barbearia.com', nomeRecebedor: nomeLongo, cidadeRecebedor: 'Rio de Janeiro', banco: ' Nubank ' } } }));
+  assert.equal(r.statusCode, 200);
+  assert.equal(amb.fake.get(`barbearias/${SLUG}`).sinal.nomeRecebedor, nomeLongo, 'guardado por inteiro');
+  assert.equal(amb.fake.get(`barbearias/${SLUG}`).sinal.banco, 'Nubank');
+
+  const a = await agendar();
+  assert.equal(a.body.sinal.recebedor, nomeLongo);
+  assert.equal(a.body.sinal.banco, 'Nubank');
+  assert.ok(a.body.sinal.pixCopiaECola.includes('5925FELIPE GOMES DO NASCIMENT'), 'no BR Code o nome é cortado em 25');
+
+  const dados = await chamar(agendamentoCliente, acaoSinal('dados', a.body.id));
+  assert.equal(dados.body.recebedor, nomeLongo);
+  assert.equal(dados.body.banco, 'Nubank');
 });

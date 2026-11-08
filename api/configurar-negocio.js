@@ -4,12 +4,12 @@
 // ========================================
 // Só o DONO (token do Firebase verificado + usuarios/{uid}). Fica no servidor (e não nas regras do
 // Firestore) para validar a chave Pix, o percentual e o limite antes de gravar.
-// POST { idToken, sinal: { ativo, percentual, prazoHoras, tipoChave, chavePix, nomeRecebedor, cidadeRecebedor },
+// POST { idToken, sinal: { ativo, percentual, prazoHoras, tipoChave, chavePix, nomeRecebedor, cidadeRecebedor, banco },
 //        limiteAgendamentosSemana }
 
 const { db, auth } = require('./_lib/firebase');
 const { dentroDoLimite, dentroDoLimitePorChave, responder, ErroNegocio, tratarErro, corpoDe } = require('./_lib/http');
-const { normalizarChavePix, limparTexto } = require('./_lib/pix');
+const { normalizarChavePix } = require('./_lib/pix');
 
 const texto = (v, max) => String(v || '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
 
@@ -21,15 +21,18 @@ function validarSinal(s) {
   if (!Number.isFinite(percentual) || percentual < 10 || percentual > 100) throw new ErroNegocio(400, 'O percentual do sinal deve ficar entre 10% e 100%.');
   if (!Number.isFinite(prazoHoras) || prazoHoras < 1 || prazoHoras > 72) throw new ErroNegocio(400, 'O prazo para pagar deve ficar entre 1 e 72 horas.');
 
-  const out = { ativo, percentual, prazoHoras, tipoChave: '', chavePix: '', nomeRecebedor: '', cidadeRecebedor: '' };
+  const out = { ativo, percentual, prazoHoras, tipoChave: '', chavePix: '', nomeRecebedor: '', cidadeRecebedor: '', banco: '' };
   const temChave = !!texto(s.chavePix, 100);
   if (ativo || temChave) {
     const chave = normalizarChavePix(s.tipoChave, s.chavePix);
     if (!chave.ok) throw new ErroNegocio(400, chave.erro);
     out.tipoChave = s.tipoChave;
     out.chavePix = chave.chave;
-    out.nomeRecebedor = limparTexto(texto(s.nomeRecebedor, 60), 25);
-    out.cidadeRecebedor = limparTexto(texto(s.cidadeRecebedor, 40), 15);
+    // Guardamos o texto como a pessoa digitou (é o que o cliente lê na tela). O limite de 25/15 letras sem acento
+    // do BR Code é aplicado só na hora de gerar o Pix (api/_lib/pix.js).
+    out.nomeRecebedor = texto(s.nomeRecebedor, 60);
+    out.cidadeRecebedor = texto(s.cidadeRecebedor, 40);
+    out.banco = texto(s.banco, 40);
     if (!out.nomeRecebedor) throw new ErroNegocio(400, 'Informe o nome de quem recebe o Pix (como aparece no banco).');
     if (!out.cidadeRecebedor) throw new ErroNegocio(400, 'Informe a cidade de quem recebe o Pix.');
   }

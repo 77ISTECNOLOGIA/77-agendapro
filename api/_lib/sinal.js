@@ -46,7 +46,8 @@ function configSinal(info) {
     tipoChave: s.tipoChave || '',
     chavePix: s.chavePix || '',
     nomeRecebedor: s.nomeRecebedor || '',
-    cidadeRecebedor: s.cidadeRecebedor || ''
+    cidadeRecebedor: s.cidadeRecebedor || '',
+    banco: s.banco || ''
   };
 }
 

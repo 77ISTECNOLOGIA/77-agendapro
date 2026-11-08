@@ -2204,6 +2204,7 @@ function preencherRegrasAgendamento() {
   $('#sinal-chave').value = sinal.chavePix || '';
   $('#sinal-nome-recebedor').value = sinal.nomeRecebedor || '';
   $('#sinal-cidade-recebedor').value = sinal.cidadeRecebedor || '';
+  $('#sinal-banco').value = sinal.banco || '';
   $('#limite-semana').value = state.barbearia.limiteAgendamentosSemana || 0;
   $('#sinal-campos').style.opacity = $('#sinal-ativo').checked ? '1' : '0.55';
 }
@@ -2226,7 +2227,8 @@ async function salvarRegrasAgendamento() {
           tipoChave: $('#sinal-tipo-chave').value,
           chavePix: $('#sinal-chave').value.trim(),
           nomeRecebedor: $('#sinal-nome-recebedor').value.trim(),
-          cidadeRecebedor: $('#sinal-cidade-recebedor').value.trim()
+          cidadeRecebedor: $('#sinal-cidade-recebedor').value.trim(),
+          banco: $('#sinal-banco').value.trim()
         }
       })
     });

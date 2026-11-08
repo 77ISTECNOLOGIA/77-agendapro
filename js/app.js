@@ -867,7 +867,10 @@ function renderizarTelaSinal() {
 
   $('#sinal-valor').textContent = formatarMoeda(s.valor);
   $('#sinal-prazo').textContent = informado ? '' : textoPrazoSinal(s.expiraEm);
-  $('#sinal-recebedor').textContent = s.recebedor ? `Quem recebe: ${s.recebedor}` : '';
+  $('#sinal-recebedor').innerHTML = s.recebedor
+    ? `<div class="sinal-recebedor-nome">Quem recebe: <strong>${escapeHtml(s.recebedor)}</strong>${s.banco ? ` · ${escapeHtml(s.banco)}` : ''}</div>
+       <div class="sinal-recebedor-dica">Antes de confirmar o Pix no seu banco, confira se este nome aparece como destinatário.</div>`
+    : '';
   $('#sinal-pagamento').classList.toggle('hidden', informado);
   $('#sinal-informado').classList.toggle('hidden', !informado);
   $('#btn-ja-paguei').classList.toggle('hidden', informado);
