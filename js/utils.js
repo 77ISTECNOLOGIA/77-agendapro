@@ -132,7 +132,7 @@ export function resumoPeriodo(agendamentos, de, ate) {
   Object.values(agendamentos || {}).forEach((a) => {
     if (!a || !a.dataChave || a.dataChave < de || a.dataChave > ate) return;
     if (a.status === 'cancelado') { r.cancelados++; if (a.motivoCancelamento === 'nao-compareceu') r.faltas++; return; }
-    if (a.status === 'confirmado') { r.pendentes++; return; }
+    if (a.status === 'confirmado' || a.status === 'aguardando_sinal' || a.status === 'sinal_informado') { r.pendentes++; return; }
     if (a.status !== 'concluido') return;
     r.atendimentos++;
     r.faturamento += Number(a.valorTotal) || 0;

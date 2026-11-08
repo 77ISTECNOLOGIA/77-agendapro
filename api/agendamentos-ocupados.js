@@ -10,6 +10,7 @@ const { db } = require('./_lib/firebase');
 const { hojeChaveBrasil } = require('./_lib/tempo');
 const { slugValido } = require('./_lib/negocio');
 const { dentroDoLimite, responder, tratarErro } = require('./_lib/http');
+const { ocupaHorario } = require('./_lib/sinal');
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'GET') return responder(res, 405, { erro: 'Método não permitido' });
@@ -24,7 +25,7 @@ module.exports = async function handler(req, res) {
 
     const ocupados = snap.docs
       .map((doc) => ({ id: doc.id, ...doc.data() }))
-      .filter((a) => a.status !== 'cancelado')
+      .filter((a) => ocupaHorario(a))
       .map((a) => ({
         id: a.id,
         profissionalId: a.profissionalId,

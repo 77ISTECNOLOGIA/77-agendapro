@@ -104,6 +104,26 @@ async function notificarAlteracaoCliente(negocioRef, agendamentoId, { tipo, ag, 
   }
 }
 
+/** Cliente tocou em "Já paguei": avisa o dono para conferir o Pix e confirmar. Nunca lança. */
+async function notificarSinalInformado(negocioRef, agendamentoId, ag) {
+  try {
+    const nome = String(ag.clienteNome || '').split(' ')[0] || 'Cliente';
+    const servicos = (ag.servicos || []).map((s) => s.nome).join(' + ');
+    const valor = Number(ag.sinalValor || 0).toFixed(2).replace('.', ',');
+    const r = await enviarParaDispositivos(negocioRef, {
+      titulo: '💰 Sinal informado',
+      corpo: `${nome} informou o Pix de R$ ${valor} — ${dataHora(ag.dataChave, ag.horario)} — ${servicos}. Confira e confirme no painel.`,
+      tag: `sinal-${agendamentoId}`,
+      dados: { agendamentoId, tipo: 'sinal' },
+      link: `${process.env.APP_URL || 'https://77-agendapro.vercel.app'}/admin?agendamento=${encodeURIComponent(agendamentoId)}`
+    });
+    return { enviadas: r.enviadas };
+  } catch (err) {
+    console.error('Falha ao avisar o dono do sinal informado:', err);
+    return { enviadas: 0, erro: true };
+  }
+}
+
 /** Melhor esforço: nunca lança, nunca bloqueia o agendamento. */
 async function notificarNovoAgendamento(negocioRef, agendamentoRef, agendamento) {
   try {
@@ -124,4 +144,4 @@ async function notificarNovoAgendamento(negocioRef, agendamentoRef, agendamento)
   }
 }
 
-module.exports = { notificarNovoAgendamento, notificarAlteracaoCliente, enviarParaDispositivos, montarCorpo };
+module.exports = { notificarNovoAgendamento, notificarAlteracaoCliente, notificarSinalInformado, enviarParaDispositivos, montarCorpo };

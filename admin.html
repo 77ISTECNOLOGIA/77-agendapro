@@ -134,6 +134,9 @@
           <button id="btn-atualizar-dash" class="btn-icon-outline" title="Atualizar">↻</button>
         </div>
 
+        <!-- Pagamentos de sinal (Pix) informados pelo cliente: conferir e confirmar -->
+        <div id="pagamentos-confirmar" class="pendencias-card" hidden></div>
+
         <!-- Atendimentos esquecidos: concluir ou cancelar -->
         <div id="pendencias-resolver" class="pendencias-card" hidden></div>
 
@@ -381,6 +384,61 @@
             <div id="horarios-funcionamento" class="horarios-conf">
               <!-- Renderizado dinamicamente -->
             </div>
+          </div>
+
+          <!-- Sinal por Pix e limite por semana -->
+          <div class="card-grande" style="margin-top: 20px;" id="card-regras-agendamento">
+            <div class="card-header">
+              <h3 class="card-titulo">Sinal por Pix e limite de agendamentos</h3>
+            </div>
+            <p style="color: var(--text-dim); font-size: 13px; margin-bottom: 14px; line-height: 1.5;">
+              Com o sinal ligado, o cliente reserva o horário, paga uma parte por Pix direto na SUA conta e toca em "Já paguei". Você confere o recebimento e confirma pelo painel.
+            </p>
+            <label style="display:flex;gap:10px;align-items:center;cursor:pointer;margin-bottom:14px;">
+              <input type="checkbox" id="sinal-ativo"> <span>Cobrar sinal por Pix nos agendamentos feitos pelo link</span>
+            </label>
+            <div id="sinal-campos">
+              <div class="form-grid">
+                <div class="input-grupo">
+                  <label class="input-label">VALOR DO SINAL (% DO SERVIÇO)</label>
+                  <input type="number" id="sinal-percentual" class="input" min="10" max="100" step="5" value="50">
+                </div>
+                <div class="input-grupo">
+                  <label class="input-label">PRAZO PARA O CLIENTE PAGAR (HORAS)</label>
+                  <input type="number" id="sinal-prazo-horas" class="input" min="1" max="72" step="1" value="24">
+                  <small class="campo-help">Termina no máximo 2 horas antes do horário marcado.</small>
+                </div>
+                <div class="input-grupo">
+                  <label class="input-label">TIPO DA CHAVE PIX</label>
+                  <select id="sinal-tipo-chave" class="input">
+                    <option value="">Escolha...</option>
+                    <option value="cpf">CPF</option>
+                    <option value="cnpj">CNPJ</option>
+                    <option value="telefone">Telefone</option>
+                    <option value="email">E-mail</option>
+                    <option value="aleatoria">Chave aleatória</option>
+                  </select>
+                </div>
+                <div class="input-grupo">
+                  <label class="input-label">CHAVE PIX</label>
+                  <input type="text" id="sinal-chave" class="input" autocomplete="off">
+                </div>
+                <div class="input-grupo">
+                  <label class="input-label">NOME DE QUEM RECEBE (COMO NO BANCO)</label>
+                  <input type="text" id="sinal-nome-recebedor" class="input" maxlength="60">
+                </div>
+                <div class="input-grupo">
+                  <label class="input-label">CIDADE DE QUEM RECEBE</label>
+                  <input type="text" id="sinal-cidade-recebedor" class="input" maxlength="40">
+                </div>
+              </div>
+            </div>
+            <div class="input-grupo" style="margin-top:6px;">
+              <label class="input-label">LIMITE DE AGENDAMENTOS POR CLIENTE, POR SEMANA</label>
+              <input type="number" id="limite-semana" class="input" min="0" max="14" step="1" value="0" style="max-width:140px;">
+              <small class="campo-help">Semana de segunda a domingo, contada por WhatsApp. 0 = sem limite. Não vale para os agendamentos que você mesmo cria no painel.</small>
+            </div>
+            <button type="button" id="btn-salvar-sinal" class="btn-acao" style="margin-top:14px;">Salvar regras de agendamento</button>
           </div>
 
           <!-- Notificações Push -->

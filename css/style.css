@@ -820,3 +820,18 @@ input { font-family: inherit; }
   object-fit: cover;
   display: block;
 }
+
+/* ====== Sinal por Pix (tela do cliente) ====== */
+.aviso-sinal { background: color-mix(in srgb, var(--accent) 10%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); border-radius: 12px; padding: 12px 14px; font-size: 13px; line-height: 1.5; margin: 14px 0; color: var(--text); }
+.sinal-pagamento { text-align: center; margin-top: 18px; }
+.sinal-valor-rotulo { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); }
+.sinal-valor { font-family: 'Bricolage Grotesque', sans-serif; font-size: 38px; font-weight: 800; letter-spacing: -0.02em; margin: 4px 0 6px; }
+.sinal-prazo { font-size: 13px; color: var(--text-dim); margin-bottom: 14px; }
+.sinal-qr { margin-top: 14px; text-align: center; font-size: 13px; color: var(--text-dim); }
+.sinal-qr summary { cursor: pointer; padding: 8px; }
+.sinal-qr-img { display: inline-block; background: #fff; padding: 10px; border-radius: 10px; margin-top: 8px; }
+.sinal-recebedor { margin-top: 12px; font-size: 12px; color: var(--text-muted); }
+.sinal-informado { margin-top: 18px; background: color-mix(in srgb, var(--accent) 10%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); border-radius: 12px; padding: 14px; font-size: 14px; line-height: 1.5; }
+.meu-ag-status-aguardando_sinal { background: rgba(251, 191, 36, 0.14); color: #fbbf24; }
+.meu-ag-status-sinal_informado { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+#tela-7 .tela-footer { display: flex; flex-direction: column; gap: 10px; }

@@ -5,6 +5,7 @@
 // horário de término (horário + duração) + margem já passou. Aqui "agora" é o de Brasília.
 
 const { enviarParaDispositivos } = require('./notificar');
+const { sinalExpirado } = require('./sinal');
 
 const MARGEM_PENDENCIA_MIN = 30;
 
@@ -26,24 +27,42 @@ function contarPendentes(agendamentos, agora, margemMin = MARGEM_PENDENCIA_MIN) 
   }).length;
 }
 
-/** Avisa o dono (push) se há atendimentos esquecidos. Nunca lança. Devolve a quantidade pendente. */
+/** Cancela reservas aguardando sinal cujo prazo venceu (o horário já estava livre; aqui só arruma o status). */
+async function limparSinaisVencidos(negocioRef, agoraMs = Date.now()) {
+  const snap = await negocioRef.collection('agendamentos').where('status', '==', 'aguardando_sinal').get();
+  let n = 0;
+  for (const d of snap.docs) {
+    if (sinalExpirado(d.data(), agoraMs)) {
+      await d.ref.update({ status: 'cancelado', canceladoEm: new Date().toISOString(), canceladoPor: 'sinal-expirado' });
+      n++;
+    }
+  }
+  return n;
+}
+
+/** Avisa o dono (push) se há atendimentos esquecidos ou pagamentos de sinal para confirmar. Nunca lança. Devolve o total. */
 async function avisarPendentes(negocioRef, agora) {
   try {
-    const snap = await negocioRef.collection('agendamentos').where('status', '==', 'confirmado').get();
-    const n = contarPendentes(snap.docs.map((d) => d.data()), agora);
-    if (!n) return 0;
+    const [confSnap, pagSnap] = await Promise.all([
+      negocioRef.collection('agendamentos').where('status', '==', 'confirmado').get(),
+      negocioRef.collection('agendamentos').where('status', '==', 'sinal_informado').get()
+    ]);
+    const n = contarPendentes(confSnap.docs.map((d) => d.data()), agora);
+    const p = pagSnap.size;
+    if (!n && !p) return 0;
+    const partes = [];
+    if (n) partes.push(n === 1 ? '1 atendimento para concluir ou cancelar' : `${n} atendimentos para concluir ou cancelar`);
+    if (p) partes.push(p === 1 ? '1 pagamento de sinal para confirmar' : `${p} pagamentos de sinal para confirmar`);
     await enviarParaDispositivos(negocioRef, {
-      corpo: n === 1
-        ? 'Você tem 1 atendimento para concluir ou cancelar. Só os concluídos entram no faturamento.'
-        : `Você tem ${n} atendimentos para concluir ou cancelar. Só os concluídos entram no faturamento.`,
+      corpo: `Você tem ${partes.join(' e ')}.${n ? ' Só os concluídos entram no faturamento.' : ''}`,
       tag: `pendencias-${agora.dataChave}`,
       dados: { tipo: 'pendencias' }
     });
-    return n;
+    return n + p;
   } catch (err) {
     console.error('Falha ao avisar atendimentos pendentes:', err);
     return 0;
   }
 }
 
-module.exports = { contarPendentes, avisarPendentes, MARGEM_PENDENCIA_MIN };
+module.exports = { contarPendentes, avisarPendentes, limparSinaisVencidos, MARGEM_PENDENCIA_MIN };

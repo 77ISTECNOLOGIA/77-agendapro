@@ -11,7 +11,7 @@
 const { db } = require('./_lib/firebase');
 const { agoraBrasil, hojeChaveBrasil } = require('./_lib/tempo');
 const { renovarSeries } = require('./_lib/recorrencia');
-const { avisarPendentes } = require('./_lib/pendencias');
+const { avisarPendentes, limparSinaisVencidos } = require('./_lib/pendencias');
 const { situacaoNegocio } = require('./_lib/negocio');
 const { responder, tratarErro } = require('./_lib/http');
 
@@ -29,7 +29,8 @@ module.exports = async function handler(req, res) {
     const negocios = await firestore.collection('barbearias').get();
     for (const n of negocios.docs) {
       try {
-        if (situacaoNegocio(n.data()).aceita && await avisarPendentes(n.ref, agora)) total.avisos++;   // push: atendimentos esquecidos
+        await limparSinaisVencidos(n.ref).catch((e) => console.error('Falha ao limpar sinais vencidos de ' + n.id, e));
+        if (situacaoNegocio(n.data()).aceita && await avisarPendentes(n.ref, agora)) total.avisos++;   // push: atendimentos esquecidos e sinais para confirmar
         const r = await renovarSeries({ firestore, negocioRef: n.ref, info: n.data(), hojeChave, agora });
         if (r.ignorado) continue;
         total.negocios++;

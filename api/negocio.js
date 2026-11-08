@@ -13,6 +13,7 @@ const {
   slugValido, situacaoNegocio, infoPublica, profissionalPublico, servicoPublico
 } = require('./_lib/negocio');
 const { dentroDoLimite, responder, tratarErro } = require('./_lib/http');
+const { ocupaHorario } = require('./_lib/sinal');
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'GET') return responder(res, 405, { erro: 'Método não permitido' });
@@ -45,7 +46,7 @@ module.exports = async function handler(req, res) {
 
     const ocupados = ocupadosSnap.docs
       .map((d) => ({ id: d.id, ...d.data() }))
-      .filter((a) => a.status !== 'cancelado')
+      .filter((a) => ocupaHorario(a))
       .map((a) => ({
         id: a.id,
         profissionalId: a.profissionalId,

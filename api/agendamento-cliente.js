@@ -27,7 +27,9 @@ const {
 } = require('./_lib/tempo');
 const { verificarSlot } = require('./_lib/disponibilidade');
 const { notificarAlteracaoCliente } = require('./_lib/notificar');
+const { executarSinal } = require('./_lib/sinal-acoes');
 const { slugValido, situacaoNegocio } = require('./_lib/negocio');
+const { statusEfetivo, contarNaSemana, limiteSemanal, semanaDaChave, ocupaHorario } = require('./_lib/sinal');
 const { dentroDoLimite, responder, ErroNegocio, tratarErro, corpoDe } = require('./_lib/http');
 
 const LIMITE_REMARCACOES_CLIENTE = 1;
@@ -43,7 +45,9 @@ function publico(a) {
     horario: a.horario,
     duracaoMin: a.duracaoMin,
     valorTotal: a.valorTotal,
-    status: a.status,
+    status: statusEfetivo(a),
+    sinalValor: a.sinalValor || 0,
+    sinalExpiraEm: a.sinalExpiraEm || null,
     remarcacoesCliente: a.remarcacoesCliente || 0
   };
 }
@@ -86,6 +90,13 @@ module.exports = async function handler(req, res) {
       return responder(res, 200, { agendamentos: meus });
     }
 
+    if (action === 'sinal-dados' || action === 'sinal-informar') {
+      if (!agendamentoId || typeof agendamentoId !== 'string' || agendamentoId.includes('/') || agendamentoId.length > 64) {
+        return responder(res, 400, { erro: 'Parâmetro obrigatório: agendamentoId' });
+      }
+      return responder(res, 200, await executarSinal({ firestore, negocioRef, agendamentoId, whatsNorm, action }));
+    }
+
     if (action !== 'cancelar' && action !== 'remarcar') {
       return responder(res, 400, { erro: 'Ação inválida' });
     }
@@ -100,15 +111,17 @@ module.exports = async function handler(req, res) {
       await firestore.runTransaction(async (tx) => {
         const ag = (await tx.get(agRef)).data();
         if (!ag || ag.clienteWhatsapp !== whatsNorm) throw new ErroNegocio(404, 'Agendamento não encontrado');
-        if (ag.status !== 'confirmado') throw new ErroNegocio(400, 'Este agendamento não pode mais ser cancelado');
-        if (ag.dataChave <= hojeChaveBrasil()) {
+        const efetivo = statusEfetivo(ag);
+        if (efetivo === 'sinal_informado') throw new ErroNegocio(400, 'Você já informou o pagamento do sinal. Para cancelar, fale direto com o estabelecimento.');
+        if (efetivo !== 'confirmado' && efetivo !== 'aguardando_sinal') throw new ErroNegocio(400, 'Este agendamento não pode mais ser cancelado');
+        if (efetivo === 'confirmado' && ag.dataChave <= hojeChaveBrasil()) {
           throw new ErroNegocio(400, 'Esse agendamento está a menos de 1 dia da data marcada. Pra cancelar agora, entre em contato direto com o estabelecimento.');
         }
         tx.update(agRef, { status: 'cancelado', canceladoEm: new Date().toISOString(), canceladoPor: 'cliente' });
         cancelado = ag;
       });
-      // avisa o dono (push); falha aqui nunca desfaz o cancelamento
-      await notificarAlteracaoCliente(negocioRef, agendamentoId, { tipo: 'cancelou', ag: cancelado });
+      // avisa o dono (push); falha aqui nunca desfaz o cancelamento. Reserva ainda sem sinal: o dono nem sabia dela.
+      if (cancelado.status === 'confirmado') await notificarAlteracaoCliente(negocioRef, agendamentoId, { tipo: 'cancelou', ag: cancelado });
       return responder(res, 200, { sucesso: true });
     }
 
@@ -125,9 +138,10 @@ module.exports = async function handler(req, res) {
 
     let remarcado = null;
     await firestore.runTransaction(async (tx) => {
-      const [agSnap, diaSnap] = await Promise.all([
+      const [agSnap, diaSnap, doClienteSnap] = await Promise.all([
         tx.get(agRef),
-        tx.get(agsRef.where('dataChave', '==', novaDataChave))
+        tx.get(agsRef.where('dataChave', '==', novaDataChave)),
+        tx.get(agsRef.where('clienteWhatsapp', '==', whatsNorm))
       ]);
       const ag = agSnap.data();
 
@@ -142,6 +156,15 @@ module.exports = async function handler(req, res) {
 
       if (ag.dataChave === novaDataChave && ag.horario === novoHorario) {
         throw new ErroNegocio(400, 'Escolha um dia ou horário diferente do atual.');
+      }
+
+      // limite de agendamentos por semana: a nova semana não pode estourar (o próprio agendamento não conta)
+      const limite = limiteSemanal(info);
+      const doCliente = doClienteSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      if (limite && contarNaSemana(doCliente, novaDataChave, Date.now(), agendamentoId) >= limite) {
+        const sem = semanaDaChave(novaDataChave);
+        const fmt = (c) => c.slice(8, 10) + '/' + c.slice(5, 7);
+        throw new ErroNegocio(409, `Você já tem ${limite} agendamento${limite === 1 ? '' : 's'} na semana de ${fmt(sem.ini)} a ${fmt(sem.fim)}, que é o limite deste estabelecimento. Escolha outra semana ou fale direto com eles.`);
       }
 
       const profSnap = await tx.get(negocioRef.collection('profissionais').doc(ag.profissionalId));

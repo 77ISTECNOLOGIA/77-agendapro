@@ -20,6 +20,10 @@ const { verificarSlot } = require('./_lib/disponibilidade');
 const { slugValido, situacaoNegocio, profissionalRealizaServico } = require('./_lib/negocio');
 const { dentroDoLimite, responder, ErroNegocio, tratarErro, corpoDe } = require('./_lib/http');
 const { notificarNovoAgendamento } = require('./_lib/notificar');
+const { montarPixCopiaECola } = require('./_lib/pix');
+const {
+  STATUS_SINAL, configSinal, calcularSinal, calcularExpiracao, contarNaSemana, limiteSemanal, semanaDaChave, ocupaHorario
+} = require('./_lib/sinal');
 
 const MAX_SERVICOS_POR_AGENDAMENTO = 10;
 const MAX_AGENDAMENTOS_FUTUROS_POR_CLIENTE = 5;
@@ -93,7 +97,7 @@ module.exports = async function handler(req, res) {
     const doCliente = await agsRef.where('clienteWhatsapp', '==', whatsapp).get();
     const futuros = doCliente.docs.filter((d) => {
       const a = d.data();
-      return a.status === 'confirmado' && a.dataChave >= hoje;
+      return (a.status === 'confirmado' || (STATUS_SINAL.includes(a.status) && ocupaHorario(a))) && a.dataChave >= hoje;
     }).length;
     if (futuros >= MAX_AGENDAMENTOS_FUTUROS_POR_CLIENTE) {
       throw new ErroNegocio(429, 'Você já tem vários agendamentos futuros neste estabelecimento. Cancele algum ou fale direto com eles.');
@@ -118,18 +122,49 @@ module.exports = async function handler(req, res) {
       origem: 'cliente'
     };
 
+    // Sinal por Pix: o horário fica reservado (aguardando_sinal) até o cliente pagar e avisar, ou o prazo vencer
+    const cfgSinal = configSinal(info);
+    const agoraMs = Date.now();
+    let sinal = null;
+    if (cfgSinal.ativo) {
+      const valorSinal = calcularSinal(valorTotal, cfgSinal.percentual);
+      agendamento.status = 'aguardando_sinal';
+      agendamento.sinalValor = valorSinal;
+      agendamento.sinalPercentual = cfgSinal.percentual;
+      agendamento.sinalExpiraEm = calcularExpiracao({ agoraMs, prazoHoras: cfgSinal.prazoHoras, dataChave, horario });
+      sinal = {
+        valor: valorSinal, percentual: cfgSinal.percentual, expiraEm: agendamento.sinalExpiraEm,
+        recebedor: cfgSinal.nomeRecebedor, telefoneNegocio: info.telefone || '',
+        pixCopiaECola: montarPixCopiaECola({ chave: cfgSinal.chavePix, valor: valorSinal, nome: cfgSinal.nomeRecebedor, cidade: cfgSinal.cidadeRecebedor, txid: novoRef.id })
+      };
+    }
+    const limite = limiteSemanal(info);
+
     await firestore.runTransaction(async (tx) => {
       // Todas as leituras antes das escritas (regra do Firestore)
-      const [diaSnap, clienteSnap] = await Promise.all([
+      const [diaSnap, clienteSnap, doClienteSnap] = await Promise.all([
         tx.get(agsRef.where('dataChave', '==', dataChave)),
-        tx.get(clienteRef)
+        tx.get(clienteRef),
+        tx.get(agsRef.where('clienteWhatsapp', '==', whatsapp))
       ]);
+      const doClienteAgora = doClienteSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+      // uma reserva aguardando sinal por vez (evita reservar vários horários sem pagar)
+      if (cfgSinal.ativo && doClienteAgora.some((a) => a.status === 'aguardando_sinal' && ocupaHorario(a, agoraMs))) {
+        throw new ErroNegocio(409, 'Você já tem uma reserva aguardando o pagamento do sinal. Pague (ou cancele) antes de fazer outra.');
+      }
+      // limite de agendamentos por semana (segunda a domingo), por cliente
+      if (limite && contarNaSemana(doClienteAgora, dataChave, agoraMs) >= limite) {
+        const sem = semanaDaChave(dataChave);
+        const fmt = (c) => c.slice(8, 10) + '/' + c.slice(5, 7);
+        throw new ErroNegocio(409, `Você já tem ${limite} agendamento${limite === 1 ? '' : 's'} na semana de ${fmt(sem.ini)} a ${fmt(sem.fim)}, que é o limite deste estabelecimento. Escolha outra semana ou fale direto com eles.`);
+      }
 
       const v = verificarSlot({
         prof, info,
         agendamentos: diaSnap.docs.map(d => ({ id: d.id, ...d.data() })),
         dataChave, horario, duracaoMin,
-        agora: agoraBrasil()
+        agora: agoraBrasil(), agoraMs
       });
       if (!v.ok) throw new ErroNegocio(409, `Horário indisponível: ${v.motivo}`);
 
@@ -154,12 +189,14 @@ module.exports = async function handler(req, res) {
       }
     });
 
-    await notificarNovoAgendamento(negocioRef, novoRef, agendamento);
+    // com sinal, o dono só é avisado quando o cliente informar o pagamento (api/_lib/sinal-acoes.js)
+    if (!sinal) await notificarNovoAgendamento(negocioRef, novoRef, agendamento);
 
     return responder(res, 201, {
       sucesso: true,
       id: novoRef.id,
-      agendamento: { ...agendamento, profissionalNome: prof.nome || '' }
+      agendamento: { ...agendamento, profissionalNome: prof.nome || '' },
+      sinal
     });
   } catch (err) {
     return tratarErro(res, err, 'criar-agendamento');

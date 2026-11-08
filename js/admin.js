@@ -552,6 +552,11 @@ function ativarListenersTempoReal() {
     state.listeners.push(onSnapshot(collection(negocioRef, chave), (snap) => {
       const dados = {};
       snap.forEach(d => { dados[d.id] = d.data(); });
+      if (chave === 'agendamentos') {
+        Object.values(dados).forEach((a) => {
+          if (a.status === 'aguardando_sinal' && a.sinalExpiraEm && Date.parse(a.sinalExpiraEm) <= Date.now()) { a.status = 'cancelado'; a._sinalExpirado = true; }
+        });
+      }
       state[chave] = dados;
       renderizarViewAtual();
     }));
@@ -803,10 +808,12 @@ async function marcarLembreteEnviado(agendamentoId) {
   }
 }
 
+const ROTULO_STATUS = { confirmado: 'Confirmado', concluido: 'Concluído', cancelado: 'Cancelado', aguardando_sinal: 'Aguardando sinal', sinal_informado: 'Pagamento informado' };
+
 function renderizarCardAgendamento(a) {
   const statusClass = a.status === 'concluido' ? 'concluido' : a.status === 'cancelado' ? 'cancelado' : '';
-  const statusLabel = { confirmado: 'Confirmado', concluido: 'Concluído', cancelado: 'Cancelado' }[a.status];
-  const statusCor = { confirmado: 'confirmado', concluido: 'concluido', cancelado: 'cancelado' }[a.status];
+  const statusLabel = a._sinalExpirado ? 'Sinal expirado' : ROTULO_STATUS[a.status];
+  const statusCor = { confirmado: 'confirmado', concluido: 'concluido', cancelado: 'cancelado', aguardando_sinal: 'aguardando_sinal', sinal_informado: 'sinal_informado' }[a.status];
   const lembreteBadge = (a.status === 'confirmado' && a.lembreteEnviado)
     ? '<span title="Lembrete enviado" style="color: var(--success); font-size: 11px; margin-right: 4px;">💬✓</span>'
     : '';
@@ -892,11 +899,13 @@ function abrirDetalhesAgendamento(id) {
       <div class="det-linha"><span class="label">Horário</span><span class="valor">${escapeHtml(a.horario)} — ${minutosParaHora(fimMin)}</span></div>
       <div class="det-linha"><span class="label">Serviços</span><span class="valor">${(a.servicos || []).map(s => escapeHtml(s.nome)).join(' + ')}</span></div>
       <div class="det-linha"><span class="label">Total</span><span class="valor" style="color:var(--accent);font-family:'Bricolage Grotesque';font-weight:700;font-size:16px;">${formatarMoeda(a.valorTotal)}</span></div>
-      <div class="det-linha"><span class="label">Status</span><span class="valor"><span class="agendamento-status status-${escapeHtml(a.status)}">${escapeHtml(a.status)}</span></span></div>
+      <div class="det-linha"><span class="label">Status</span><span class="valor"><span class="agendamento-status status-${escapeHtml(a.status)}">${escapeHtml(a._sinalExpirado ? 'Sinal expirado' : (ROTULO_STATUS[a.status] || a.status))}</span></span></div>
+      ${a.sinalValor ? `<div class="det-linha"><span class="label">Sinal</span><span class="valor">${formatarMoeda(a.sinalValor)} (${a.sinalPercentual || ''}%)${a.status === 'sinal_informado' && a.sinalInformadoEm ? ' — informado às ' + new Date(a.sinalInformadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : ''}${a.status === 'aguardando_sinal' && a.sinalExpiraEm ? ' — pagar até ' + new Date(a.sinalExpiraEm).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}</span></div>` : ''}
       ${a.recorrenciaId ? `<div class="det-linha"><span class="label">Horário fixo</span><span class="valor">🔁 ${NOMES_DIA_FIXO[data.getDay()]} às ${escapeHtml(a.horario)}</span></div>` : ''}
       ${a.status === 'confirmado' ? `<div class="det-linha"><span class="label">Lembrete</span><span class="valor">${lembreteStr}</span></div>` : ''}
     </div>
     <div class="det-acoes">
+      ${a.status === 'sinal_informado' ? `<button class="btn-concluir" id="acao-confirmar-sinal">✓ Confirmar pagamento do sinal</button><button class="btn-cancelar" id="acao-recusar-sinal">✕ Recusar (não recebi)</button>` : ''}
       ${a.status === 'confirmado' ? `<button class="btn-concluir" id="acao-concluir">✓ Marcar como concluído</button>` : ''}
       ${a.status === 'confirmado' ? `<button class="btn-remarcar" id="acao-remarcar">🔁 Remarcar</button>` : ''}
       ${a.status === 'confirmado' ? `<button class="btn-whatsapp" id="acao-whatsapp">💬 ${a.lembreteEnviado ? 'Reenviar' : 'Enviar'} lembrete no WhatsApp</button>` : ''}
@@ -906,6 +915,11 @@ function abrirDetalhesAgendamento(id) {
   `;
 
   abrirModal('Detalhes do agendamento', corpo);
+
+  if (a.status === 'sinal_informado') {
+    $('#acao-confirmar-sinal').addEventListener('click', () => confirmarSinal(id));
+    $('#acao-recusar-sinal').addEventListener('click', () => recusarSinal(id));
+  }
 
   if (a.status === 'confirmado') {
     $('#acao-concluir').addEventListener('click', () => concluirAgendamento(id));
@@ -1067,13 +1081,41 @@ function renderizarRelatorios() {
 
 // Aviso de atendimentos esquecidos (confirmados cujo horário de término + 30 min já passou)
 const MARGEM_PENDENCIA_MIN = 30;
+function renderizarPagamentos() {
+  const box = $('#pagamentos-confirmar');
+  if (!box) return 0;
+  const lista = Object.entries(state.agendamentos).map(([id, a]) => ({ ...a, id })).filter(a => a.status === 'sinal_informado')
+    .sort((x, y) => String(x.sinalInformadoEm || '').localeCompare(String(y.sinalInformadoEm || '')));
+  if (!lista.length) { box.hidden = true; box.innerHTML = ''; return 0; }
+  box.hidden = false;
+  box.innerHTML = `
+    <div class="pendencias-titulo">💰 ${lista.length} pagamento${lista.length !== 1 ? 's' : ''} de sinal para confirmar</div>
+    <div class="pendencias-sub">O cliente avisou que pagou o Pix. Confira no seu banco e confirme; sem a sua confirmação o agendamento fica pendente.</div>
+    ${lista.map(a => `
+      <div class="pendencia-item">
+        <div class="pendencia-info">
+          <div class="pendencia-quando">${escapeHtml(a.clienteNome)} · ${formatarMoeda(a.sinalValor)}</div>
+          <div class="pendencia-det">${formatarDataCurta(a.dataChave)} às ${escapeHtml(a.horario)} · ${(a.servicos || []).map(x => escapeHtml(x.nome)).join(' + ')}${a.sinalInformadoEm ? ' · informou às ' + new Date(a.sinalInformadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : ''}</div>
+        </div>
+        <div class="pendencia-acoes">
+          <button class="pag-confirmar pend-concluir" data-id="${escapeHtml(a.id)}">✓ Confirmar</button>
+          <button class="pag-recusar" data-id="${escapeHtml(a.id)}">✕ Recusar</button>
+        </div>
+      </div>`).join('')}`;
+  $$('#pagamentos-confirmar .pag-confirmar').forEach(b => b.addEventListener('click', () => confirmarSinal(b.dataset.id)));
+  $$('#pagamentos-confirmar .pag-recusar').forEach(b => b.addEventListener('click', () => recusarSinal(b.dataset.id)));
+  return lista.length;
+}
+
 function renderizarPendencias() {
   const lista = atendimentosParaResolver(state.agendamentos, new Date(), MARGEM_PENDENCIA_MIN);
+  const totalPagamentos = renderizarPagamentos();
+  const totalSelo = lista.length + totalPagamentos;
   const navDash = document.querySelector('.nav-item[data-view="dashboard"]');
   if (navDash) {
     let selo = navDash.querySelector('.nav-selo');
-    if (lista.length && !selo) { selo = document.createElement('span'); selo.className = 'nav-selo'; navDash.appendChild(selo); }
-    if (selo) { if (lista.length) selo.textContent = lista.length; else selo.parentNode.removeChild(selo); }
+    if (totalSelo && !selo) { selo = document.createElement('span'); selo.className = 'nav-selo'; navDash.appendChild(selo); }
+    if (selo) { if (totalSelo) selo.textContent = totalSelo; else selo.parentNode.removeChild(selo); }
   }
   const box = $('#pendencias-resolver');
   if (!box) return;
@@ -1099,6 +1141,27 @@ function renderizarPendencias() {
 }
 // o tempo passa mesmo sem nenhuma alteração no banco: reavalia a cada minuto
 setInterval(() => { if (state.dadosCarregados) renderizarPendencias(); }, 60000);
+
+async function confirmarSinal(id) {
+  try {
+    await updateDoc(doc(db, 'barbearias', state.barbeariaId, 'agendamentos', id), { status: 'confirmado', sinalConfirmadoEm: new Date().toISOString() });
+    fecharModal();
+    toast('Sinal confirmado! Agendamento confirmado. ✓', 'sucesso');
+  } catch (err) {
+    toast('Erro ao confirmar o pagamento', 'erro');
+  }
+}
+
+async function recusarSinal(id) {
+  if (!confirm('Recusar este pagamento? O agendamento será cancelado e o horário volta a ficar livre.')) return;
+  try {
+    await updateDoc(doc(db, 'barbearias', state.barbeariaId, 'agendamentos', id), { status: 'cancelado', canceladoEm: new Date().toISOString(), canceladoPor: 'sinal-recusado' });
+    fecharModal();
+    toast('Pagamento recusado. Horário liberado.', 'sucesso');
+  } catch (err) {
+    toast('Erro ao recusar o pagamento', 'erro');
+  }
+}
 
 async function concluirAgendamento(id) {
   try {
@@ -2086,6 +2149,9 @@ function renderizarConfiguracoes() {
   $('#conf-slug').value = state.barbeariaId;
   $('#link-publico').textContent = `${window.location.origin}/${state.barbeariaId}`;
 
+  // Sinal por Pix e limite semanal
+  preencherRegrasAgendamento();
+
   // Status das notificações push (verifica se há pelo menos 1 dispositivo ativado)
   carregarStatusNotificacoes();
 
@@ -2126,6 +2192,52 @@ function renderizarConfiguracoes() {
   } catch (e) {
     qrEl.innerHTML = '<div style="color:#666;">QR Code não disponível</div>';
   }
+}
+
+function preencherRegrasAgendamento() {
+  const sinal = state.barbearia.sinal || {};
+  if (document.activeElement && document.activeElement.closest && document.activeElement.closest('#card-regras-agendamento')) return;   // não apaga o que a pessoa está digitando
+  $('#sinal-ativo').checked = sinal.ativo === true;
+  $('#sinal-percentual').value = sinal.percentual || 50;
+  $('#sinal-prazo-horas').value = sinal.prazoHoras || 24;
+  $('#sinal-tipo-chave').value = sinal.tipoChave || '';
+  $('#sinal-chave').value = sinal.chavePix || '';
+  $('#sinal-nome-recebedor').value = sinal.nomeRecebedor || '';
+  $('#sinal-cidade-recebedor').value = sinal.cidadeRecebedor || '';
+  $('#limite-semana').value = state.barbearia.limiteAgendamentosSemana || 0;
+  $('#sinal-campos').style.opacity = $('#sinal-ativo').checked ? '1' : '0.55';
+}
+
+async function salvarRegrasAgendamento() {
+  const btn = $('#btn-salvar-sinal');
+  btn.disabled = true;
+  btn.textContent = 'Salvando...';
+  try {
+    const resp = await fetch('/api/configurar-negocio', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        idToken: await auth.currentUser.getIdToken(),
+        limiteAgendamentosSemana: Number($('#limite-semana').value || 0),
+        sinal: {
+          ativo: $('#sinal-ativo').checked,
+          percentual: Number($('#sinal-percentual').value),
+          prazoHoras: Number($('#sinal-prazo-horas').value),
+          tipoChave: $('#sinal-tipo-chave').value,
+          chavePix: $('#sinal-chave').value.trim(),
+          nomeRecebedor: $('#sinal-nome-recebedor').value.trim(),
+          cidadeRecebedor: $('#sinal-cidade-recebedor').value.trim()
+        }
+      })
+    });
+    const corpo = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(corpo.erro || 'Não foi possível salvar.');
+    toast('Regras de agendamento salvas', 'sucesso');
+  } catch (err) {
+    toast(err.message, 'erro');
+  }
+  btn.disabled = false;
+  btn.textContent = 'Salvar regras de agendamento';
 }
 
 async function salvarConfiguracoes(e) {
@@ -2219,6 +2331,8 @@ function inicializarEventosViews() {
     renderizarAgenda();
   });
   $('#btn-novo-agendamento').addEventListener('click', () => modalNovoAgendamento());
+  $('#btn-salvar-sinal').addEventListener('click', salvarRegrasAgendamento);
+  $('#sinal-ativo').addEventListener('change', () => { $('#sinal-campos').style.opacity = $('#sinal-ativo').checked ? '1' : '0.55'; });
   $('#btn-horarios-fixos').addEventListener('click', () => modalHorariosFixos());
 
   // Serviços

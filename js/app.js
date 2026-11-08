@@ -110,7 +110,8 @@ function mostrarTela(numero) {
     3: 'Passo 2 de 3',
     4: 'Passo 3 de 3',
     5: 'Concluído',
-    6: 'Meus agendamentos'
+    6: 'Meus agendamentos',
+    7: 'Pagamento do sinal'
   };
   $('#header-passo').textContent = labels[numero] || '';
 
@@ -262,6 +263,19 @@ function inicializarEventos() {
       toast('Não foi possível carregar os serviços. Tente novamente.', 'erro');
     }
   });
+  // tela do sinal (Pix)
+  $('#btn-copiar-pix').addEventListener('click', copiarPix);
+  $('#btn-ja-paguei').addEventListener('click', handleJaPaguei);
+  $('#btn-sinal-whats').addEventListener('click', () => {
+    const fone = telefoneParaWhatsapp(state.sinalAtual.telefoneNegocio);
+    if (fone) window.open(`https://wa.me/${fone}?text=${encodeURIComponent(mensagemWhatsSinal())}`, '_blank');
+  });
+  $('#btn-sinal-meus').addEventListener('click', async () => {
+    mostrarTela(6);
+    mostrarPainelLista();
+    await carregarMeusAgendamentos();
+  });
+
   // tela de sucesso: voltar ao início (mesma tela de entrada) ou conferir/alterar o que acabou de marcar
   $('#btn-inicio').addEventListener('click', () => {
     resetarFluxo().catch((err) => console.error('Erro ao recarregar:', err));
@@ -705,6 +719,19 @@ function renderizarResumoFinal() {
     <div class="resumo-linha"><span class="label">Serviços</span><span class="valor">${servicos.map(s => escapeHtml(s.nome)).join(' + ')}</span></div>
     <div class="resumo-linha destaque"><span class="label">Total</span><span class="valor">${formatarMoeda(total)}</span></div>
   `;
+
+  // Sinal por Pix: avisa ANTES de confirmar quanto é e quanto tempo tem para pagar
+  const sinal = state.barbearia.sinal;
+  const aviso = $('#aviso-sinal');
+  if (sinal && sinal.ativo) {
+    const valor = Math.round(total * sinal.percentual) / 100;
+    aviso.innerHTML = `<strong>Sinal de ${sinal.percentual}%: ${formatarMoeda(valor)} via Pix.</strong> Ao reservar, o horário fica separado para você e você terá até ${sinal.prazoHoras} h para pagar (no máximo até 2 horas antes do horário). O estabelecimento confirma depois de conferir o Pix.`;
+    aviso.classList.remove('hidden');
+    $('#btn-confirmar').textContent = rotuloConfirmar();
+  } else {
+    aviso.classList.add('hidden');
+    $('#btn-confirmar').textContent = rotuloConfirmar();
+  }
 }
 
 // ========================================
@@ -724,7 +751,7 @@ async function handleConfirmarAgendamento() {
     if (!slotAlvo || slotAlvo.indisponivel) {
       toast('Este horário acabou de ser reservado por outro cliente. Escolha outro.', 'erro');
       btn.disabled = false;
-      btn.textContent = 'Confirmar ✓';
+      btn.textContent = rotuloConfirmar();
       mostrarTela(3);
       renderizarHorarios();
       return;
@@ -748,7 +775,7 @@ async function handleConfirmarAgendamento() {
     if (resp.status === 409) {
       toast(corpo.erro || 'Este horário acabou de ser reservado. Escolha outro.', 'erro');
       btn.disabled = false;
-      btn.textContent = 'Confirmar ✓';
+      btn.textContent = rotuloConfirmar();
       await recarregarAgendamentos();
       mostrarTela(3);
       renderizarHorarios();
@@ -757,7 +784,14 @@ async function handleConfirmarAgendamento() {
     if (!resp.ok) {
       toast(corpo.erro || 'Erro ao confirmar agendamento. Tente novamente.', 'erro');
       btn.disabled = false;
-      btn.textContent = 'Confirmar ✓';
+      btn.textContent = rotuloConfirmar();
+      return;
+    }
+
+    if (corpo.sinal) {
+      state.sinalAtual = { agendamentoId: corpo.id, status: 'aguardando_sinal', ...corpo.sinal, agendamento: corpo.agendamento };
+      renderizarTelaSinal();
+      mostrarTela(7);
       return;
     }
 
@@ -768,12 +802,156 @@ async function handleConfirmarAgendamento() {
     console.error('Erro ao confirmar:', err);
     toast('Erro ao confirmar agendamento. Tente novamente.', 'erro');
     btn.disabled = false;
-    btn.textContent = 'Confirmar ✓';
+    btn.textContent = rotuloConfirmar();
   }
 }
 
 async function recarregarAgendamentos() {
   state.agendamentos = await carregarOcupacao(state.slug);
+}
+
+// ========================================
+// TELA 7: PAGAMENTO DO SINAL (Pix)
+// ========================================
+function rotuloConfirmar() {
+  const s = state.barbearia && state.barbearia.sinal;
+  return s && s.ativo ? 'Reservar e pagar sinal →' : 'Confirmar ✓';
+}
+
+function telefoneParaWhatsapp(tel) {
+  let d = String(tel || '').replace(/\D/g, '');
+  if (d.length === 10 || d.length === 11) d = '55' + d;
+  return /^55\d{10,11}$/.test(d) ? d : '';
+}
+
+function textoDataHora(dataChave, horario) {
+  const [ano, mes, dia] = dataChave.split('-').map(Number);
+  const dias = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+  return `${dias[new Date(ano, mes - 1, dia).getDay()]}, ${String(dia).padStart(2, '0')}/${String(mes).padStart(2, '0')} às ${horario}`;
+}
+
+function textoPrazoSinal(expiraEm) {
+  if (!expiraEm) return '';
+  const d = new Date(expiraEm);
+  const hoje = new Date();
+  const mesmoDia = d.toDateString() === hoje.toDateString();
+  const hh = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const dd = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+  return `Pague até ${mesmoDia ? 'hoje às' : dd + ' às'} ${hh}. Depois disso o horário é liberado.`;
+}
+
+function mensagemWhatsSinal() {
+  const s = state.sinalAtual;
+  const ag = s.agendamento;
+  const servicos = (ag.servicos || []).map(x => x.nome).join(' + ');
+  return `Olá! Fiz o Pix do sinal de ${formatarMoeda(s.valor)} do meu agendamento de ${textoDataHora(ag.dataChave, ag.horario)} (${servicos}), em nome de ${state.cliente.nome}. Pode confirmar, por favor?`;
+}
+
+function renderizarTelaSinal() {
+  const s = state.sinalAtual;
+  const ag = s.agendamento;
+  const informado = s.status === 'sinal_informado';
+
+  $('#sinal-selo').textContent = informado ? 'Aguardando confirmação' : 'Falta o sinal';
+  $('#sinal-titulo').textContent = informado ? 'Pagamento informado!' : 'Pague o sinal para garantir o horário';
+  $('#sinal-sub').textContent = informado
+    ? 'Seu horário continua reservado até o estabelecimento conferir o Pix e confirmar.'
+    : 'Copie o código Pix, pague no aplicativo do seu banco e depois toque em "Já paguei".';
+
+  $('#resumo-sinal').innerHTML = `
+    <div class="resumo-linha"><span class="label">Profissional</span><span class="valor">${escapeHtml(ag.profissionalNome || '')}</span></div>
+    <div class="resumo-linha"><span class="label">Quando</span><span class="valor">${escapeHtml(textoDataHora(ag.dataChave, ag.horario))}</span></div>
+    <div class="resumo-linha"><span class="label">Serviços</span><span class="valor">${(ag.servicos || []).map(x => escapeHtml(x.nome)).join(' + ')}</span></div>
+    <div class="resumo-linha"><span class="label">Total do serviço</span><span class="valor">${formatarMoeda(ag.valorTotal)}</span></div>
+  `;
+
+  $('#sinal-valor').textContent = formatarMoeda(s.valor);
+  $('#sinal-prazo').textContent = informado ? '' : textoPrazoSinal(s.expiraEm);
+  $('#sinal-recebedor').textContent = s.recebedor ? `Quem recebe: ${s.recebedor}` : '';
+  $('#sinal-pagamento').classList.toggle('hidden', informado);
+  $('#sinal-informado').classList.toggle('hidden', !informado);
+  $('#btn-ja-paguei').classList.toggle('hidden', informado);
+  $('#btn-sinal-whats').classList.toggle('hidden', !informado || !telefoneParaWhatsapp(s.telefoneNegocio));
+
+  const qr = $('#sinal-qr');
+  qr.innerHTML = '';
+  if (!informado && typeof QRCode !== 'undefined') {
+    try {
+      new QRCode(qr, { text: s.pixCopiaECola, width: 200, height: 200, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+    } catch (e) { qr.textContent = 'QR Code indisponível. Use o código copia e cola.'; }
+  }
+}
+
+async function copiarPix() {
+  const texto = state.sinalAtual.pixCopiaECola;
+  try {
+    await navigator.clipboard.writeText(texto);
+  } catch (_) {
+    const t = document.createElement('textarea');
+    t.value = texto; t.style.position = 'fixed'; t.style.opacity = '0';
+    document.body.appendChild(t); t.select();
+    try { document.execCommand('copy'); } catch (e) { /* sem permissão: o aviso abaixo orienta */ }
+    document.body.removeChild(t);
+  }
+  toast('Código Pix copiado! Cole no app do seu banco.', 'sucesso');
+}
+
+// Um toque só: registra o "Já paguei" no sistema (o dono recebe o aviso) e abre o WhatsApp do
+// estabelecimento com a mensagem pronta. O WhatsApp precisa ser aberto DENTRO do clique (senão o
+// navegador bloqueia), então a chamada ao servidor segue em paralelo com keepalive.
+async function handleJaPaguei() {
+  const btn = $('#btn-ja-paguei');
+  btn.disabled = true;
+  btn.textContent = 'Registrando...';
+  const s = state.sinalAtual;
+  const fone = telefoneParaWhatsapp(s.telefoneNegocio);
+
+  const chamada = fetch('/api/agendamento-cliente', {
+    method: 'POST', keepalive: true,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ slug: state.slug, whatsapp: state.cliente.whatsapp, action: 'sinal-informar', agendamentoId: s.agendamentoId })
+  });
+  if (fone) window.open(`https://wa.me/${fone}?text=${encodeURIComponent(mensagemWhatsSinal())}`, '_blank');
+
+  try {
+    const resp = await chamada;
+    const corpo = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      toast(corpo.erro || 'Não consegui registrar o pagamento. Avise o estabelecimento pelo WhatsApp.', 'erro');
+      btn.disabled = false;
+      btn.textContent = 'Já paguei';
+      return;
+    }
+    s.status = 'sinal_informado';
+    renderizarTelaSinal();
+    toast('Pagamento informado! Aguarde a confirmação.', 'sucesso');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  } catch (err) {
+    console.error('Erro ao informar pagamento:', err);
+    toast('Sem conexão. Tente de novo ou avise pelo WhatsApp.', 'erro');
+    btn.disabled = false;
+    btn.textContent = 'Já paguei';
+  }
+}
+
+async function abrirPagamentoSinal(agendamentoId) {
+  try {
+    const resp = await fetch('/api/agendamento-cliente', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: state.slug, whatsapp: state.cliente.whatsapp, action: 'sinal-dados', agendamentoId })
+    });
+    const dados = await resp.json();
+    if (!resp.ok) { toast(dados.erro || 'Não foi possível abrir o pagamento.', 'erro'); await carregarMeusAgendamentos(); return; }
+    state.sinalAtual = { agendamentoId, ...dados };
+    $('#btn-ja-paguei').disabled = false;
+    $('#btn-ja-paguei').textContent = 'Já paguei';
+    renderizarTelaSinal();
+    mostrarTela(7);
+  } catch (err) {
+    console.error('Erro ao abrir pagamento do sinal:', err);
+    toast('Erro ao abrir o pagamento. Tente novamente.', 'erro');
+  }
 }
 
 // ========================================
@@ -856,7 +1034,7 @@ async function resetarFluxo() {
   state.horarioSelecionado = null;
   state.horariosCache = {};
   $('#btn-confirmar').disabled = false;
-  $('#btn-confirmar').textContent = 'Confirmar ✓';
+  $('#btn-confirmar').textContent = rotuloConfirmar();
 
   await carregarBarbearia(state.slug);          // serviços e horários ocupados atualizados (inclui o agendamento que acabou de ser feito)
 }
@@ -900,7 +1078,7 @@ function renderizarMeusAgendamentos() {
   const container = $('#lista-meus-agendamentos');
   const hojeChave = dataParaChave(new Date());
   const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-  const labelStatus = { confirmado: 'Confirmado', concluido: 'Concluído', cancelado: 'Cancelado' };
+  const labelStatus = { confirmado: 'Confirmado', concluido: 'Concluído', cancelado: 'Cancelado', aguardando_sinal: 'Aguardando sinal', sinal_informado: 'Pagamento informado' };
 
   if (state.meusAgendamentos.length === 0) {
     container.innerHTML = '<div class="horario-placeholder">Nenhum agendamento encontrado com este WhatsApp.</div>';
@@ -923,6 +1101,15 @@ function renderizarMeusAgendamentos() {
         </div>
         <div class="meu-ag-info">${escapeHtml(a.profissionalNome)} • ${(a.servicos || []).map(s => escapeHtml(s.nome)).join(' + ')}</div>
         <div class="meu-ag-valor">${formatarMoeda(a.valorTotal)}</div>
+        ${a.status === 'aguardando_sinal' ? `
+          <div class="meu-ag-acoes">
+            <button class="btn-outline btn-mini-full" data-acao="pagar" data-id="${a.id}" type="button">Pagar sinal (${formatarMoeda(a.sinalValor)})</button>
+            <button class="btn-outline btn-mini-full btn-perigo-outline" data-acao="cancelar" data-id="${a.id}" type="button">Cancelar</button>
+          </div>
+          <div class="meu-ag-aviso">${escapeHtml(textoPrazoSinal(a.sinalExpiraEm))}</div>` : ''}
+        ${a.status === 'sinal_informado' ? `
+          <div class="meu-ag-acoes"><button class="btn-outline btn-mini-full" data-acao="pagar" data-id="${a.id}" type="button">Ver pagamento</button></div>
+          <div class="meu-ag-aviso">Aguardando o estabelecimento confirmar o seu Pix.</div>` : ''}
         ${dentroDoPrazo ? `
           <div class="meu-ag-acoes">
             ${!jaRemarcou ? `<button class="btn-outline btn-mini-full" data-acao="remarcar" data-id="${a.id}" type="button">Remarcar</button>` : ''}
@@ -936,6 +1123,9 @@ function renderizarMeusAgendamentos() {
 
   container.querySelectorAll('[data-acao="remarcar"]').forEach(btn => {
     btn.addEventListener('click', () => iniciarRemarcacao(btn.dataset.id));
+  });
+  container.querySelectorAll('[data-acao="pagar"]').forEach(btn => {
+    btn.addEventListener('click', () => abrirPagamentoSinal(btn.dataset.id));
   });
   container.querySelectorAll('[data-acao="cancelar"]').forEach(btn => {
     btn.addEventListener('click', () => confirmarCancelamento(btn.dataset.id));

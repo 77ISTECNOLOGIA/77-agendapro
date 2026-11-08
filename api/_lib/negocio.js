@@ -6,6 +6,8 @@
 // dias (dá tempo de a 77 IS cobrar/ativar sem derrubar a agenda do cliente final).
 const CARENCIA_TRIAL_DIAS = 7;
 
+const { configSinal, limiteSemanal } = require('./sinal');
+
 const SLUGS_RESERVADOS = [
   'admin', 'cadastro', 'painel77', 'api', 'css', 'js', 'assets', 'index', 'login',
   'manifest', 'firebase-messaging-sw', 'favicon', 'robots', 'sitemap', 'www', 'app'
@@ -41,9 +43,13 @@ function situacaoNegocio(info, agoraMs = Date.now()) {
 }
 
 // Só estes campos do documento do negócio vão para o visitante anônimo.
+// (A chave Pix só sai pelo servidor, para quem acabou de reservar: api/criar-agendamento.js e api/sinal.js.)
 function infoPublica(info) {
   const i = info || {};
+  const cfg = configSinal(i);
   return {
+    sinal: { ativo: cfg.ativo, percentual: cfg.percentual, prazoHoras: cfg.prazoHoras },
+    limiteAgendamentosSemana: limiteSemanal(i),
     nome: i.nome || '',
     endereco: i.endereco || '',
     telefone: i.telefone || '',

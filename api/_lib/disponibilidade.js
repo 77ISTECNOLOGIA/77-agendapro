@@ -6,6 +6,7 @@
 // decide de verdade é esta função, dentro de uma transação.
 
 const { horaParaMinutos, diaSemanaDaChave, somarDias } = require('./tempo');
+const { ocupaHorario } = require('./sinal');
 
 const INTERVALO_MIN = 30;           // granularidade da grade de horários
 const ANTECEDENCIA_MIN = 30;        // não agenda "pra daqui a 5 minutos"
@@ -23,7 +24,7 @@ const JANELA_MAX_DIAS = 90;         // não agenda além de 90 dias
  * @param {{dataChave:string, minutos:number}} p.agora
  * @returns {{ok:true}|{ok:false, motivo:string}}
  */
-function verificarSlot({ prof, info, agendamentos, dataChave, horario, duracaoMin, ignorarId, agora }) {
+function verificarSlot({ prof, info, agendamentos, dataChave, horario, duracaoMin, ignorarId, agora, agoraMs = Date.now() }) {
   if (!prof || prof.ativo === false) return { ok: false, motivo: 'Profissional indisponível' };
 
   if (dataChave < agora.dataChave) return { ok: false, motivo: 'Data no passado' };
@@ -52,7 +53,7 @@ function verificarSlot({ prof, info, agendamentos, dataChave, horario, duracaoMi
   const profId = prof.id;
   const conflita = (agendamentos || []).some((a) => {
     if (ignorarId && a.id === ignorarId) return false;
-    if (a.profissionalId !== profId || a.dataChave !== dataChave || a.status === 'cancelado') return false;
+    if (a.profissionalId !== profId || a.dataChave !== dataChave || !ocupaHorario(a, agoraMs)) return false;
     const aIni = horaParaMinutos(a.horario);
     return inicio < aIni + a.duracaoMin && fim > aIni;
   });

@@ -171,6 +171,8 @@
           <!-- Resumo renderizado dinamicamente -->
         </div>
 
+        <div id="aviso-sinal" class="aviso-sinal hidden"></div>
+
         <div class="aviso-wpp">
           <span class="aviso-icone">💬</span>
           <span>O estabelecimento pode te enviar um lembrete no WhatsApp antes do horário.</span>
@@ -198,6 +200,37 @@
         <button id="btn-novo" class="btn" type="button">Fazer novo agendamento</button>
         <button id="btn-ver-meus" class="btn btn-outline" type="button" style="margin-top:10px;">Ver meus agendamentos</button>
         <button id="btn-inicio" class="link-secundario" type="button">← Voltar ao início</button>
+      </div>
+    </section>
+
+    <!-- ============ TELA 7: PAGAMENTO DO SINAL (Pix) ============ -->
+    <section id="tela-7" class="tela">
+      <div class="tela-body" style="padding-top: 30px;">
+        <div class="tela-rotulo" id="sinal-selo">Falta o sinal</div>
+        <h1 class="tela-h1" id="sinal-titulo">Pague o sinal para garantir o horário</h1>
+        <p class="tela-sub" id="sinal-sub"></p>
+
+        <div id="resumo-sinal" class="resumo-card"></div>
+
+        <div id="sinal-pagamento" class="sinal-pagamento">
+          <div class="sinal-valor-rotulo">Valor do sinal</div>
+          <div class="sinal-valor" id="sinal-valor">R$ 0,00</div>
+          <div class="sinal-prazo" id="sinal-prazo"></div>
+          <button id="btn-copiar-pix" class="btn" type="button">Copiar código Pix</button>
+          <details class="sinal-qr">
+            <summary>Pagar por QR Code (de outro aparelho)</summary>
+            <div id="sinal-qr" class="sinal-qr-img"></div>
+          </details>
+          <div class="sinal-recebedor" id="sinal-recebedor"></div>
+        </div>
+        <div id="sinal-informado" class="sinal-informado hidden">
+          <strong>Pagamento informado.</strong> O estabelecimento vai conferir o Pix e confirmar seu horário. Se demorar, é só chamar no WhatsApp.
+        </div>
+      </div>
+      <div class="tela-footer">
+        <button id="btn-ja-paguei" class="btn" type="button">Já paguei</button>
+        <button id="btn-sinal-whats" class="btn btn-outline hidden" type="button">Avisar no WhatsApp</button>
+        <button id="btn-sinal-meus" class="link-secundario" type="button">Ver meus agendamentos</button>
       </div>
     </section>
 
@@ -250,6 +283,7 @@
     <span id="toast-msg"></span>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <!-- Firebase SDK -->
   <script type="module" src="js/app.js"></script>
 

@@ -27,7 +27,7 @@ service cloud.firestore {
 
     function dataChaveOk(v) { return v is string && v.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$'); }
     function horarioOk(v)   { return v is string && v.matches('^([01][0-9]|2[0-3]):[0-5][0-9]$'); }
-    function statusAgOk(v)  { return v in ['confirmado', 'concluido', 'cancelado']; }
+    function statusAgOk(v)  { return v in ['confirmado', 'concluido', 'cancelado', 'aguardando_sinal', 'sinal_informado']; }
 
     // Forma mínima de um agendamento criado pelo dono (agendamento manual).
     // O agendamento do cliente final é criado pelo servidor.

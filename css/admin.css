@@ -1096,3 +1096,8 @@
 /* Relatórios */
 .rel-filtros { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 0 0 16px; font-size: 13px; color: var(--text-dim); }
 .rel-filtros select, .rel-filtros input { background: var(--surface-2); color: var(--text); border: 1px solid rgba(255,255,255,.15); border-radius: 10px; padding: 8px 10px; font-size: 14px; }
+
+/* sinal por Pix: status e botões */
+.status-aguardando_sinal { background: rgba(251, 191, 36, 0.14); color: #fbbf24; }
+.status-sinal_informado { background: rgba(0, 210, 255, 0.14); color: #00D2FF; }
+.pag-recusar { color: #ff8888; }
