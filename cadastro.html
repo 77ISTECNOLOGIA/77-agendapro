@@ -11,6 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;500;600;700;800&family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/marca77.css">
   <link rel="icon" type="image/png" sizes="32x32" href="/img/favicon-32.png">
   <link rel="apple-touch-icon" href="/img/icon-180.png">
 
@@ -19,7 +20,6 @@
     .wrap { max-width: 500px; margin: 0 auto; padding: 20px; }
 
     .cad-header { text-align: center; margin-bottom: 32px; }
-    .cad-header .logo-mark { width: 64px; height: 64px; margin: 0 auto 16px; font-size: 26px; }
     .cad-titulo { font-family: 'Bricolage Grotesque', sans-serif; font-size: 32px; font-weight: 700; letter-spacing: -0.03em; margin-bottom: 8px; }
     .cad-titulo .accent { color: var(--accent); }
     .cad-sub { color: var(--text-dim); font-size: 15px; line-height: 1.5; }
@@ -33,9 +33,8 @@
       padding: 14px 10px; text-align: center; cursor: pointer; transition: all 0.2s;
     }
     .tipo-btn:hover { border-color: var(--border-light); }
-    .tipo-btn.selecionado { border-color: var(--accent); background: rgba(212, 255, 58, 0.08); }
-    .tipo-btn .tipo-emoji { font-size: 28px; margin-bottom: 6px; }
-    .tipo-btn .tipo-label { font-size: 12px; font-weight: 600; color: var(--text); }
+    .tipo-btn.selecionado { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+        .tipo-btn .tipo-label { font-size: 13px; font-weight: 600; color: var(--text); }
     .tipo-btn .tipo-sub { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
 
     .secao-titulo { font-family: 'Bricolage Grotesque', sans-serif; font-size: 13px; font-weight: 700; color: var(--accent); letter-spacing: 0.08em; text-transform: uppercase; margin: 20px 0 14px; padding-top: 16px; border-top: 1px solid var(--border); }
@@ -54,13 +53,13 @@
     .link-login a { color: var(--accent); text-decoration: none; font-weight: 500; }
   </style>
 </head>
-<body>
+<body class="cadastro-77">
 <div class="wrap">
 
   <!-- HEADER -->
   <header class="cad-header">
-    <div class="logo-mark">77</div>
-    <h1 class="cad-titulo">77 <span class="accent">AgendaPro</span></h1>
+    <img class="cad-logo" src="/img/logo-77is.png" alt="77 IS Tecnologia &amp; Inteligência" width="150" height="111">
+    <h1 class="cad-titulo">Agenda<span class="accent">Pro</span></h1>
     <p class="cad-sub">Agenda online + dashboard financeiro<br>pra qualquer profissional de beleza.</p>
   </header>
 
@@ -82,22 +81,18 @@
       <div class="input-label" style="margin-bottom:10px;">QUAL É O SEU NEGÓCIO? *</div>
       <div class="tipo-grid" id="tipo-grid">
         <div class="tipo-btn selecionado" data-tipo="barbearia">
-          <div class="tipo-emoji">💈</div>
           <div class="tipo-label">Barbearia</div>
           <div class="tipo-sub">Corte, barba, etc</div>
         </div>
         <div class="tipo-btn" data-tipo="salao">
-          <div class="tipo-emoji">💇</div>
           <div class="tipo-label">Salão de Beleza</div>
           <div class="tipo-sub">Cabelo, coloração, etc</div>
         </div>
         <div class="tipo-btn" data-tipo="estetica">
-          <div class="tipo-emoji">✨</div>
           <div class="tipo-label">Estética / Studio</div>
           <div class="tipo-sub">Cílios, sobrancelha, etc</div>
         </div>
         <div class="tipo-btn" data-tipo="nails">
-          <div class="tipo-emoji">💅</div>
           <div class="tipo-label">Nail Designer</div>
           <div class="tipo-sub">Unhas, gel, acrílico</div>
         </div>
@@ -167,10 +162,12 @@
     <div class="link-login">Já tem conta? <a href="/admin">Entrar no painel</a></div>
   </div>
 
+  <div class="credito-77" style="margin-top:22px;">Sistema de agendamento criado por <strong>77 IS Tecnologia &amp; Inteligência</strong></div>
+
   <!-- SUCESSO -->
   <div id="tela-sucesso" class="cad-card hidden">
     <div class="sucesso-box">
-      <div style="width:72px;height:72px;border-radius:50%;background:var(--accent);margin:0 auto 20px;display:flex;align-items:center;justify-content:center;font-size:36px;color:#0a0a0a;">✓</div>
+      <div style="width:72px;height:72px;border-radius:50%;background:var(--accent);margin:0 auto 20px;display:flex;align-items:center;justify-content:center;font-size:36px;color:#fff;">✓</div>
       <h2 style="font-family:'Bricolage Grotesque',sans-serif;font-size:24px;font-weight:700;margin-bottom:10px;">Tudo pronto!</h2>
       <p style="color:var(--text-dim);font-size:14px;line-height:1.5;margin-bottom:24px;">
         <strong id="nome-sucesso">Seu negócio</strong> foi cadastrado e seus 30 dias grátis já começaram.

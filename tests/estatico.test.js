@@ -163,3 +163,17 @@ test('manifest (instalar o painel no Android/iPhone): ícones existem, 192 e 512
   assert.equal(m.display, 'standalone');
   assert.equal(m.start_url, '/admin');
 });
+
+test('cadastro de negócio: identidade 77 (logo, paleta azul, rodapé padrão) e sem emojis nos tipos de negócio', () => {
+  const fs2 = require('node:fs'), path2 = require('node:path');
+  const h = fs2.readFileSync(path2.join(__dirname, '..', 'cadastro.html'), 'utf8');
+  assert.match(h, /<body class="cadastro-77">/);
+  assert.match(h, /css\/marca77\.css/);
+  assert.match(h, /class="cad-logo" src="\/img\/logo-77is\.png"/);
+  assert.doesNotMatch(h, /logo-mark/);
+  assert.doesNotMatch(h, /tipo-emoji/);
+  assert.doesNotMatch(h, /212, 255, 58/);
+  assert.match(h, /<div class="credito-77"[^>]*>Sistema de agendamento criado por <strong>77 IS Tecnologia &amp; Inteligência<\/strong><\/div>/);
+  assert.equal((h.match(/class="tipo-btn/g) || []).length, 4, 'os 4 tipos de negócio continuam');
+  assert.match(fs2.readFileSync(path2.join(__dirname, '..', 'css', 'marca77.css'), 'utf8'), /body\.cadastro-77 \{[\s\S]*--accent: #0077FF/);
+});
