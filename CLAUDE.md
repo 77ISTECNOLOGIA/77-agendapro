@@ -63,6 +63,8 @@ AgendaPro é um produto da **77 IS Tecnologia & Inteligência**, plataforma de a
 
 21. **Serviço: só foto, sem ícone (2026-11) — revisa a decisão #13.** A pedido do Felipe (emojis passam cara de IA/infantil e não de produto profissional), o cadastro do serviço **não tem mais escolha de ícone**: removidos a grade de emojis, o campo "Outro", o "Sem ícone" e a sugestão por nome (`EMOJIS_SERVICO`/`sugerirEmoji` saíram de `js/utils.js`). Regra única: **foto do serviço (opcional) ou nenhum bloco visual** (só nome, tempo e valor), tanto no painel quanto no link do cliente. `api/_lib/negocio.js` (`servicoPublico`) não devolve mais `emoji` e `api/cadastrar-negocio.js` não grava. Serviços antigos mantêm o campo `emoji` no banco, mas ele é ignorado em todas as telas.
 
+22. **Domínio próprio — adiado (2026-11).** Hoje tudo roda em `77-agendapro.vercel.app`. Domínio próprio na Vercel é grátis, mas **registrar o nome custa por ano** (`.com.br` ≈ R$ 40 no Registro.br; `.com` ≈ R$ 60–90) e não existe opção gratuita séria. Decisão do Felipe: **só depois de começar a cobrar mensalidade**. Alternativa sem custo se a 77 IS já tiver um domínio: subdomínio (ex.: `agenda.<dominio>`). **Checklist para quando for trocar:** adicionar o domínio em Vercel → Settings → Domains e colar os registros de DNS; autorizar o domínio novo no Firebase Authentication; trocar a variável `APP_URL` e os endereços fixos `https://77-agendapro.vercel.app` (`api/_lib/notificar.js` e afins); redirecionar o endereço antigo para o novo (QR Codes e links já enviados); avisar donos: login novo, reativar notificações push e reinstalar o ícone na tela inicial. Trocar cedo, antes de ter muitos donos.
+
 ## Módulos construídos
 
 | Módulo | Arquivo | Resumo |
