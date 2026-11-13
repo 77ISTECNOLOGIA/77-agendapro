@@ -196,3 +196,42 @@ test('telas: cadastro e Configurações têm o bloco de endereço ligado à busc
   // link do cliente: cabeçalho curto
   assert.match(ler('js/app.js'), /enderecoCurto \|\| state\.barbearia\.endereco/);
 });
+
+// ---------------------------------------------------------------- botão "Ver no mapa" (link do cliente)
+function extrairFuncao(src, nome) {
+  const m = new RegExp('function ' + nome + '\\(').exec(src);
+  assert.ok(m, nome + ' não encontrada');
+  let i = src.indexOf('{', src.indexOf(')', m.index)), n = 0;
+  for (; i < src.length; i++) { if (src[i] === '{') n++; else if (src[i] === '}' && --n === 0) break; }
+  return src.slice(m.index, i + 1);
+}
+
+test('mapa: link do Google Maps com o endereço codificado (nada de escapar da URL); sem endereço, sem link', () => {
+  const app = ler('js/app.js');
+  const ctx = vm.createContext({ String, encodeURIComponent });
+  vm.runInContext(extrairFuncao(app, 'urlMapa'), ctx);
+  const u = (e) => vm.runInContext('urlMapa(' + JSON.stringify(e) + ')', ctx);
+  assert.equal(u('Rua A, 123 - Sé, São Paulo - SP, CEP 01001-000'), 'https://www.google.com/maps/search/?api=1&query=Rua%20A%2C%20123%20-%20S%C3%A9%2C%20S%C3%A3o%20Paulo%20-%20SP%2C%20CEP%2001001-000');
+  assert.equal(u(''), ''); assert.equal(u(null), ''); assert.equal(u('   '), '');
+  const malicioso = u('x&query=evil"><script>alert(1)</script>#');
+  assert.ok(malicioso.startsWith('https://www.google.com/maps/search/?api=1&query='));
+  assert.doesNotMatch(malicioso.slice('https://www.google.com/maps/search/?api=1&query='.length), /[<>"&#]/, 'tudo codificado');
+});
+
+test('mapa: o cabeçalho mostra o botão quando há endereço e esconde quando não há', () => {
+  const app = ler('js/app.js');
+  const els = { '#header-nome': { textContent: '' }, '#header-passo': { textContent: '' }, '#btn-mapa': { href: '', escondido: true, classList: { remove() { els['#btn-mapa'].escondido = false; }, add() { els['#btn-mapa'].escondido = true; } } } };
+  const state = { barbearia: { nome: 'Lipão', enderecoCurto: 'Icaraí, Niterói', endereco: 'Rua A, 1 - Icaraí, Niterói - RJ, CEP 24230-005' } };
+  const ctx = vm.createContext({ state, $: (s) => els[s], String, encodeURIComponent });
+  vm.runInContext(extrairFuncao(app, 'urlMapa') + extrairFuncao(app, 'renderizarHeader'), ctx);
+  vm.runInContext('renderizarHeader()', ctx);
+  assert.equal(els['#btn-mapa'].escondido, false);
+  assert.match(els['#btn-mapa'].href, /^https:\/\/www\.google\.com\/maps\/search\//);
+  assert.equal(els['#header-passo'].textContent, 'Icaraí, Niterói', 'cabeçalho continua curto');
+  state.barbearia = { nome: 'Sem endereço', endereco: '' };
+  vm.runInContext('renderizarHeader()', ctx);
+  assert.equal(els['#btn-mapa'].escondido, true);
+  const html = ler('index.html');
+  assert.match(html, /<a id="btn-mapa" class="btn-mapa hidden"[^>]*target="_blank" rel="noopener noreferrer"/);
+  assert.doesNotMatch(html.slice(html.indexOf('id="btn-mapa"'), html.indexOf('Ver no mapa')), /emoji|📍/, 'sem emoji: ícone de traço');
+});

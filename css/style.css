@@ -842,3 +842,9 @@ input { font-family: inherit; }
 /* foto do serviço ainda chegando: caixa do mesmo tamanho, sem a tela "pular" depois */
 .servico-foto.foto-carregando { background: var(--surface-2); animation: foto-pulso 1.3s ease-in-out infinite; }
 @keyframes foto-pulso { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+
+/* botão "Ver no mapa" no cabeçalho do link do cliente */
+.btn-mapa { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; padding: 8px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; text-decoration: none; white-space: nowrap;
+  color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent); background: color-mix(in srgb, var(--accent) 10%, transparent); transition: background .2s; }
+.btn-mapa:hover, .btn-mapa:focus-visible { background: color-mix(in srgb, var(--accent) 20%, transparent); }
+.btn-mapa.hidden { display: none; }
