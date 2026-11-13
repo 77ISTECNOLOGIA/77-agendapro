@@ -51,7 +51,8 @@ test('tela do cliente: pagamento do sinal (tela 7), botão único "Já paguei" e
   for (const id of ['tela-7', 'btn-copiar-pix', 'btn-ja-paguei', 'btn-sinal-whats', 'btn-sinal-meus', 'sinal-qr', 'aviso-sinal', 'sinal-informado']) {
     assert.match(html, new RegExp('id="' + id + '"'), id);
   }
-  assert.match(html, /qrcodejs@1\.0\.0\/qrcode\.min\.js/);
+  assert.doesNotMatch(html, /<script src="https:\/\/cdn\.jsdelivr\.net[^>]*qrcode/, 'o QR Code não é baixado na abertura do link');
+  assert.match(app, /s\.src = 'https:\/\/cdn\.jsdelivr\.net\/npm\/qrcodejs@1\.0\.0\/qrcode\.min\.js'/, 'só quando a tela do Pix é aberta');
   // "Já paguei": registra no servidor (keepalive) e abre o WhatsApp DENTRO do clique, antes de esperar a resposta
   const fn = extrair(app, 'handleJaPaguei');
   assert.match(fn, /keepalive: true/);

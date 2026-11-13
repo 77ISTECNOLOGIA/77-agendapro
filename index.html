@@ -7,6 +7,20 @@
   <title>77 AgendaPro</title>
   <meta name="description" content="Agende seu horário de forma rápida e prática">
 
+  <!-- Abertura mais rápida: (1) já pede os dados do negócio AGORA, sem esperar o app.js ser baixado e lido;
+       (2) pede todos os módulos de uma vez (sem isso o navegador só descobre os de dentro depois do app.js) -->
+  <script>
+    (function () {
+      try {
+        var slug = new URLSearchParams(location.search).get('b') || location.pathname.split('/').filter(Boolean)[0];
+        if (slug) window.__negocioPrefetch = { slug: slug, promessa: fetch('/api/negocio?slug=' + encodeURIComponent(slug)) };
+      } catch (e) { /* sem pré-carga: o app.js busca normalmente */ }
+    })();
+  </script>
+  <link rel="modulepreload" href="js/app.js">
+  <link rel="modulepreload" href="js/utils.js">
+  <link rel="modulepreload" href="js/vocabulario.js">
+
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -283,7 +297,6 @@
     <span id="toast-msg"></span>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <!-- Firebase SDK -->
   <script type="module" src="js/app.js"></script>
 

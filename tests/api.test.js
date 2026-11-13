@@ -428,7 +428,18 @@ test('api/negocio: devolve a foto do serviço (e só se for um JPEG válido)', a
   const JPEG = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsL';
   amb.fake.seed(`barbearias/${SLUG}/servicos/srv1`, { ...amb.fake.get(`barbearias/${SLUG}/servicos/srv1`), foto: JPEG });
   amb.fake.seed(`barbearias/${SLUG}/servicos/srv2`, { ...amb.fake.get(`barbearias/${SLUG}/servicos/srv2`), foto: 'javascript:alert(1)' });
+  // pacote principal (1ª tela): SEM as fotos, só o aviso de que existem
   const r = await chamar(negocio, req('GET', { query: { slug: SLUG } }));
-  assert.equal(r.body.servicos.srv1.foto, JPEG);
-  assert.equal(r.body.servicos.srv2.foto, '', 'valor suspeito é descartado antes de chegar ao navegador do cliente');
+  assert.equal('foto' in r.body.servicos.srv1, false, 'a foto não pesa mais na abertura do link');
+  assert.equal(r.body.servicos.srv1.temFoto, true);
+  assert.equal(r.body.servicos.srv2.temFoto, false, 'valor suspeito não conta como foto');
+  assert.doesNotMatch(JSON.stringify(r.body), /data:image/);
+  assert.equal(r.headers['Cache-Control'], 'no-store');
+
+  // chamada separada das fotos: só as válidas, e o navegador pode guardar por 5 minutos
+  const f = await chamar(negocio, req('GET', { query: { slug: SLUG, fotos: '1' } }));
+  assert.equal(f.statusCode, 200);
+  assert.deepEqual(f.body, { fotos: { srv1: JPEG } }, 'valor suspeito é descartado antes de chegar ao navegador do cliente');
+  assert.equal(f.headers['Cache-Control'], 'public, max-age=300');
+  assert.deepEqual((await chamar(negocio, req('GET', { query: { slug: 'link-que-nao-existe', fotos: '1' } }))).body, { fotos: {} });
 });

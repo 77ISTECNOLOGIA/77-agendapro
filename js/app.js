@@ -156,17 +156,59 @@ async function inicializar() {
     renderizarHeader();
     inicializarEventos();
     mostrarApp();
+    carregarFotosServicos();                             // sem esperar: a tela já está de pé
   } catch (err) {
     console.error('Erro ao inicializar:', err);
     mostrarErroBarbearia();
   }
 }
 
+// As fotos dos serviços vêm numa chamada separada (o pacote principal não leva mais as fotos, que pesam muito).
+// Enquanto não chegam, o cartão mostra uma caixa cinza do mesmo tamanho (sem a tela "pular" quando a foto aparece).
+async function carregarFotosServicos() {
+  const temAlguma = Object.values(state.servicos).some((s) => s.temFoto);
+  if (!temAlguma) return;
+  try {
+    const resp = await fetch(`/api/negocio?slug=${encodeURIComponent(state.slug)}&fotos=1`);
+    if (!resp.ok) throw new Error('fotos indisponíveis');
+    const { fotos } = await resp.json();
+    Object.entries(fotos || {}).forEach(([id, foto]) => {
+      if (state.servicos[id] && fotoServicoValida(foto)) state.servicos[id].foto = foto;
+    });
+  } catch (err) {
+    console.error('Fotos dos serviços:', err);
+  }
+  // quem não recebeu foto deixa de esperar por ela (cartão sem foto, como qualquer outro)
+  Object.values(state.servicos).forEach((s) => { if (!fotoServicoValida(s.foto)) s.temFoto = false; });
+  aplicarFotosServicos();
+}
+
+function aplicarFotosServicos() {
+  $$('#lista-servicos .servico-card').forEach((card) => {
+    const s = state.servicos[card.dataset.id];
+    const pendente = card.querySelector('.foto-carregando');
+    if (!s || !pendente) return;
+    if (fotoServicoValida(s.foto)) {
+      const img = document.createElement('img');
+      img.src = s.foto;
+      img.alt = s.nome || '';
+      pendente.classList.remove('foto-carregando');
+      pendente.appendChild(img);
+    } else {
+      pendente.remove();
+    }
+  });
+}
+
 async function carregarBarbearia(slug) {
   // Uma única chamada devolve info pública, serviços, profissionais e a
   // ocupação futura — já filtrados no servidor (sem comissão, sem tokens,
   // sem nome/WhatsApp de outros clientes).
-  const resp = await fetch(`/api/negocio?slug=${encodeURIComponent(slug)}`);
+  let resp = null;
+  const pre = window.__negocioPrefetch;
+  window.__negocioPrefetch = null;                       // a pré-carga vale uma vez só
+  if (pre && pre.slug === slug) { try { resp = await pre.promessa; } catch (_) { resp = null; } }
+  if (!resp || (!resp.ok && resp.status !== 404 && resp.status !== 400)) resp = await fetch(`/api/negocio?slug=${encodeURIComponent(slug)}`);
   if (resp.status === 404 || resp.status === 400) return false;
   if (!resp.ok) throw new Error('Falha ao carregar o estabelecimento');
 
@@ -400,7 +442,7 @@ function renderizarTela2() {
     card.innerHTML = `
       ${fotoServicoValida(s.foto)
         ? `<div class="servico-foto com-foto"><img src="${s.foto}" alt="${escapeHtml(s.nome)}" loading="lazy"></div>`
-        : ''}
+        : (s.temFoto ? '<div class="servico-foto com-foto foto-carregando"></div>' : '')}
       <div class="servico-info">
         <div class="servico-nome">${escapeHtml(s.nome)}</div>
         <div class="servico-detalhes">${s.duracaoMin} min • <span class="servico-preco">${formatarMoeda(s.preco)}</span></div>
@@ -847,6 +889,21 @@ function mensagemWhatsSinal() {
   return `Olá! Fiz o Pix do sinal de ${formatarMoeda(s.valor)} do meu agendamento de ${textoDataHora(ag.dataChave, ag.horario)} (${servicos}), em nome de ${state.cliente.nome}. Pode confirmar, por favor?`;
 }
 
+let promessaQR = null;
+function carregarQRCode() {
+  if (typeof QRCode !== 'undefined') return Promise.resolve();
+  if (!promessaQR) {
+    promessaQR = new Promise((ok, erro) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js';
+      s.onload = ok;
+      s.onerror = () => { promessaQR = null; erro(new Error('QR Code indisponível')); };
+      document.head.appendChild(s);
+    });
+  }
+  return promessaQR;
+}
+
 function renderizarTelaSinal() {
   const s = state.sinalAtual;
   const ag = s.agendamento;
@@ -879,10 +936,13 @@ function renderizarTelaSinal() {
 
   const qr = $('#sinal-qr');
   qr.innerHTML = '';
-  if (!informado && typeof QRCode !== 'undefined') {
-    try {
-      new QRCode(qr, { text: s.pixCopiaECola, width: 200, height: 200, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
-    } catch (e) { qr.textContent = 'QR Code indisponível. Use o código copia e cola.'; }
+  if (!informado) {
+    const texto = s.pixCopiaECola;
+    carregarQRCode().then(() => {
+      if (state.sinalAtual && state.sinalAtual.pixCopiaECola !== texto) return;   // mudou de reserva enquanto baixava
+      qr.innerHTML = '';
+      new QRCode(qr, { text: texto, width: 200, height: 200, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+    }).catch(() => { qr.textContent = 'QR Code indisponível. Use o código copia e cola.'; });
   }
 }
 

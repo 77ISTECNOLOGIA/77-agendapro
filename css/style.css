@@ -838,3 +838,7 @@ input { font-family: inherit; }
 
 .sinal-recebedor-nome { font-size: 13px; color: var(--text); line-height: 1.5; overflow-wrap: anywhere; }
 .sinal-recebedor-dica { font-size: 11px; color: var(--text-muted); margin-top: 4px; line-height: 1.4; }
+
+/* foto do serviço ainda chegando: caixa do mesmo tamanho, sem a tela "pular" depois */
+.servico-foto.foto-carregando { background: var(--surface-2); animation: foto-pulso 1.3s ease-in-out infinite; }
+@keyframes foto-pulso { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }

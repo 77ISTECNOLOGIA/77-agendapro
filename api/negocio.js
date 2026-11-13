@@ -10,7 +10,7 @@
 const { db } = require('./_lib/firebase');
 const { hojeChaveBrasil } = require('./_lib/tempo');
 const {
-  slugValido, situacaoNegocio, infoPublica, profissionalPublico, servicoPublico
+  slugValido, situacaoNegocio, infoPublica, profissionalPublico, servicoPublico, servicoPublicoLeve
 } = require('./_lib/negocio');
 const { dentroDoLimite, responder, tratarErro } = require('./_lib/http');
 const { ocupaHorario } = require('./_lib/sinal');
@@ -24,6 +24,17 @@ module.exports = async function handler(req, res) {
 
   try {
     const negocioRef = db().collection('barbearias').doc(slug);
+
+    // Fotos dos serviços: chamada separada, feita pelo link DEPOIS de mostrar a tela. Só lê os serviços e o
+    // navegador pode guardar por 5 minutos (a foto muda raramente; o resto da resposta continua sem cache).
+    if (String((req.query && req.query.fotos) || '') === '1') {
+      const snap = await negocioRef.collection('servicos').get();
+      const fotos = {};
+      snap.docs.forEach((d) => { const f = servicoPublico(d.id, d.data()).foto; if (f) fotos[d.id] = f; });
+      res.setHeader('Cache-Control', 'public, max-age=300');
+      return res.status(200).json({ fotos });
+    }
+
     const hoje = hojeChaveBrasil();
 
     const [infoSnap, servicosSnap, profsSnap, ocupadosSnap] = await Promise.all([
@@ -39,7 +50,7 @@ module.exports = async function handler(req, res) {
     const situacao = situacaoNegocio(info);
 
     const servicos = {};
-    servicosSnap.docs.forEach((d) => { servicos[d.id] = servicoPublico(d.id, d.data()); });
+    servicosSnap.docs.forEach((d) => { servicos[d.id] = servicoPublicoLeve(d.id, d.data()); });
 
     const profissionais = {};
     profsSnap.docs.forEach((d) => { profissionais[d.id] = profissionalPublico(d.id, d.data(), hoje); });

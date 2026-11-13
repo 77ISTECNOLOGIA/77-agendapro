@@ -101,7 +101,14 @@ function servicoPublico(id, s) {
   };
 }
 
+// Versão leve para a 1ª tela do link: SEM a foto (que pesa até ~70 mil caracteres por serviço e fazia toda
+// abertura do link baixar todas as fotos). `temFoto` avisa que ela existe; as fotos vêm depois, em /api/negocio?fotos=1.
+function servicoPublicoLeve(id, s) {
+  const { foto, ...resto } = servicoPublico(id, s);
+  return { ...resto, temFoto: !!foto };
+}
+
 module.exports = {
   CARENCIA_TRIAL_DIAS, SLUGS_RESERVADOS, TIPOS_NEGOCIO,
-  slugValido, situacaoNegocio, infoPublica, profissionalPublico, servicoPublico, profissionalRealizaServico, fotoServicoValida
+  slugValido, situacaoNegocio, infoPublica, profissionalPublico, servicoPublico, servicoPublicoLeve, profissionalRealizaServico, fotoServicoValida
 };
