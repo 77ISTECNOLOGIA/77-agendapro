@@ -178,10 +178,14 @@
   transition: all var(--transition);
   flex-shrink: 0;
 }
-.btn-logout:hover {
-  border-color: var(--danger);
-  color: var(--danger);
+/* O vermelho só aparece em aparelhos com mouse: no celular o :hover "gruda" depois do toque e o botão ficava vermelho até tocar em outro lugar */
+@media (hover: hover) {
+  .btn-logout:hover {
+    border-color: var(--danger);
+    color: var(--danger);
+  }
 }
+.btn-logout:focus:not(:focus-visible) { outline: none; }
 
 /* ====== ABAS HORIZONTAIS (substituem a sidebar fixa) ====== */
 .tabs-nav {

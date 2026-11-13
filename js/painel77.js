@@ -4,6 +4,7 @@
 
 import { firebaseConfig } from './firebase-config.js';
 import { escapeHtml, adicionarMostrarSenha } from './utils.js';
+import { toast } from './toast.js';
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
   getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail
@@ -69,11 +70,6 @@ function diasAte(iso) {
   return Math.ceil((new Date(iso).getTime()-Date.now())/(86400000));
 }
 
-function toast(msg, tipo='') {
-  const el=$('#toast'); $('#toast-msg').textContent=msg;
-  el.className=`toast ativo ${tipo}`; el.classList.remove('hidden');
-  setTimeout(()=>{el.classList.remove('ativo');setTimeout(()=>el.classList.add('hidden'),300);},3000);
-}
 function abrirModal(titulo, corpo, rodape='') {
   $('#modal-titulo').textContent=titulo; $('#modal-body').innerHTML=corpo; $('#modal-footer').innerHTML=rodape;
   $('#modal-overlay').classList.remove('hidden');
@@ -166,7 +162,12 @@ $('#btn-esqueci').addEventListener('click', async () => {
   }
 });
 
-$('#btn-logout')?.addEventListener('click', async () => { if(confirm('Sair?')) await signOut(auth); });
+$('#btn-logout')?.addEventListener('click', (e) => {
+  e.currentTarget.blur();
+  abrirModal('Sair do painel', '<p style="color:var(--text-dim);line-height:1.5;margin:0;">Deseja realmente sair? Você vai precisar entrar de novo com e-mail e senha.</p>', `<button class="btn-acao-secundario" id="modal-cancel">Cancelar</button><button class="btn-acao-perigo" id="modal-confirmar-sair">Sair</button>`);
+  $('#modal-cancel').addEventListener('click', fecharModal);
+  $('#modal-confirmar-sair').addEventListener('click', async () => { fecharModal(); await signOut(auth); });
+});
 $('#btn-logout-negado')?.addEventListener('click', () => signOut(auth));
 
 // ========================================

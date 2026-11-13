@@ -6,6 +6,7 @@
 // (/api/negocio, /api/criar-agendamento, /api/agendamento-cliente), que
 // validam no servidor e só devolvem o que o visitante pode ver.
 import { aplicarTema } from './vocabulario.js';
+import { toast } from './toast.js';
 import { escapeHtml, profissionalRealizaServico, fotoServicoValida, urlMapa, urlAppleMaps, ehAppleMobile } from './utils.js';
 
 // ========================================
@@ -89,16 +90,6 @@ function horaParaMinutos(hora) {
   return h * 60 + m;
 }
 
-function toast(msg, tipo = '') {
-  const el = $('#toast');
-  $('#toast-msg').textContent = msg;
-  el.className = `toast ativo ${tipo}`;
-  el.classList.remove('hidden');
-  setTimeout(() => {
-    el.classList.remove('ativo');
-    setTimeout(() => el.classList.add('hidden'), 300);
-  }, 3000);
-}
 
 function mostrarTela(numero) {
   $$('.tela').forEach(t => t.classList.remove('ativa'));

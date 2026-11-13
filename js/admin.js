@@ -3,6 +3,7 @@
 // ========================================
 
 import { db } from './firebase-config.js';
+import { toast } from './toast.js';
 import { ligarBuscaCep, UFS } from './cep.js';
 import { urlMapa, consultaMapa } from './utils.js';
 import { escapeHtml, adicionarMostrarSenha, profissionalRealizaServico, calcularVinculosProfissional, atendimentosParaResolver, periodoPronto, resumoPeriodo, fotoServicoValida } from './utils.js';
@@ -134,16 +135,6 @@ function formatarWhatsapp(num) {
   if (d.length === 13) return `(${d.slice(2, 4)}) ${d.slice(4, 9)}-${d.slice(9, 13)}`;
   if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7, 11)}`;
   return num;
-}
-function toast(msg, tipo = '') {
-  const el = $('#toast');
-  $('#toast-msg').textContent = msg;
-  el.className = `toast ativo ${tipo}`;
-  el.classList.remove('hidden');
-  setTimeout(() => {
-    el.classList.remove('ativo');
-    setTimeout(() => el.classList.add('hidden'), 300);
-  }, 3000);
 }
 
 // ========================================
@@ -494,9 +485,16 @@ async function ouvirNotificacoesEmPrimeiroPlano() {
   }
 }
 
-async function handleLogout() {
-  if (!confirm('Deseja realmente sair?')) return;
-  await signOut(auth);
+// Confirmação com a janela do próprio painel (a do navegador deixava o botão "Sair" marcado depois de cancelar)
+function handleLogout() {
+  const botao = $('#btn-logout');
+  if (botao) botao.blur();
+  abrirModal('Sair do painel', '<p style="color:var(--text-dim);line-height:1.5;margin:0;">Deseja realmente sair? Você vai precisar entrar de novo com e-mail e senha.</p>', `<button class="btn-acao-secundario" id="modal-cancel">Cancelar</button><button class="btn-acao-perigo" id="modal-confirmar-sair">Sair</button>`);
+  $('#modal-cancel').addEventListener('click', fecharModal);
+  $('#modal-confirmar-sair').addEventListener('click', async () => {
+    fecharModal();
+    await signOut(auth);
+  });
 }
 
 function mostrarLogin(msg) {
@@ -2356,6 +2354,9 @@ async function salvarRegrasAgendamento() {
 
 async function salvarConfiguracoes(e) {
   e.preventDefault();
+  const botao = $('#btn-salvar-config');
+  const rotuloBotao = botao ? botao.textContent : '';
+  if (botao) { botao.disabled = true; botao.textContent = 'Salvando...'; }
   const dados = {
     nome: $('#conf-nome').value.trim(),
     telefone: $('#conf-telefone').value.trim(),
@@ -2384,7 +2385,9 @@ async function salvarConfiguracoes(e) {
     await updateDoc(doc(db, 'barbearias', state.barbeariaId), dados);
     toast('Configurações salvas', 'sucesso');
   } catch (err) {
-    toast(err.mensagemUsuario || 'Erro ao salvar', 'erro');
+    toast(err.mensagemUsuario || 'Não foi possível salvar. Tente de novo.', 'erro');
+  } finally {
+    if (botao) { botao.disabled = false; botao.textContent = rotuloBotao; }
   }
 }
 

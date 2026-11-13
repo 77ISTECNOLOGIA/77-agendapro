@@ -646,34 +646,71 @@ input { font-family: inherit; }
 }
 
 /* ====== TOAST ====== */
+/* Aviso curto (toast): cartão escuro com ícone, barra de tempo e animação. Tipos: .sucesso, .erro, (sem tipo = informação). */
 .toast {
   position: fixed;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%) translateY(100px);
-  background: var(--surface-2);
-  border: 1px solid var(--border-light);
-  color: var(--text);
-  padding: 12px 20px;
-  border-radius: var(--radius-md);
-  font-size: 13px;
-  font-weight: 500;
+  top: 20px;
+  right: 20px;
   z-index: 1100; /* acima de janelas/modais (200) e do loading (1000): senão o aviso de erro some atrás do modal */
-  transition: transform 0.3s cubic-bezier(0.68, -0.55, 0.27, 1.55);
-  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: max-content;
+  max-width: min(calc(100vw - 32px), 380px);
+  padding: 14px 18px 17px 14px;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border-light);
+  border-radius: 14px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(-14px) scale(0.98);
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+  --toast-cor: #0077FF;
 }
-.toast.ativo {
-  transform: translateX(-50%) translateY(0);
+.toast.hidden { display: none; }
+.toast.ativo { opacity: 1; transform: none; pointer-events: auto; }
+.toast #toast-msg { overflow-wrap: anywhere; }
+/* ícone (círculo translúcido com o símbolo) */
+.toast::before {
+  content: '';
+  flex: 0 0 28px;
+  height: 28px;
+  background: center / contain no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 28'%3E%3Ccircle cx='14' cy='14' r='14' fill='%230077FF' fill-opacity='.2'/%3E%3Cpath d='M14 12.6v6M14 8.9v.1' fill='none' stroke='%2300A6FF' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E");
 }
-.toast.erro {
-  border-color: var(--danger);
-  background: rgba(255, 68, 68, 0.1);
-  color: #ff8888;
+.toast.sucesso { --toast-cor: #22c55e; }
+.toast.sucesso::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 28'%3E%3Ccircle cx='14' cy='14' r='14' fill='%2322c55e' fill-opacity='.2'/%3E%3Cpath d='M8.6 14.6l3.7 3.7 7.1-7.6' fill='none' stroke='%2322c55e' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
-.toast.sucesso {
-  border-color: var(--success);
-  background: rgba(74, 222, 128, 0.1);
-  color: var(--success);
+.toast.erro { --toast-cor: #ef4444; }
+.toast.erro::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 28'%3E%3Ccircle cx='14' cy='14' r='14' fill='%23ef4444' fill-opacity='.2'/%3E%3Cpath d='M14 8.6v6.2M14 19.1v.1' fill='none' stroke='%23ef4444' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+/* barra de tempo no rodapé do cartão */
+.toast::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 3px;
+  background: var(--toast-cor);
+  transform-origin: left;
+  transform: scaleX(1);
+  opacity: 0.9;
+}
+.toast.ativo::after { animation: toast-barra var(--toast-dur, 3200ms) linear forwards; }
+@keyframes toast-barra { to { transform: scaleX(0); } }
+@media (max-width: 600px) {
+  .toast { top: max(12px, env(safe-area-inset-top)); left: 16px; right: 16px; width: auto; max-width: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast { transition: opacity 0.15s ease; transform: none; }
+  .toast.ativo::after { animation-duration: 0.001ms; }
 }
 
 /* ====== TELA CHEIA (ERROS) ====== */
