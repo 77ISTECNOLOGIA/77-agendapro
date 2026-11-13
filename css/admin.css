@@ -1101,3 +1101,11 @@
 .status-aguardando_sinal { background: rgba(251, 191, 36, 0.14); color: #fbbf24; }
 .status-sinal_informado { background: rgba(0, 210, 255, 0.14); color: #00D2FF; }
 .pag-recusar { color: #ff8888; }
+
+/* endereço (Configurações) */
+.linha-rua { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; }
+.linha-cidade { display: grid; grid-template-columns: 1.3fr 1.3fr 0.7fr; gap: 12px; }
+.cep-aviso { display: block; margin-top: 6px; font-size: 12px; color: var(--text-muted); }
+.cep-aviso[data-tipo="ok"] { color: #4ade80; }
+.cep-aviso[data-tipo="erro"] { color: #fbbf24; }
+@media (max-width: 480px) { .linha-cidade { grid-template-columns: 1fr 1fr; } .linha-cidade .input-grupo:last-child { grid-column: 1 / -1; } }

@@ -248,7 +248,7 @@ function mostrarErroBarbearia(titulo, mensagem, icone) {
 
 function renderizarHeader() {
   $('#header-nome').textContent = state.barbearia.nome || 'Barbearia';
-  $('#header-passo').textContent = state.barbearia.endereco || '';
+  $('#header-passo').textContent = state.barbearia.enderecoCurto || state.barbearia.endereco || '';
 }
 
 // ========================================

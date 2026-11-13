@@ -305,7 +305,8 @@ test('cliente: remarcar para o próprio horário atual não conflita consigo mes
 // ---------------------------------------------------------------- cadastrar-negocio
 
 const cadastro = (extra = {}) => ({
-  idToken: 'tok-novo-dono', nomeNeg: 'Studio Nova', slug: 'studio-nova', cidade: 'Niterói', bairro: 'Icaraí',
+  idToken: 'tok-novo-dono', nomeNeg: 'Studio Nova', slug: 'studio-nova',
+  cep: '24230-005', logradouro: 'Rua Miguel de Frias', numero: '77', complemento: 'Sala 2', bairro: 'Icaraí', cidade: 'Niterói', uf: 'RJ',
   telefone: '21999990000', nomeResp: 'Ana Dona', tipoNegocio: 'estetica',
   servicos: [{ nome: 'Design de Sobrancelha', duracaoMin: 45, preco: 60, emoji: '🪄' }], ...extra
 });
@@ -328,6 +329,44 @@ test('cadastro: nasce em trial de 30 dias (definido pelo servidor) e com víncul
   assert.equal(u.email, 'novo-dono@teste.com');          // e-mail do token, não do corpo
   assert.equal(amb.fake.get('cadastrosAguardando/studio-nova').uid, 'novo-dono');
   assert.equal(amb.fake.get('barbearias/studio-nova/servicos/srv_001').nome, 'Design de Sobrancelha');
+});
+
+test('cadastro: grava o endereço completo (estruturado + texto) e o cabeçalho curto do link do cliente', async () => {
+  const r = await chamar(cadastrarNegocio, req('POST', { body: cadastro({ uf: 'rj', cep: '24230005', numero: '  77  ' }) }));
+  assert.equal(r.statusCode, 201);
+  const n = amb.fake.get('barbearias/studio-nova');
+  assert.deepEqual(n.enderecoDetalhe, { cep: '24230-005', logradouro: 'Rua Miguel de Frias', numero: '77', complemento: 'Sala 2', bairro: 'Icaraí', cidade: 'Niterói', uf: 'RJ' });
+  assert.equal(n.endereco, 'Rua Miguel de Frias, 77 - Sala 2 - Icaraí, Niterói - RJ, CEP 24230-005');
+  assert.equal(n.cidade, 'Niterói'); assert.equal(n.bairro, 'Icaraí');
+  assert.equal(amb.fake.get('cadastrosAguardando/studio-nova').uf, 'RJ');
+  const pub = await chamar(negocio, req('GET', { query: { slug: 'studio-nova' } }));
+  assert.equal(pub.body.barbearia.endereco, n.endereco);
+  assert.equal(pub.body.barbearia.enderecoCurto, 'Icaraí, Niterói');
+});
+
+test('cadastro: endereço é obrigatório e validado no servidor (CEP, rua, número, bairro, cidade, UF)', async () => {
+  const casos = [
+    [{ cep: '123' }, /CEP válido/], [{ cep: '' }, /CEP válido/], [{ logradouro: ' ' }, /rua/i], [{ numero: '' }, /número/i],
+    [{ bairro: '' }, /bairro/i], [{ cidade: '' }, /cidade/i], [{ uf: 'XX' }, /estado/i], [{ uf: '' }, /estado/i]
+  ];
+  for (const [campo, msg] of casos) {
+    limparLimites();
+    const r = await chamar(cadastrarNegocio, req('POST', { body: cadastro(campo) }));
+    assert.equal(r.statusCode, 400, JSON.stringify(campo));
+    assert.match(r.body.erro, msg, JSON.stringify(campo));
+  }
+  assert.equal(amb.fake.get('barbearias/studio-nova'), undefined, 'nada é criado com endereço incompleto');
+  limparLimites();
+  const semComplemento = await chamar(cadastrarNegocio, req('POST', { body: cadastro({ complemento: '' }) }));
+  assert.equal(semComplemento.statusCode, 201, 'complemento é opcional');
+  assert.equal(amb.fake.get('barbearias/studio-nova').enderecoDetalhe.complemento, '');
+});
+
+test('negócio antigo (só texto de endereço): cabeçalho curto continua mostrando o texto que já tinha', async () => {
+  amb.fake.seed(`barbearias/${SLUG}`, { ...amb.fake.get(`barbearias/${SLUG}`), endereco: 'Mangueira, Rio de Janeiro' });
+  const pub = await chamar(negocio, req('GET', { query: { slug: SLUG } }));
+  assert.equal(pub.body.barbearia.enderecoCurto, 'Mangueira, Rio de Janeiro');
+  assert.equal(pub.body.barbearia.endereco, 'Mangueira, Rio de Janeiro');
 });
 
 test('cadastro: recusa slug em uso, reservado, token inválido, 2º negócio na mesma conta e dados ruins', async () => {

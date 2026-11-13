@@ -372,10 +372,6 @@
                 <input type="text" id="conf-nome" class="input">
               </div>
               <div class="input-grupo">
-                <label class="input-label">ENDEREÇO</label>
-                <input type="text" id="conf-endereco" class="input">
-              </div>
-              <div class="input-grupo">
                 <label class="input-label">TELEFONE (WhatsApp)</label>
                 <input type="tel" id="conf-telefone" class="input">
               </div>
@@ -385,6 +381,47 @@
                 <small class="campo-help">Link público: <span id="link-publico">—</span></small>
               </div>
             </div>
+          </div>
+
+          <!-- Endereço -->
+          <div class="card-grande" style="margin-top: 20px;" id="bloco-endereco">
+            <div class="card-header">
+              <h3 class="card-titulo">Endereço do estabelecimento</h3>
+            </div>
+            <p id="conf-endereco-atual" class="campo-help" style="margin-bottom:12px;"></p>
+      <div class="input-grupo">
+        <label class="input-label" for="conf-cep">CEP *</label>
+        <input type="text" id="conf-cep" class="input" inputmode="numeric" autocomplete="postal-code" maxlength="9" placeholder="00000-000">
+        <small id="conf-cep-aviso" class="cep-aviso">Digite o CEP e preenchemos o endereço para você.</small>
+      </div>
+      <div class="linha-rua">
+        <div class="input-grupo">
+          <label class="input-label" for="conf-logradouro">RUA / AVENIDA *</label>
+          <input type="text" id="conf-logradouro" class="input" maxlength="80" autocomplete="address-line1" placeholder="Rua das Flores">
+        </div>
+        <div class="input-grupo">
+          <label class="input-label" for="conf-numero">NÚMERO *</label>
+          <input type="text" id="conf-numero" class="input" maxlength="10" inputmode="text" placeholder="123 ou S/N">
+        </div>
+      </div>
+      <div class="input-grupo">
+        <label class="input-label" for="conf-complemento">COMPLEMENTO (OPCIONAL)</label>
+        <input type="text" id="conf-complemento" class="input" maxlength="40" autocomplete="address-line2" placeholder="Sala 2, loja B...">
+      </div>
+      <div class="linha-cidade">
+        <div class="input-grupo">
+          <label class="input-label" for="conf-bairro">BAIRRO *</label>
+          <input type="text" id="conf-bairro" class="input" maxlength="60" placeholder="Copacabana">
+        </div>
+        <div class="input-grupo">
+          <label class="input-label" for="conf-cidade">CIDADE *</label>
+          <input type="text" id="conf-cidade" class="input" maxlength="60" autocomplete="address-level2" placeholder="Rio de Janeiro">
+        </div>
+        <div class="input-grupo">
+          <label class="input-label" for="conf-uf">UF *</label>
+          <select id="conf-uf" class="input"><option value="">—</option></select>
+        </div>
+      </div>
           </div>
 
           <!-- Horários -->

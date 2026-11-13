@@ -3,6 +3,7 @@
 // ========================================
 
 import { db } from './firebase-config.js';
+import { ligarBuscaCep, UFS } from './cep.js';
 import { escapeHtml, adicionarMostrarSenha, profissionalRealizaServico, calcularVinculosProfissional, atendimentosParaResolver, periodoPronto, resumoPeriodo, fotoServicoValida } from './utils.js';
 import { aplicarTema, resetarTema } from './vocabulario.js';
 import {
@@ -2208,9 +2209,46 @@ function renderizarClientes() {
 // ========================================
 // VIEW: CONFIGURAÇÕES
 // ========================================
+// ---- Endereço (Configurações) ----
+const CAMPOS_ENDERECO = ['cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'uf'];
+
+function lerEnderecoForm() {
+  const f = {};
+  CAMPOS_ENDERECO.forEach((k) => { f[k] = ($('#conf-' + k).value || '').trim(); });
+  return f;
+}
+
+function preencherEndereco() {
+  const bloco = $('#bloco-endereco');
+  if (!bloco || bloco.dataset.sujo === '1') return;          // não apaga o que a pessoa está digitando
+  const e = state.barbearia.enderecoDetalhe || {};
+  CAMPOS_ENDERECO.forEach((k) => { $('#conf-' + k).value = e[k] || ''; });
+  $('#conf-endereco-atual').textContent = e.cep
+    ? ''
+    : (state.barbearia.endereco ? `Endereço cadastrado hoje: ${state.barbearia.endereco}. Preencha o CEP abaixo para completar (rua, número e CEP).` : 'Informe o endereço completo do seu estabelecimento.');
+}
+
+function enderecoMudou(f) {
+  if (!CAMPOS_ENDERECO.some((k) => f[k])) return false;      // formulário vazio: não mexe no que já existe
+  const atual = state.barbearia.enderecoDetalhe;
+  if (!atual) return true;
+  const mesmo = (k) => (k === 'cep' ? String(f[k]).replace(/\D/g, '') === String(atual[k] || '').replace(/\D/g, '') : String(f[k]).trim() === String(atual[k] || '').trim());
+  return !CAMPOS_ENDERECO.every(mesmo);
+}
+
+async function salvarEnderecoApi(f) {
+  const resp = await fetch('/api/configurar-negocio', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ idToken: await auth.currentUser.getIdToken(), endereco: f })
+  });
+  const corpo = await resp.json().catch(() => ({}));
+  if (!resp.ok) { const e = new Error(corpo.erro || 'Não foi possível salvar o endereço.'); e.mensagemUsuario = e.message; throw e; }
+}
+
 function renderizarConfiguracoes() {
   $('#conf-nome').value = state.barbearia.nome || '';
-  $('#conf-endereco').value = state.barbearia.endereco || '';
+  preencherEndereco();
   $('#conf-telefone').value = state.barbearia.telefone || '';
   $('#conf-slug').value = state.barbeariaId;
   $('#link-publico').textContent = `${window.location.origin}/${state.barbeariaId}`;
@@ -2314,7 +2352,6 @@ async function salvarConfiguracoes(e) {
   e.preventDefault();
   const dados = {
     nome: $('#conf-nome').value.trim(),
-    endereco: $('#conf-endereco').value.trim(),
     telefone: $('#conf-telefone').value.trim(),
     horarioFuncionamento: {}
   };
@@ -2328,10 +2365,16 @@ async function salvarConfiguracoes(e) {
   });
 
   try {
+    // endereço passa pelo servidor (valida CEP, número, UF...); só chama se a pessoa mexeu nele
+    const end = lerEnderecoForm();
+    if (enderecoMudou(end)) {
+      await salvarEnderecoApi(end);
+      const bloco = $('#bloco-endereco'); if (bloco) bloco.dataset.sujo = '';
+    }
     await updateDoc(doc(db, 'barbearias', state.barbeariaId), dados);
     toast('Configurações salvas', 'sucesso');
   } catch (err) {
-    toast('Erro ao salvar', 'erro');
+    toast(err.mensagemUsuario || 'Erro ao salvar', 'erro');
   }
 }
 
@@ -2402,6 +2445,9 @@ function inicializarEventosViews() {
   });
   $('#btn-novo-agendamento').addEventListener('click', () => modalNovoAgendamento());
   $('#btn-salvar-sinal').addEventListener('click', salvarRegrasAgendamento);
+  UFS.forEach((uf) => { const o = document.createElement('option'); o.value = uf; o.textContent = uf; $('#conf-uf').appendChild(o); });
+  ligarBuscaCep({ cep: 'conf-cep', logradouro: 'conf-logradouro', numero: 'conf-numero', bairro: 'conf-bairro', cidade: 'conf-cidade', uf: 'conf-uf', aviso: 'conf-cep-aviso' });
+  $('#bloco-endereco').addEventListener('input', () => { $('#bloco-endereco').dataset.sujo = '1'; });
   $('#sinal-ativo').addEventListener('change', () => { $('#sinal-campos').style.opacity = $('#sinal-ativo').checked ? '1' : '0.55'; });
   $('#btn-horarios-fixos').addEventListener('click', () => modalHorariosFixos());
 

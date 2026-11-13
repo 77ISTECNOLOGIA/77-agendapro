@@ -42,6 +42,12 @@
     .slug-preview { font-size: 11px; color: var(--text-muted); margin-top: 6px; font-family: 'SF Mono', monospace; }
     .slug-preview .accent { color: var(--accent); }
     .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .linha-rua { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; }
+    .linha-cidade { display: grid; grid-template-columns: 1.3fr 1.3fr 0.7fr; gap: 12px; }
+    .cep-aviso { display: block; margin-top: 6px; font-size: 12px; color: var(--text-muted); }
+    .cep-aviso[data-tipo="ok"] { color: #4ade80; }
+    .cep-aviso[data-tipo="erro"] { color: #fbbf24; }
+    @media (max-width: 480px) { .linha-cidade { grid-template-columns: 1fr 1fr; } .linha-cidade .input-grupo:last-child { grid-column: 1 / -1; } }
     @media (max-width: 480px) { .form-row { grid-template-columns: 1fr; } .tipo-grid { grid-template-columns: 1fr 1fr; } }
 
     .beneficios { list-style: none; padding: 0; margin: 0 0 20px; }
@@ -114,14 +120,37 @@
         </div>
       </div>
 
-      <div class="form-row">
+      <div class="input-grupo">
+        <label class="input-label" for="cep">CEP *</label>
+        <input type="text" id="cep" class="input" inputmode="numeric" autocomplete="postal-code" maxlength="9" placeholder="00000-000">
+        <small id="cep-aviso" class="cep-aviso">Digite o CEP e preenchemos o endereço para você.</small>
+      </div>
+      <div class="linha-rua">
         <div class="input-grupo">
-          <label class="input-label" for="cidade">CIDADE</label>
-          <input type="text" id="cidade" class="input" placeholder="Rio de Janeiro" value="Rio de Janeiro">
+          <label class="input-label" for="logradouro">RUA / AVENIDA *</label>
+          <input type="text" id="logradouro" class="input" maxlength="80" autocomplete="address-line1" placeholder="Rua das Flores">
         </div>
         <div class="input-grupo">
-          <label class="input-label" for="bairro">BAIRRO</label>
-          <input type="text" id="bairro" class="input" placeholder="Copacabana">
+          <label class="input-label" for="numero">NÚMERO *</label>
+          <input type="text" id="numero" class="input" maxlength="10" inputmode="text" placeholder="123 ou S/N">
+        </div>
+      </div>
+      <div class="input-grupo">
+        <label class="input-label" for="complemento">COMPLEMENTO (OPCIONAL)</label>
+        <input type="text" id="complemento" class="input" maxlength="40" autocomplete="address-line2" placeholder="Sala 2, loja B...">
+      </div>
+      <div class="linha-cidade">
+        <div class="input-grupo">
+          <label class="input-label" for="bairro">BAIRRO *</label>
+          <input type="text" id="bairro" class="input" maxlength="60" placeholder="Copacabana">
+        </div>
+        <div class="input-grupo">
+          <label class="input-label" for="cidade">CIDADE *</label>
+          <input type="text" id="cidade" class="input" maxlength="60" autocomplete="address-level2" placeholder="Rio de Janeiro">
+        </div>
+        <div class="input-grupo">
+          <label class="input-label" for="uf">UF *</label>
+          <select id="uf" class="input"><option value="">—</option></select>
         </div>
       </div>
 

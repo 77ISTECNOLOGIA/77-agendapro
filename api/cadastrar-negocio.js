@@ -18,6 +18,7 @@
 // POST { idToken, ...dados } → cria negócio + serviços + usuário + fila de aprovação
 
 const { db, auth } = require('./_lib/firebase');
+const { normalizarEndereco, camposDoEndereco } = require('./_lib/endereco');
 const { normalizarWhatsapp, whatsappValido } = require('./_lib/tempo');
 const { slugValido, SLUGS_RESERVADOS, TIPOS_NEGOCIO } = require('./_lib/negocio');
 const { dentroDoLimite, responder, ErroNegocio, tratarErro, corpoDe } = require('./_lib/http');
@@ -69,8 +70,6 @@ module.exports = async function handler(req, res) {
   const slug = String(b.slug || '').toLowerCase();
   const nomeNeg = texto(b.nomeNeg, 80);
   const nomeResp = texto(b.nomeResp, 80);
-  const cidade = texto(b.cidade, 60);
-  const bairro = texto(b.bairro, 60);
   const telefone = normalizarWhatsapp(b.telefone);
   const tipoNegocio = TIPOS_NEGOCIO.includes(b.tipoNegocio) ? b.tipoNegocio : 'outro';
   const servicos = sanitizarServicos(b.servicos);
@@ -82,6 +81,9 @@ module.exports = async function handler(req, res) {
   if (!whatsappValido(telefone)) return responder(res, 400, { erro: 'Digite um WhatsApp válido com DDD.' });
 
   try {
+    // Endereço completo é obrigatório (CEP, rua, número, bairro, cidade e UF); o navegador preenche pelo CEP, mas o servidor valida de novo
+    const end = normalizarEndereco(b);
+
     const decoded = await auth().verifyIdToken(String(b.idToken));
     const uid = decoded.uid;
     const email = String(decoded.email || '').toLowerCase();
@@ -94,7 +96,6 @@ module.exports = async function handler(req, res) {
     const agoraMs = Date.now();
     const agora = new Date(agoraMs).toISOString();
     const trialFim = new Date(agoraMs + DIAS_TRIAL * 86400000).toISOString();
-    const enderecoCompleto = [bairro, cidade].filter(Boolean).join(', ');
     const servicosFinais = servicos.length ? servicos : [{ nome: 'Atendimento padrão', duracaoMin: 60, preco: 80 }];
 
     await firestore.runTransaction(async (tx) => {
@@ -106,9 +107,7 @@ module.exports = async function handler(req, res) {
         nome: nomeNeg,
         slug,
         tipoNegocio,
-        endereco: enderecoCompleto || 'Rio de Janeiro',
-        cidade,
-        bairro,
+        ...camposDoEndereco(end),
         telefone,
         status: 'trial',
         plano: 'trial',
@@ -131,7 +130,7 @@ module.exports = async function handler(req, res) {
 
       tx.set(filaRef, {
         barbeariaId: slug, nomeBarbearia: nomeNeg, tipoNegocio, nomeResponsavel: nomeResp,
-        email, telefone, cidade, bairro, criadoEm: agora, uid
+        email, telefone, cidade: end.cidade, bairro: end.bairro, uf: end.uf, criadoEm: agora, uid
       });
     });
 

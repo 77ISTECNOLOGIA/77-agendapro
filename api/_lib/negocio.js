@@ -52,6 +52,9 @@ function infoPublica(info) {
     limiteAgendamentosSemana: limiteSemanal(i),
     nome: i.nome || '',
     endereco: i.endereco || '',
+    // cabeçalho curto do link do cliente: "Bairro, Cidade" (negócios antigos, sem endereço detalhado, mostram o texto que já tinham)
+    enderecoCurto: (i.enderecoDetalhe && i.enderecoDetalhe.bairro && i.enderecoDetalhe.cidade)
+      ? i.enderecoDetalhe.bairro + ', ' + i.enderecoDetalhe.cidade : (i.endereco || ''),
     telefone: i.telefone || '',
     tipoNegocio: i.tipoNegocio || 'barbearia',
     horarioFuncionamento: i.horarioFuncionamento || {}

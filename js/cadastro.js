@@ -14,6 +14,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { SERVICOS_SUGERIDOS } from './vocabulario.js';
 import { adicionarMostrarSenha } from './utils.js';
+import { ligarBuscaCep, UFS, cepValido } from './cep.js';
 
 const auth = getAuth(getApp());
 
@@ -103,6 +104,10 @@ $('#telefone').addEventListener('input', (e) => {
 
 adicionarMostrarSenha($('#senha'));
 
+// Endereço: lista de estados e preenchimento automático pelo CEP
+UFS.forEach((uf) => { const o = document.createElement('option'); o.value = uf; o.textContent = uf; $('#uf').appendChild(o); });
+ligarBuscaCep({ cep: 'cep', logradouro: 'logradouro', numero: 'numero', bairro: 'bairro', cidade: 'cidade', uf: 'uf', aviso: 'cep-aviso' });
+
 // ========================================
 // API
 // ========================================
@@ -120,8 +125,13 @@ async function enviarCadastro(idToken, dados) {
       idToken,
       nomeNeg: dados.nomeNeg,
       slug: dados.slug,
-      cidade: dados.cidade,
+      cep: dados.cep,
+      logradouro: dados.logradouro,
+      numero: dados.numero,
+      complemento: dados.complemento,
       bairro: dados.bairro,
+      cidade: dados.cidade,
+      uf: dados.uf,
       telefone: dados.telefone,
       nomeResp: dados.nomeResp,
       tipoNegocio: dados.tipoNegocio,
@@ -171,8 +181,13 @@ async function handleCadastro(e) {
   const dados = {
     nomeNeg: $('#nome-neg').value.trim(),
     slug: slugify($('#slug').value),
-    cidade: $('#cidade').value.trim(),
+    cep: $('#cep').value.trim(),
+    logradouro: $('#logradouro').value.trim(),
+    numero: $('#numero').value.trim(),
+    complemento: $('#complemento').value.trim(),
     bairro: $('#bairro').value.trim(),
+    cidade: $('#cidade').value.trim(),
+    uf: $('#uf').value,
     telefone: $('#telefone').value.trim(),
     nomeResp: $('#nome-resp').value.trim(),
     email: $('#email').value.trim().toLowerCase(),
@@ -184,6 +199,12 @@ async function handleCadastro(e) {
   if (!dados.nomeNeg) return mostrarErro('Digite o nome do estabelecimento.');
   if (!dados.slug || dados.slug.length < 3) return mostrarErro('O link precisa ter pelo menos 3 caracteres.');
   if (!dados.telefone || dados.telefone.replace(/\D/g, '').length < 11) return mostrarErro('Digite um WhatsApp válido com DDD.');
+  if (!cepValido(dados.cep)) return mostrarErro('Digite o CEP do estabelecimento (8 números).');
+  if (dados.logradouro.length < 2) return mostrarErro('Informe a rua (ou avenida) do estabelecimento.');
+  if (!dados.numero) return mostrarErro('Informe o número do endereço (ou S/N, se não houver).');
+  if (dados.bairro.length < 2) return mostrarErro('Informe o bairro.');
+  if (dados.cidade.length < 2) return mostrarErro('Informe a cidade.');
+  if (!dados.uf) return mostrarErro('Escolha o estado (UF).');
   if (!dados.nomeResp) return mostrarErro('Digite seu nome.');
   if (!validarEmail(dados.email)) return mostrarErro('Digite um email válido.');
   if (dados.senha.length < 6) return mostrarErro('Senha precisa ter pelo menos 6 caracteres.');

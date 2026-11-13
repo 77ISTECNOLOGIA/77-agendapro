@@ -606,7 +606,7 @@ async function modalDetalhes(id) {
       <h4>Dados Gerais</h4>
       <div class="modal-info-row"><span class="label">Tipo</span><span class="valor">${TIPO_LABEL[info.tipoNegocio]||'—'}</span></div>
       <div class="modal-info-row"><span class="label">Slug</span><span class="valor" style="font-family:monospace;">/${escapeHtml(id)}</span></div>
-      <div class="modal-info-row"><span class="label">Endereço</span><span class="valor">${escapeHtml(info.bairro||'—')}${info.cidade?', '+escapeHtml(info.cidade):''}</span></div>
+      <div class="modal-info-row"><span class="label">Endereço</span><span class="valor">${escapeHtml(info.endereco||((info.bairro||'—')+(info.cidade?', '+info.cidade:'')))}</span></div>
       <div class="modal-info-row"><span class="label">WhatsApp</span><span class="valor">${escapeHtml(fmtWhats(info.telefone))}</span></div>
       <div class="modal-info-row"><span class="label">Status</span><span class="valor">${escapeHtml(info.status||'—')}</span></div>
       ${info.trialFim?`<div class="modal-info-row"><span class="label">Trial até</span><span class="valor">${new Date(info.trialFim).toLocaleDateString('pt-BR')}</span></div>`:''}

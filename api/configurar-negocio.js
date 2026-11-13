@@ -4,12 +4,14 @@
 // ========================================
 // Só o DONO (token do Firebase verificado + usuarios/{uid}). Fica no servidor (e não nas regras do
 // Firestore) para validar a chave Pix, o percentual e o limite antes de gravar.
-// POST { idToken, sinal: { ativo, percentual, prazoHoras, tipoChave, chavePix, nomeRecebedor, cidadeRecebedor, banco },
-//        limiteAgendamentosSemana }
+// POST { idToken, sinal?: { ativo, percentual, prazoHoras, tipoChave, chavePix, nomeRecebedor, cidadeRecebedor, banco },
+//        limiteAgendamentosSemana?, endereco?: { cep, logradouro, numero, complemento, bairro, cidade, uf } }
+// Cada parte é opcional: só o que vier no pedido é validado e gravado.
 
 const { db, auth } = require('./_lib/firebase');
 const { dentroDoLimite, dentroDoLimitePorChave, responder, ErroNegocio, tratarErro, corpoDe } = require('./_lib/http');
 const { normalizarChavePix } = require('./_lib/pix');
+const { normalizarEndereco, camposDoEndereco } = require('./_lib/endereco');
 const { normalizarBanco } = require('./_lib/sinal');
 
 const texto = (v, max) => String(v || '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
@@ -59,12 +61,29 @@ module.exports = async function handler(req, res) {
     const negocioRef = firestore.collection('barbearias').doc(vinculo.barbeariaId);
     if (!(await negocioRef.get()).exists) throw new ErroNegocio(404, 'Negócio não encontrado');
 
-    const limite = Math.round(Number(b.limiteAgendamentosSemana || 0));
-    if (!Number.isInteger(limite) || limite < 0 || limite > 14) throw new ErroNegocio(400, 'O limite por semana deve ficar entre 0 (sem limite) e 14.');
+    const mudancas = {};
+    const resposta = { sucesso: true };
 
-    const sinal = validarSinal(b.sinal);
-    await negocioRef.update({ sinal, limiteAgendamentosSemana: limite });
-    return responder(res, 200, { sucesso: true, sinal, limiteAgendamentosSemana: limite });
+    if (b.limiteAgendamentosSemana !== undefined) {
+      const limite = Math.round(Number(b.limiteAgendamentosSemana || 0));
+      if (!Number.isInteger(limite) || limite < 0 || limite > 14) throw new ErroNegocio(400, 'O limite por semana deve ficar entre 0 (sem limite) e 14.');
+      mudancas.limiteAgendamentosSemana = limite;
+      resposta.limiteAgendamentosSemana = limite;
+    }
+    if (b.sinal !== undefined) {
+      mudancas.sinal = validarSinal(b.sinal);
+      resposta.sinal = mudancas.sinal;
+    }
+    if (b.endereco !== undefined) {
+      const campos = camposDoEndereco(normalizarEndereco(b.endereco));
+      Object.assign(mudancas, campos);
+      resposta.endereco = campos.endereco;
+      resposta.enderecoDetalhe = campos.enderecoDetalhe;
+    }
+    if (!Object.keys(mudancas).length) throw new ErroNegocio(400, 'Nada para salvar.');
+
+    await negocioRef.update(mudancas);
+    return responder(res, 200, resposta);
   } catch (err) {
     return tratarErro(res, err, 'configurar-negocio');
   }
