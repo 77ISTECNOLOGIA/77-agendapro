@@ -6,7 +6,7 @@
 // (/api/negocio, /api/criar-agendamento, /api/agendamento-cliente), que
 // validam no servidor e só devolvem o que o visitante pode ver.
 import { aplicarTema } from './vocabulario.js';
-import { escapeHtml, profissionalRealizaServico, fotoServicoValida, urlMapa } from './utils.js';
+import { escapeHtml, profissionalRealizaServico, fotoServicoValida, urlMapa, urlAppleMaps, ehAppleMobile } from './utils.js';
 
 // ========================================
 // ESTADO GLOBAL
@@ -252,16 +252,41 @@ function renderizarHeader() {
   $('#header-passo').textContent = state.barbearia.enderecoCurto || state.barbearia.endereco || '';
   const mapa = $('#btn-mapa');
   const url = urlMapa(state.barbearia.linkMapa, state.barbearia.consultaMapa || state.barbearia.endereco);
-  if (mapa) {
-    if (url) { mapa.href = url; mapa.classList.remove('hidden'); }
-    else mapa.classList.add('hidden');             // sem endereço cadastrado: sem botão
+  if (!mapa) return;
+  if (!url) { mapa.classList.add('hidden'); return; }       // sem endereço cadastrado: sem botão
+  mapa.classList.remove('hidden');
+  if (ehAppleMobile()) {
+    // iPhone/iPad: o botão abre um mini menu. O Google Maps pode falhar se o aplicativo não estiver instalado; o Apple Maps não.
+    mapa.href = '#';
+    mapa.dataset.menu = '1';
+    $('#mapa-apple').href = urlAppleMaps(state.barbearia.endereco || state.barbearia.consultaMapa);
+    $('#mapa-google').href = url;
+  } else {
+    mapa.href = url;                                          // demais aparelhos: link direto
+    mapa.dataset.menu = '';
   }
+}
+
+// Mini menu do botão "Ver no mapa" (só aparece no iPhone/iPad; ver renderizarHeader)
+function ligarMenuMapa() {
+  const botao = $('#btn-mapa'), menu = $('#menu-mapa');
+  if (!botao || !menu) return;
+  botao.addEventListener('click', (e) => {
+    if (botao.dataset.menu !== '1') return;                  // fora do iPhone o link abre direto
+    e.preventDefault();
+    menu.classList.toggle('hidden');
+  });
+  document.addEventListener('click', (e) => {
+    if (!menu.classList.contains('hidden') && !(e.target.closest && e.target.closest('.mapa-wrap'))) menu.classList.add('hidden');
+  });
+  menu.addEventListener('click', () => setTimeout(() => menu.classList.add('hidden'), 0));
 }
 
 // ========================================
 // EVENTOS
 // ========================================
 function inicializarEventos() {
+  ligarMenuMapa();
   const inputWhats = $('#input-whatsapp');
   inputWhats.addEventListener('input', (e) => {
     e.target.value = formatarWhatsapp(e.target.value);

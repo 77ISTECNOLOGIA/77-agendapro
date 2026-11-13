@@ -41,6 +41,20 @@ export function urlMapa(linkMapa, consulta) {
   return q ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q) : '';
 }
 
+// iPhone/iPad (inclui iPad que se apresenta como Mac). Lá o link do Google Maps tenta abrir o APLICATIVO Google Maps e,
+// se ele não estiver instalado, o Safari mostra "não pode abrir a página porque o endereço é inválido".
+export function ehAppleMobile(nav) {
+  const n = nav || (typeof navigator !== 'undefined' ? navigator : {});
+  const ua = String(n.userAgent || '');
+  return /iPad|iPhone|iPod/.test(ua) || (n.platform === 'MacIntel' && Number(n.maxTouchPoints) > 1);
+}
+
+// Apple Maps abre direto no aplicativo nativo do iPhone (sempre instalado). Busca pelo endereço completo (com CEP).
+export function urlAppleMaps(enderecoCompleto) {
+  const q = String(enderecoCompleto || '').trim();
+  return q ? 'https://maps.apple.com/?q=' + encodeURIComponent(q) : '';
+}
+
 // Serviço com `profissionaisIds` preenchido só é feito por esses profissionais;
 // lista ausente/vazia = QUALQUER um (padrão, e é o que vale pros serviços
 // antigos). Mesma regra do servidor (api/_lib/negocio.js).

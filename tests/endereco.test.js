@@ -275,8 +275,11 @@ test('mapa: o cabeçalho mostra o botão quando há endereço/link e esconde qua
   const els = { '#header-nome': { textContent: '' }, '#header-passo': { textContent: '' }, '#btn-mapa': { href: '', escondido: true, classList: { remove() { els['#btn-mapa'].escondido = false; }, add() { els['#btn-mapa'].escondido = true; } } } };
   const state = { barbearia: { nome: 'Lipão', enderecoCurto: 'Mangueira, Rio de Janeiro', endereco: TEXTO_COMPLETO, consultaMapa: '20911-135, Rio de Janeiro - RJ', linkMapa: '' } };
   const utils = ler('js/utils.js');
-  const ctx = vm.createContext({ state, $: (s) => els[s], String, encodeURIComponent, URL });
-  ['consultaMapa', 'linkMapaValido', 'urlMapa'].forEach((f) => vm.runInContext(extrairFuncao(utils, f), ctx));
+  els['#mapa-apple'] = { href: '' }; els['#mapa-google'] = { href: '' };
+  els['#btn-mapa'].dataset = {};
+  const navegador = { userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120', platform: 'Win32', maxTouchPoints: 0 };
+  const ctx = vm.createContext({ state, $: (s) => els[s], String, encodeURIComponent, URL, navigator: navegador, Number });
+  ['consultaMapa', 'linkMapaValido', 'urlMapa', 'ehAppleMobile', 'urlAppleMaps'].forEach((f) => vm.runInContext(extrairFuncao(utils, f), ctx));
   vm.runInContext(extrairFuncao(app, 'renderizarHeader'), ctx);
   vm.runInContext('renderizarHeader()', ctx);
   assert.equal(els['#btn-mapa'].escondido, false);
@@ -295,4 +298,81 @@ test('mapa: o cabeçalho mostra o botão quando há endereço/link e esconde qua
   const adm = ler('admin.html');
   assert.match(adm, /id="conf-link-mapa"/); assert.match(adm, /id="conf-testar-mapa"/);
   assert.match(ler('js/admin.js'), /paraApi\.linkMapa = link/);
+});
+
+// ---------------------------------------------------------------- iPhone: "o Safari não pode abrir a página porque o endereço é inválido"
+function carregarMapaIos(userAgent, extra = {}) {
+  const utils = ler('js/utils.js'), app = ler('js/app.js');
+  const els = {
+    '#header-nome': { textContent: '' }, '#header-passo': { textContent: '' },
+    '#btn-mapa': { href: '', dataset: {}, escondido: true, classList: { remove() { els['#btn-mapa'].escondido = false; }, add() { els['#btn-mapa'].escondido = true; } } },
+    '#mapa-apple': { href: '' }, '#mapa-google': { href: '' }
+  };
+  const state = { barbearia: { nome: 'Lipão', enderecoCurto: 'Mangueira, Rio de Janeiro', endereco: TEXTO_COMPLETO, consultaMapa: '20911-135, Rio de Janeiro - RJ', linkMapa: '' } };
+  const ctx = vm.createContext({ state, $: (s) => els[s], String, encodeURIComponent, URL, Number, navigator: { userAgent, platform: 'iPhone', maxTouchPoints: 5, ...extra } });
+  ['consultaMapa', 'linkMapaValido', 'urlMapa', 'ehAppleMobile', 'urlAppleMaps'].forEach((f) => vm.runInContext(extrairFuncao(utils, f), ctx));
+  vm.runInContext(extrairFuncao(app, 'renderizarHeader'), ctx);
+  vm.runInContext('renderizarHeader()', ctx);
+  return { els, ctx };
+}
+
+test('iPhone/iPad: detecta o aparelho e monta o link do Apple Maps com o endereço completo', () => {
+  const utils = ler('js/utils.js');
+  const ctx = vm.createContext({ String, encodeURIComponent, Number });
+  ['ehAppleMobile', 'urlAppleMaps'].forEach((f) => vm.runInContext(extrairFuncao(utils, f), ctx));
+  const ios = (nav) => vm.runInContext('ehAppleMobile(' + JSON.stringify(nav) + ')', ctx);
+  assert.equal(ios({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Safari/604.1' }), true);
+  assert.equal(ios({ userAgent: 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) Safari/604.1' }), true);
+  assert.equal(ios({ userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1', platform: 'MacIntel', maxTouchPoints: 5 }), true, 'iPad que se apresenta como Mac');
+  assert.equal(ios({ userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1', platform: 'MacIntel', maxTouchPoints: 0 }), false, 'Mac comum');
+  assert.equal(ios({ userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) Chrome/120 Mobile', platform: 'Linux armv8l', maxTouchPoints: 5 }), false);
+  assert.equal(ios({ userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120', platform: 'Win32', maxTouchPoints: 0 }), false);
+  assert.equal(vm.runInContext('urlAppleMaps(' + JSON.stringify(TEXTO_COMPLETO) + ')', ctx), 'https://maps.apple.com/?q=' + encodeURIComponent(TEXTO_COMPLETO));
+  assert.equal(vm.runInContext("urlAppleMaps('')", ctx), '');
+});
+
+test('iPhone: o botão vira menu (Apple Maps / Google Maps) e não leva mais direto ao Google (que dava erro sem o app)', () => {
+  const { els } = carregarMapaIos('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Safari/604.1');
+  assert.equal(els['#btn-mapa'].escondido, false);
+  assert.equal(els['#btn-mapa'].href, '#', 'não abre o Google direto');
+  assert.equal(els['#btn-mapa'].dataset.menu, '1');
+  assert.equal(els['#mapa-apple'].href, 'https://maps.apple.com/?q=' + encodeURIComponent(TEXTO_COMPLETO));
+  assert.equal(els['#mapa-google'].href, 'https://www.google.com/maps/search/?api=1&query=20911-135%2C%20Rio%20de%20Janeiro%20-%20RJ');
+  assert.equal(els['#header-passo'].textContent, 'Mangueira, Rio de Janeiro');
+});
+
+test('demais aparelhos (Android, computador): link direto, sem menu', () => {
+  const { els } = carregarMapaIos('Mozilla/5.0 (Linux; Android 14; Pixel 8) Chrome/120 Mobile', { platform: 'Linux armv8l', maxTouchPoints: 5 });
+  assert.equal(els['#btn-mapa'].href, 'https://www.google.com/maps/search/?api=1&query=20911-135%2C%20Rio%20de%20Janeiro%20-%20RJ');
+  assert.equal(els['#btn-mapa'].dataset.menu, '');
+});
+
+test('menu do mapa: abre ao tocar no iPhone, fecha ao tocar fora ou numa opção; fora do iPhone o link abre direto', () => {
+  const app = ler('js/app.js');
+  const classes = new Set(['hidden']);
+  const menu = { classList: { contains: (c) => classes.has(c), toggle: (c) => (classes.has(c) ? classes.delete(c) : classes.add(c)), add: (c) => classes.add(c), remove: (c) => classes.delete(c) }, handlers: {}, addEventListener(t, f) { this.handlers[t] = f; } };
+  const botao = { dataset: { menu: '1' }, handlers: {}, addEventListener(t, f) { this.handlers[t] = f; } };
+  const doc = { handlers: {}, addEventListener(t, f) { this.handlers[t] = f; } };
+  const ctx = vm.createContext({ $: (s) => ({ '#btn-mapa': botao, '#menu-mapa': menu }[s]), document: doc, setTimeout: (f) => f() });
+  vm.runInContext(extrairFuncao(app, 'ligarMenuMapa'), ctx);
+  vm.runInContext('ligarMenuMapa()', ctx);
+  let evitou = 0;
+  botao.handlers.click({ preventDefault() { evitou++; } });
+  assert.equal(evitou, 1, 'no iPhone o toque não segue o link');
+  assert.equal(classes.has('hidden'), false, 'menu aberto');
+  doc.handlers.click({ target: { closest: () => null } });
+  assert.equal(classes.has('hidden'), true, 'tocar fora fecha');
+  botao.handlers.click({ preventDefault() {} });
+  doc.handlers.click({ target: { closest: () => ({}) } });
+  assert.equal(classes.has('hidden'), false, 'tocar dentro do botão/menu não fecha antes da hora');
+  menu.handlers.click();
+  assert.equal(classes.has('hidden'), true, 'escolher uma opção fecha o menu');
+  botao.dataset.menu = '';
+  evitou = 0;
+  botao.handlers.click({ preventDefault() { evitou++; } });
+  assert.equal(evitou, 0, 'fora do iPhone o link abre direto');
+  assert.equal(classes.has('hidden'), true);
+  assert.match(app, /function inicializarEventos\(\) \{\s*\n\s*ligarMenuMapa\(\);/);
+  const html = ler('index.html');
+  for (const id of ['menu-mapa', 'mapa-apple', 'mapa-google']) assert.match(html, new RegExp('id="' + id + '"'), id);
 });

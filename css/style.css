@@ -848,3 +848,11 @@ input { font-family: inherit; }
   color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent); background: color-mix(in srgb, var(--accent) 10%, transparent); transition: background .2s; }
 .btn-mapa:hover, .btn-mapa:focus-visible { background: color-mix(in srgb, var(--accent) 20%, transparent); }
 .btn-mapa.hidden { display: none; }
+
+/* mini menu do "Ver no mapa" no iPhone */
+.mapa-wrap { position: relative; flex-shrink: 0; }
+.menu-mapa { position: absolute; right: 0; top: calc(100% + 8px); z-index: 80; min-width: 150px; padding: 6px; border-radius: 12px;
+  background: var(--surface-2); border: 1px solid var(--border-light); box-shadow: 0 12px 30px rgba(0, 0, 0, .55); display: flex; flex-direction: column; }
+.menu-mapa.hidden { display: none; }
+.menu-mapa a { padding: 12px 14px; border-radius: 8px; color: var(--text); font-size: 14px; font-weight: 600; text-decoration: none; }
+.menu-mapa a:active, .menu-mapa a:hover { background: color-mix(in srgb, var(--accent) 16%, transparent); }
