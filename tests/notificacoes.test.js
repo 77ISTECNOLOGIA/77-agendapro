@@ -281,6 +281,6 @@ test('toques em agendamentos DIFERENTES, ou no mesmo depois de um tempo, abrem n
 
 test('painel: só considera "carregado" depois de renderizar tudo, e zera ao entrar/sair', () => {
   assert.match(adminSrc, /await renderizarTudo\(\);\s*\n\s*state\.dadosCarregados = true;\s*\n\s*tratarLinkDeNotificacao\(\)/);
-  assert.match(adminSrc, /state\.dadosCarregados = false;\s*\n\s*state\.barbeariaId = userData\.barbeariaId/);
-  assert.match(adminSrc, /state\.dadosCarregados = false;\s*\n\s*desativarListeners\(\);\s*\n\s*mostrarLogin\(\)/);
+  assert.match(adminSrc, /state\.dadosCarregados = false;\s*\n\s*if \(userData\.barbeariaId !== palpite\)/);
+  assert.match(adminSrc, /state\.dadosCarregados = false;\s*\n\s*state\.appPronto = false;\s*\n\s*desativarListeners\(\);\s*\n\s*mostrarLogin\(\)/);
 });

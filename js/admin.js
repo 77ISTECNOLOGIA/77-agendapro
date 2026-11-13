@@ -17,11 +17,6 @@ import {
   sendPasswordResetEmail
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import {
-  getMessaging,
-  getToken,
-  onMessage
-} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js";
-import {
   doc,
   collection,
   getDoc,
@@ -36,6 +31,41 @@ import {
 
 const auth = getAuth(getApp());
 
+// O pacote de notificações push é grande e só serve quando o aparelho vai (ou já está) recebendo
+// avisos: é baixado sob demanda, e não a cada abertura do painel.
+const carregarMessaging = () => import("https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js");
+
+// QR Code (Configurações): biblioteca de terceiros baixada só quando a aba é aberta.
+let promessaQR = null;
+function carregarQRCode() {
+  if (typeof QRCode !== 'undefined') return Promise.resolve();
+  if (!promessaQR) {
+    promessaQR = new Promise((ok, erro) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js';
+      s.onload = ok;
+      s.onerror = () => { promessaQR = null; erro(new Error('QR Code indisponível')); };
+      document.head.appendChild(s);
+    });
+  }
+  return promessaQR;
+}
+
+// Último negócio deste usuário, guardado neste aparelho. É só um PALPITE para começar a baixar os dados
+// em paralelo com a confirmação do vínculo; quem manda é o banco (as regras do Firestore negam o que não for dele).
+function lerVinculoGuardado(uid) {
+  try {
+    const v = localStorage.getItem('ap_vinculo_' + uid);
+    return /^[a-z0-9]+(-[a-z0-9]+)*$/.test(v || '') ? v : null;
+  } catch (_) { return null; }
+}
+function guardarVinculo(uid, barbeariaId) {
+  try {
+    if (barbeariaId) localStorage.setItem('ap_vinculo_' + uid, barbeariaId);
+    else localStorage.removeItem('ap_vinculo_' + uid);
+  } catch (_) { /* sem armazenamento: só perde a otimização */ }
+}
+
 // Chave gerada no Firebase Console > Configurações > Cloud Messaging > Certificados push da Web
 const VAPID_KEY = 'BBDdf4Estwxij9B1m3R7jZCrNNMul4EcIjAYJ9-Xw-8mgebCIgGwCUfPdYBko7scsVQ6VxMefFBYORQv9mzLYl4';
 
@@ -46,6 +76,8 @@ const state = {
   user: null,
   barbeariaId: null,
   barbearia: null,
+  negocioExiste: false,
+  appPronto: false,        // true depois de mostrarApp(): antes disso os acompanhamentos em tempo real não redesenham nada
   servicos: {},
   profissionais: {},
   agendamentos: {},
@@ -121,33 +153,56 @@ function inicializarAuth() {
     if (user) {
       state.user = user;
       try {
+        // O banco fica nos EUA: cada ida e volta custa ~150–250 ms, então o que vai em fila custa caro.
+        // Com o palpite da última visita, os dados já começam a chegar EM PARALELO com a confirmação do vínculo;
+        // sem palpite (1ª vez neste aparelho), começam logo depois dela. Os dados são baixados UMA vez só
+        // (antes eram baixados por inteiro e, em seguida, de novo pelos acompanhamentos em tempo real).
+        const palpite = lerVinculoGuardado(user.uid);
+        let prontos = null;
+        if (palpite) {
+          state.barbeariaId = palpite;
+          prontos = ativarListenersTempoReal();
+          prontos.catch(() => {});                 // palpite errado: tratado logo abaixo
+        }
         const snap = await getDoc(doc(db, 'usuarios', user.uid));
         if (!snap.exists()) {
+          desativarListeners();
+          guardarVinculo(user.uid, null);
           await signOut(auth);
           mostrarLogin('Usuário sem barbearia vinculada. Contate o suporte.');
           return;
         }
         const userData = snap.data();
         state.dadosCarregados = false;
-        state.barbeariaId = userData.barbeariaId;
-        await carregarBarbearia();
+        if (userData.barbeariaId !== palpite) {      // 1ª visita neste aparelho, ou o vínculo mudou
+          state.barbeariaId = userData.barbeariaId;
+          prontos = ativarListenersTempoReal();
+        }
+        guardarVinculo(user.uid, userData.barbeariaId);
+        await prontos;                               // 1º retrato de negócio, serviços, profissionais, agendamentos e clientes
+        if (!state.negocioExiste) throw new Error('Barbearia não encontrada');
         aplicarTema(state.barbearia.tipoNegocio);
+        $('#sidebar-barbearia').textContent = state.barbearia.nome || '—';
         renderizarUserInfo(userData);
         mostrarApp();
         avisarSituacaoConta();
-        ativarListenersTempoReal();
         await renderizarTudo();
         state.dadosCarregados = true;
-        tratarLinkDeNotificacao();
-        renovarHorariosFixos();       // reforço da rotina diária: gera o que faltar dos clientes fixos     // aberto pelo toque numa notificação: já mostra o agendamento
-        ouvirNotificacoesEmPrimeiroPlano();
-        atualizarServiceWorker();
+        tratarLinkDeNotificacao();                   // aberto pelo toque numa notificação: já mostra o agendamento
+        // O que não é preciso para ver a tela fica para depois que ela já apareceu
+        setTimeout(() => {
+          renovarHorariosFixos();                    // reforço da rotina diária (no máximo 1x a cada 4 h por aparelho)
+          ouvirNotificacoesEmPrimeiroPlano();
+          atualizarServiceWorker();
+        }, 1500);
       } catch (err) {
+        desativarListeners();
         console.error('Erro ao carregar usuário:', err);
         mostrarLogin('Erro ao carregar dados. Tente novamente.');
       }
     } else {
       state.dadosCarregados = false;
+      state.appPronto = false;
       desativarListeners();
       mostrarLogin();
     }
@@ -236,6 +291,7 @@ async function ativarNotificacoes() {
     const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
     await navigator.serviceWorker.ready;            // o iPhone precisa do worker ATIVO antes de gerar o token
     registration.update().catch(() => {});
+    const { getMessaging, getToken } = await carregarMessaging();
     const messaging = getMessaging(getApp());
     const token = await getToken(messaging, {
       vapidKey: VAPID_KEY,
@@ -416,11 +472,13 @@ function atualizarServiceWorker() {
 // Sem isso, o navegador recebe a notificação silenciosamente e não mostra nada na tela
 // quando a aba do admin já está ativa (só mostra automaticamente em segundo plano).
 let listenerForegroundAtivo = false;
-function ouvirNotificacoesEmPrimeiroPlano() {
+async function ouvirNotificacoesEmPrimeiroPlano() {
   if (listenerForegroundAtivo) return;
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
 
   try {
+    const { getMessaging, onMessage } = await carregarMessaging();
+    if (listenerForegroundAtivo) return;
     const messaging = getMessaging(getApp());
     onMessage(messaging, (payload) => {
       const corpo = (payload.notification && payload.notification.body) || '';
@@ -461,6 +519,7 @@ function mostrarLogin(msg) {
 }
 
 function mostrarApp() {
+  state.appPronto = true;
   $('#loading').classList.add('hidden');
   $('#tela-login').classList.add('hidden');
   $('#admin-app').classList.remove('hidden');
@@ -475,25 +534,6 @@ function renderizarUserInfo(userData) {
 // ========================================
 // CARREGAR DADOS DA BARBEARIA
 // ========================================
-async function carregarBarbearia() {
-  const negocioRef = doc(db, 'barbearias', state.barbeariaId);
-  const [infoSnap, servicosSnap, profissionaisSnap, agendamentosSnap, clientesSnap] = await Promise.all([
-    getDoc(negocioRef),
-    getDocs(collection(negocioRef, 'servicos')),
-    getDocs(collection(negocioRef, 'profissionais')),
-    getDocs(collection(negocioRef, 'agendamentos')),
-    getDocs(collection(negocioRef, 'clientes')),
-  ]);
-  if (!infoSnap.exists()) throw new Error('Barbearia não encontrada');
-
-  const paraObjeto = (snap) => { const obj = {}; snap.forEach(d => { obj[d.id] = d.data(); }); return obj; };
-  state.barbearia = infoSnap.data() || {};
-  state.servicos = paraObjeto(servicosSnap);
-  state.profissionais = paraObjeto(profissionaisSnap);
-  state.agendamentos = paraObjeto(agendamentosSnap);
-  state.clientes = paraObjeto(clientesSnap);
-  $('#sidebar-barbearia').textContent = state.barbearia.nome || '—';
-}
 
 // ========================================
 // SITUAÇÃO DA CONTA (trial / suspensão)
@@ -538,15 +578,35 @@ function avisarSituacaoConta() {
 // ========================================
 // LISTENERS EM TEMPO REAL
 // ========================================
+// Devolve uma promessa que se cumpre quando as CINCO fontes (negócio, serviços, profissionais, agendamentos
+// e clientes) entregaram o 1º retrato — é a partir daí que a tela pode aparecer.
 function ativarListenersTempoReal() {
   desativarListeners();
   const negocioRef = doc(db, 'barbearias', state.barbeariaId);
+  state.negocioExiste = false;
+  state.barbearia = null;
+
+  const fontes = new Set(['negocio', 'servicos', 'profissionais', 'agendamentos', 'clientes']);
+  const chegaram = new Set();
+  let cumprir, falhar;
+  const prontos = new Promise((ok, erro) => { cumprir = ok; falhar = erro; });
+  const marcar = (nome) => { chegaram.add(nome); if (chegaram.size === fontes.size) cumprir(); };
+  const comErro = (nome) => (err) => {
+    console.error('Erro ao acompanhar ' + nome + ':', err);
+    if (chegaram.size < fontes.size) falhar(err);       // falha na abertura: o chamador mostra a mensagem
+  };
+  const redesenhar = () => { if (state.appPronto) renderizarViewAtual(); };   // antes da tela aparecer não há o que desenhar
 
   state.listeners.push(onSnapshot(negocioRef, (snap) => {
+    state.negocioExiste = snap.exists();
     state.barbearia = snap.data() || {};
-    avisarSituacaoConta();
-    renderizarViewAtual();
-  }));
+    if (state.appPronto) {
+      $('#sidebar-barbearia').textContent = state.barbearia.nome || '—';
+      avisarSituacaoConta();
+    }
+    redesenhar();
+    marcar('negocio');
+  }, comErro('negocio')));
 
   ['servicos', 'profissionais', 'agendamentos', 'clientes'].forEach((chave) => {
     state.listeners.push(onSnapshot(collection(negocioRef, chave), (snap) => {
@@ -558,9 +618,11 @@ function ativarListenersTempoReal() {
         });
       }
       state[chave] = dados;
-      renderizarViewAtual();
-    }));
+      redesenhar();
+      marcar(chave);
+    }, comErro(chave)));
   });
+  return prontos;
 }
 
 function desativarListeners() {
@@ -1661,7 +1723,11 @@ async function modalHorariosFixos() {
 // Ao abrir o painel, renova os horários fixos (reforço da rotina diária; é idempotente).
 async function renovarHorariosFixos() {
   try {
+    if (Date.now() - Number(localStorage.getItem('ap_renovou_em') || 0) < 4 * 3600 * 1000) return;
+  } catch (_) { /* sem armazenamento: renova sempre */ }
+  try {
     const r = await chamarRecorrencia('renovar');
+    try { localStorage.setItem('ap_renovou_em', String(Date.now())); } catch (_) { /* ok */ }
     if (r.criadas > 0) toast('🔁 Horários fixos renovados: ' + r.criadas + ' novo' + (r.criadas > 1 ? 's' : '') + ' agendamento' + (r.criadas > 1 ? 's' : ''), 'sucesso');
     else if (r.erros > 0) toast('⚠ Um horário fixo precisa de atenção. Veja em "Horários fixos".', 'erro');
   } catch (err) { console.error('Renovação dos horários fixos:', err.message); }
@@ -2180,7 +2246,8 @@ function renderizarConfiguracoes() {
   const linkPublico = `${window.location.origin}/${state.barbeariaId}`;
   const qrEl = $('#qr-code-container');
   qrEl.innerHTML = '';
-  try {
+  carregarQRCode().then(() => {
+    qrEl.innerHTML = '';
     new QRCode(qrEl, {
       text: linkPublico,
       width: 180,
@@ -2189,9 +2256,9 @@ function renderizarConfiguracoes() {
       colorLight: '#ffffff',
       correctLevel: QRCode.CorrectLevel.M
     });
-  } catch (e) {
+  }).catch(() => {
     qrEl.innerHTML = '<div style="color:#666;">QR Code não disponível</div>';
-  }
+  });
 }
 
 function preencherRegrasAgendamento() {

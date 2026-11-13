@@ -6,7 +6,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "node --test tests/logica.test.js tests/api.test.js tests/exclusao.test.js tests/vinculos.test.js tests/estatico.test.js tests/foto.test.js tests/notificacoes.test.js tests/recorrencia.test.js tests/recorrencia-tela.test.js tests/pendencias.test.js tests/relatorios.test.js tests/avisos-cliente.test.js tests/sinal.test.js tests/sinal-tela.test.js"
+    "test": "node --test tests/logica.test.js tests/api.test.js tests/exclusao.test.js tests/vinculos.test.js tests/estatico.test.js tests/foto.test.js tests/notificacoes.test.js tests/recorrencia.test.js tests/recorrencia-tela.test.js tests/pendencias.test.js tests/relatorios.test.js tests/avisos-cliente.test.js tests/sinal.test.js tests/sinal-tela.test.js tests/painel-abertura.test.js"
   },
   "dependencies": {
     "firebase-admin": "^13.0.0"

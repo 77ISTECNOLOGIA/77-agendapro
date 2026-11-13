@@ -125,7 +125,7 @@ Cada negócio (`barbearia`) é identificado por um `slug` único, que é literal
 - **XSS**: todo texto vindo de usuário é escapado antes de entrar na tela (`escapeHtml`), inclusive `horario`, `status` e `id` do agendamento no painel do dono (que ficaram expostos pela escrita aberta e foram corrigidos em 16/10/2026); o servidor também só aceita `HH:MM` e `AAAA-MM-DD`.
 - **Erros**: as funções nunca devolvem `err.message` ao navegador — só mensagens genéricas ou de regra de negócio.
 - **Cabeçalhos** (`vercel.json`): nosniff, X-Frame-Options DENY, Referrer-Policy, HSTS, Permissions-Policy. Sem CSP ainda.
-- **Testes**: `npm test` (183 testes das APIs, da exclusão de negócios e da lógica de disponibilidade). As regras do Firestore ainda não têm teste automatizado.
+- **Testes**: `npm test` (190 testes das APIs, da exclusão de negócios e da lógica de disponibilidade). As regras do Firestore ainda não têm teste automatizado.
 
 ---
 

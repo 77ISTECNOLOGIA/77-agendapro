@@ -6,10 +6,21 @@
   <meta name="theme-color" content="#0A0A0F">
   <title>77 AgendaPro — Painel</title>
 
+  <!-- Abertura mais rápida: já abre a conexão com o servidor do Firebase e pede TODOS os módulos de uma vez
+       (sem isso o navegador só descobre os de dentro depois de baixar e ler o admin.js, e eles vão em fila) -->
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  <link rel="modulepreload" href="js/firebase-config.js">
+  <link rel="modulepreload" href="js/admin.js">
+  <link rel="modulepreload" href="js/utils.js">
+  <link rel="modulepreload" href="js/vocabulario.js">
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js">
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js">
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;500;600;700;800&family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Raleway:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Raleway:wght@400;500;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <noscript><link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Raleway:wght@400;500;600&display=swap" rel="stylesheet"></noscript>
 
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/admin.css">
@@ -499,7 +510,6 @@
     <span id="toast-msg"></span>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script type="module" src="js/firebase-config.js"></script>
   <script type="module" src="js/admin.js"></script>
 
