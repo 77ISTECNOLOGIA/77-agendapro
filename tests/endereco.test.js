@@ -192,10 +192,13 @@ test('telas: cadastro e Configurações têm o bloco de endereço ligado à busc
   // o endereço das Configurações passa pelo servidor (as regras do Firestore não mudaram)
   assert.match(admJs, /async function salvarEnderecoApi/);
   assert.doesNotMatch(admJs, /endereco: \$\('#conf-endereco'\)/);
-  assert.match(admJs, /if \(enderecoMudou\(end\)\) \{\s*\n\s*await salvarEnderecoApi\(end\);/);
+  assert.match(admJs, /if \(enderecoMudou\(end\)\) paraApi\.endereco = end;/);
+  assert.match(admJs, /await salvarEnderecoApi\(paraApi\)/);
   // link do cliente: cabeçalho curto
   assert.match(ler('js/app.js'), /enderecoCurto \|\| state\.barbearia\.endereco/);
+  assert.match(ler('js/app.js'), /urlMapa\(state\.barbearia\.linkMapa, state\.barbearia\.consultaMapa \|\| state\.barbearia\.endereco\)/);
 });
+
 
 // ---------------------------------------------------------------- botão "Ver no mapa" (link do cliente)
 function extrairFuncao(src, nome) {
@@ -205,33 +208,91 @@ function extrairFuncao(src, nome) {
   for (; i < src.length; i++) { if (src[i] === '{') n++; else if (src[i] === '}' && --n === 0) break; }
   return src.slice(m.index, i + 1);
 }
+function carregarMapaUtils() {
+  const utils = ler('js/utils.js');
+  const ctx = vm.createContext({ String, encodeURIComponent, URL });
+  ['consultaMapa', 'linkMapaValido', 'urlMapa'].forEach((f) => vm.runInContext(extrairFuncao(utils, f), ctx));
+  return (js) => vm.runInContext(js, ctx);
+}
+const DETALHE = { cep: '20911-135', logradouro: 'Rua Liberdade', numero: '20', bairro: 'Mangueira', cidade: 'Rio de Janeiro', uf: 'RJ' };
+const TEXTO_COMPLETO = 'Rua Liberdade, 20 - Mangueira, Rio de Janeiro - RJ, CEP 20911-135';
 
-test('mapa: link do Google Maps com o endereço codificado (nada de escapar da URL); sem endereço, sem link', () => {
-  const app = ler('js/app.js');
-  const ctx = vm.createContext({ String, encodeURIComponent });
-  vm.runInContext(extrairFuncao(app, 'urlMapa'), ctx);
-  const u = (e) => vm.runInContext('urlMapa(' + JSON.stringify(e) + ')', ctx);
-  assert.equal(u('Rua A, 123 - Sé, São Paulo - SP, CEP 01001-000'), 'https://www.google.com/maps/search/?api=1&query=Rua%20A%2C%20123%20-%20S%C3%A9%2C%20S%C3%A3o%20Paulo%20-%20SP%2C%20CEP%2001001-000');
-  assert.equal(u(''), ''); assert.equal(u(null), ''); assert.equal(u('   '), '');
-  const malicioso = u('x&query=evil"><script>alert(1)</script>#');
-  assert.ok(malicioso.startsWith('https://www.google.com/maps/search/?api=1&query='));
+test('mapa: busca pelo CEP + cidade (o endereço por extenso caía em OUTRA rua de mesmo nome); CEP de localidade usa o endereço', () => {
+  const r = carregarMapaUtils();
+  assert.equal(r('consultaMapa(' + JSON.stringify(DETALHE) + ', "x")'), '20911-135, Rio de Janeiro - RJ');
+  assert.equal(E.consultaMapa(DETALHE, 'x'), '20911-135, Rio de Janeiro - RJ', 'servidor e navegador seguem a mesma regra');
+  const geral = { ...DETALHE, cep: '24000-000' };
+  assert.equal(r('consultaMapa(' + JSON.stringify(geral) + ', ' + JSON.stringify(TEXTO_COMPLETO) + ')'), TEXTO_COMPLETO);
+  assert.equal(E.consultaMapa(geral, TEXTO_COMPLETO), TEXTO_COMPLETO);
+  assert.equal(E.consultaMapa(null, 'Mangueira, Rio de Janeiro'), 'Mangueira, Rio de Janeiro', 'negócio antigo: o texto que já tinha');
+  assert.equal(E.consultaMapa(null, ''), '');
+});
+
+test('mapa: link exato do dono tem prioridade; só links do Google Maps valem; sem nada, sem botão', () => {
+  const r = carregarMapaUtils();
+  const url = (l, c) => r('urlMapa(' + JSON.stringify(l) + ', ' + JSON.stringify(c) + ')');
+  assert.equal(url('', '20911-135, Rio de Janeiro - RJ'), 'https://www.google.com/maps/search/?api=1&query=20911-135%2C%20Rio%20de%20Janeiro%20-%20RJ');
+  assert.equal(url('https://maps.app.goo.gl/AbC123', 'qualquer'), 'https://maps.app.goo.gl/AbC123');
+  assert.equal(url('https://www.google.com/maps/place/Rua+Liberdade/@-22.89,-43.22,17z', 'q'), 'https://www.google.com/maps/place/Rua+Liberdade/@-22.89,-43.22,17z');
+  for (const ruim of ['http://maps.app.goo.gl/x', 'https://evil.com/maps/x', 'https://google.com.evil.com/maps/x', 'javascript:alert(1)', 'https://www.google.com/search?q=x', 'https://user:pw@maps.app.goo.gl/x', 'maps.app.goo.gl/x']) {
+    assert.equal(url(ruim, '20911-135, Rio'), 'https://www.google.com/maps/search/?api=1&query=20911-135%2C%20Rio', 'link suspeito é ignorado: ' + ruim);
+  }
+  assert.equal(url('', ''), ''); assert.equal(url(null, null), '');
+  const malicioso = url('', 'x&query=evil"><script>alert(1)</script>#');
   assert.doesNotMatch(malicioso.slice('https://www.google.com/maps/search/?api=1&query='.length), /[<>"&#]/, 'tudo codificado');
 });
 
-test('mapa: o cabeçalho mostra o botão quando há endereço e esconde quando não há', () => {
+test('mapa: o servidor valida o link colado pelo dono e a API pública só entrega link válido', async () => {
+  assert.equal(E.validarLinkMapa(''), '');
+  assert.equal(E.validarLinkMapa('  https://maps.app.goo.gl/AbC123  '), 'https://maps.app.goo.gl/AbC123');
+  for (const ruim of ['http://maps.app.goo.gl/x', 'https://evil.com/maps', 'javascript:alert(1)', 'texto qualquer', 'https://www.google.com/search?q=x', 'https://maps.app.goo.gl/' + 'a'.repeat(500)]) {
+    assert.throws(() => E.validarLinkMapa(ruim), (err) => err.status === 400, ruim.slice(0, 40));
+  }
+  assert.equal(E.linkMapaSeguro('https://evil.com/maps'), '', 'valor estranho no banco nunca sai na API pública');
+
+  const salvar = await chamar({ idToken: 'tok-dono1', linkMapa: 'https://maps.app.goo.gl/AbC123' });
+  assert.equal(salvar.statusCode, 200);
+  assert.equal(amb.fake.get('barbearias/' + SLUG).linkMapa, 'https://maps.app.goo.gl/AbC123');
+  assert.equal(amb.fake.get('barbearias/' + SLUG).limiteAgendamentosSemana, 2, 'só o link mudou');
+  const ruim = await chamar({ idToken: 'tok-dono1', linkMapa: 'https://evil.com/maps' });
+  assert.equal(ruim.statusCode, 400);
+  assert.equal(amb.fake.get('barbearias/' + SLUG).linkMapa, 'https://maps.app.goo.gl/AbC123', 'link ruim não substitui o bom');
+  const limpar = await chamar({ idToken: 'tok-dono1', linkMapa: '' });
+  assert.equal(limpar.statusCode, 200);
+  assert.equal(amb.fake.get('barbearias/' + SLUG).linkMapa, '');
+
+  // API pública do link do cliente
+  const negocioApi = require('../api/negocio');
+  await chamar({ idToken: 'tok-dono1', endereco: ENDERECO, linkMapa: 'https://maps.app.goo.gl/AbC123' });
+  const pub = res(); await negocioApi(req('GET', { query: { slug: SLUG } }), pub);
+  assert.equal(pub.body.barbearia.linkMapa, 'https://maps.app.goo.gl/AbC123');
+  assert.equal(pub.body.barbearia.consultaMapa, '20550-013, Rio de Janeiro - RJ');
+  assert.doesNotMatch(JSON.stringify(pub.body), /enderecoDetalhe/, 'o detalhe do endereço não vai por inteiro na API pública');
+});
+
+test('mapa: o cabeçalho mostra o botão quando há endereço/link e esconde quando não há', () => {
   const app = ler('js/app.js');
   const els = { '#header-nome': { textContent: '' }, '#header-passo': { textContent: '' }, '#btn-mapa': { href: '', escondido: true, classList: { remove() { els['#btn-mapa'].escondido = false; }, add() { els['#btn-mapa'].escondido = true; } } } };
-  const state = { barbearia: { nome: 'Lipão', enderecoCurto: 'Icaraí, Niterói', endereco: 'Rua A, 1 - Icaraí, Niterói - RJ, CEP 24230-005' } };
-  const ctx = vm.createContext({ state, $: (s) => els[s], String, encodeURIComponent });
-  vm.runInContext(extrairFuncao(app, 'urlMapa') + extrairFuncao(app, 'renderizarHeader'), ctx);
+  const state = { barbearia: { nome: 'Lipão', enderecoCurto: 'Mangueira, Rio de Janeiro', endereco: TEXTO_COMPLETO, consultaMapa: '20911-135, Rio de Janeiro - RJ', linkMapa: '' } };
+  const utils = ler('js/utils.js');
+  const ctx = vm.createContext({ state, $: (s) => els[s], String, encodeURIComponent, URL });
+  ['consultaMapa', 'linkMapaValido', 'urlMapa'].forEach((f) => vm.runInContext(extrairFuncao(utils, f), ctx));
+  vm.runInContext(extrairFuncao(app, 'renderizarHeader'), ctx);
   vm.runInContext('renderizarHeader()', ctx);
   assert.equal(els['#btn-mapa'].escondido, false);
-  assert.match(els['#btn-mapa'].href, /^https:\/\/www\.google\.com\/maps\/search\//);
-  assert.equal(els['#header-passo'].textContent, 'Icaraí, Niterói', 'cabeçalho continua curto');
-  state.barbearia = { nome: 'Sem endereço', endereco: '' };
+  assert.equal(els['#btn-mapa'].href, 'https://www.google.com/maps/search/?api=1&query=20911-135%2C%20Rio%20de%20Janeiro%20-%20RJ', 'busca pelo CEP, não pelo endereço por extenso');
+  assert.equal(els['#header-passo'].textContent, 'Mangueira, Rio de Janeiro', 'cabeçalho continua curto');
+  state.barbearia.linkMapa = 'https://maps.app.goo.gl/AbC123';
+  vm.runInContext('renderizarHeader()', ctx);
+  assert.equal(els['#btn-mapa'].href, 'https://maps.app.goo.gl/AbC123', 'link exato do dono vence');
+  state.barbearia = { nome: 'Sem endereço', endereco: '', consultaMapa: '', linkMapa: '' };
   vm.runInContext('renderizarHeader()', ctx);
   assert.equal(els['#btn-mapa'].escondido, true);
   const html = ler('index.html');
   assert.match(html, /<a id="btn-mapa" class="btn-mapa hidden"[^>]*target="_blank" rel="noopener noreferrer"/);
   assert.doesNotMatch(html.slice(html.indexOf('id="btn-mapa"'), html.indexOf('Ver no mapa')), /emoji|📍/, 'sem emoji: ícone de traço');
+  // Configurações: campo do link + teste
+  const adm = ler('admin.html');
+  assert.match(adm, /id="conf-link-mapa"/); assert.match(adm, /id="conf-testar-mapa"/);
+  assert.match(ler('js/admin.js'), /paraApi\.linkMapa = link/);
 });

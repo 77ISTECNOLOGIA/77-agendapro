@@ -7,6 +7,7 @@
 const CARENCIA_TRIAL_DIAS = 7;
 
 const { configSinal, limiteSemanal } = require('./sinal');
+const { consultaMapa, linkMapaSeguro } = require('./endereco');
 
 const SLUGS_RESERVADOS = [
   'admin', 'cadastro', 'painel77', 'api', 'css', 'js', 'assets', 'index', 'login',
@@ -53,6 +54,9 @@ function infoPublica(info) {
     nome: i.nome || '',
     endereco: i.endereco || '',
     // cabeçalho curto do link do cliente: "Bairro, Cidade" (negócios antigos, sem endereço detalhado, mostram o texto que já tinham)
+    // botão "Ver no mapa": link exato colado pelo dono (se houver) ou busca pelo CEP (ver consultaMapa)
+    linkMapa: linkMapaSeguro(i.linkMapa),
+    consultaMapa: consultaMapa(i.enderecoDetalhe, i.endereco),
     enderecoCurto: (i.enderecoDetalhe && i.enderecoDetalhe.bairro && i.enderecoDetalhe.cidade)
       ? i.enderecoDetalhe.bairro + ', ' + i.enderecoDetalhe.cidade : (i.endereco || ''),
     telefone: i.telefone || '',

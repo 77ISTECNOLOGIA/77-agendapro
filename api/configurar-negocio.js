@@ -5,13 +5,14 @@
 // Só o DONO (token do Firebase verificado + usuarios/{uid}). Fica no servidor (e não nas regras do
 // Firestore) para validar a chave Pix, o percentual e o limite antes de gravar.
 // POST { idToken, sinal?: { ativo, percentual, prazoHoras, tipoChave, chavePix, nomeRecebedor, cidadeRecebedor, banco },
-//        limiteAgendamentosSemana?, endereco?: { cep, logradouro, numero, complemento, bairro, cidade, uf } }
+//        limiteAgendamentosSemana?, endereco?: { cep, logradouro, numero, complemento, bairro, cidade, uf },
+//        linkMapa?: link do Google Maps ('' remove) }
 // Cada parte é opcional: só o que vier no pedido é validado e gravado.
 
 const { db, auth } = require('./_lib/firebase');
 const { dentroDoLimite, dentroDoLimitePorChave, responder, ErroNegocio, tratarErro, corpoDe } = require('./_lib/http');
 const { normalizarChavePix } = require('./_lib/pix');
-const { normalizarEndereco, camposDoEndereco } = require('./_lib/endereco');
+const { normalizarEndereco, camposDoEndereco, validarLinkMapa } = require('./_lib/endereco');
 const { normalizarBanco } = require('./_lib/sinal');
 
 const texto = (v, max) => String(v || '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
@@ -79,6 +80,10 @@ module.exports = async function handler(req, res) {
       Object.assign(mudancas, campos);
       resposta.endereco = campos.endereco;
       resposta.enderecoDetalhe = campos.enderecoDetalhe;
+    }
+    if (b.linkMapa !== undefined) {
+      mudancas.linkMapa = validarLinkMapa(b.linkMapa);
+      resposta.linkMapa = mudancas.linkMapa;
     }
     if (!Object.keys(mudancas).length) throw new ErroNegocio(400, 'Nada para salvar.');
 

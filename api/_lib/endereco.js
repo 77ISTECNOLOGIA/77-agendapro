@@ -46,9 +46,44 @@ function enderecoCurto(e) {
   return e.bairro + ', ' + e.cidade;
 }
 
+/**
+ * Texto que o botão "Ver no mapa" manda ao Google Maps. Procurar pelo ENDEREÇO ("Rua Liberdade, 20 - Mangueira...")
+ * erra quando há ruas de mesmo nome na cidade (o Google escolheu outra "Rua da Liberdade", de outro CEP). Procurar pelo
+ * CEP + cidade cai na rua certa. CEPs terminados em -000 são de localidade (a cidade toda), então nesses vale o endereço.
+ */
+function consultaMapa(detalhe, enderecoCompleto) {
+  const d = detalhe || {};
+  const cep = String(d.cep || '');
+  if (/^\d{5}-\d{3}$/.test(cep) && !cep.endsWith('-000') && d.cidade && d.uf) return cep + ', ' + d.cidade + ' - ' + d.uf;
+  return String(enderecoCompleto || '').trim();
+}
+
+const MENSAGEM_LINK_MAPA = 'Cole um link do Google Maps (o de "Compartilhar", que começa com maps.app.goo.gl ou google.com/maps).';
+
+/** Link de localização colado pelo dono. Só aceita endereços do Google Maps (https). Vazio = sem link. */
+function validarLinkMapa(entrada) {
+  const v = String(entrada == null ? '' : entrada).trim();
+  if (!v) return '';
+  if (v.length > 400) throw new ErroNegocio(400, MENSAGEM_LINK_MAPA);
+  let u;
+  try { u = new URL(v); } catch (_) { throw new ErroNegocio(400, MENSAGEM_LINK_MAPA); }
+  const host = u.hostname.toLowerCase();
+  const ok = u.protocol === 'https:' && !u.username && !u.password && (
+    host === 'maps.app.goo.gl'
+    || ((host === 'google.com' || host === 'www.google.com' || host === 'maps.google.com' || host === 'goo.gl') && u.pathname.startsWith('/maps'))
+  );
+  if (!ok) throw new ErroNegocio(400, MENSAGEM_LINK_MAPA);
+  return u.toString();
+}
+
+/** Mesma regra, sem lançar erro: valor inválido vira vazio (usado ao devolver dados públicos). */
+function linkMapaSeguro(entrada) {
+  try { return validarLinkMapa(entrada); } catch (_) { return ''; }
+}
+
 /** Campos que vão para o documento do negócio. */
 function camposDoEndereco(e) {
   return { endereco: enderecoTexto(e), enderecoDetalhe: e, cidade: e.cidade, bairro: e.bairro };
 }
 
-module.exports = { UFS, normalizarEndereco, enderecoTexto, enderecoCurto, camposDoEndereco };
+module.exports = { UFS, normalizarEndereco, enderecoTexto, enderecoCurto, camposDoEndereco, consultaMapa, validarLinkMapa, linkMapaSeguro };

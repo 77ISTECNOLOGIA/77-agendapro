@@ -4,6 +4,7 @@
 
 import { db } from './firebase-config.js';
 import { ligarBuscaCep, UFS } from './cep.js';
+import { urlMapa, consultaMapa } from './utils.js';
 import { escapeHtml, adicionarMostrarSenha, profissionalRealizaServico, calcularVinculosProfissional, atendimentosParaResolver, periodoPronto, resumoPeriodo, fotoServicoValida } from './utils.js';
 import { aplicarTema, resetarTema } from './vocabulario.js';
 import {
@@ -2223,6 +2224,10 @@ function preencherEndereco() {
   if (!bloco || bloco.dataset.sujo === '1') return;          // não apaga o que a pessoa está digitando
   const e = state.barbearia.enderecoDetalhe || {};
   CAMPOS_ENDERECO.forEach((k) => { $('#conf-' + k).value = e[k] || ''; });
+  $('#conf-link-mapa').value = state.barbearia.linkMapa || '';
+  const teste = urlMapa(state.barbearia.linkMapa, consultaMapa(state.barbearia.enderecoDetalhe, state.barbearia.endereco));
+  const aTeste = $('#conf-testar-mapa');
+  if (aTeste) { aTeste.href = teste || '#'; aTeste.style.display = teste ? '' : 'none'; }
   $('#conf-endereco-atual').textContent = e.cep
     ? ''
     : (state.barbearia.endereco ? `Endereço cadastrado hoje: ${state.barbearia.endereco}. Preencha o CEP abaixo para completar (rua, número e CEP).` : 'Informe o endereço completo do seu estabelecimento.');
@@ -2236,14 +2241,15 @@ function enderecoMudou(f) {
   return !CAMPOS_ENDERECO.every(mesmo);
 }
 
-async function salvarEnderecoApi(f) {
+// corpo: { endereco?, linkMapa? } — só o que mudou
+async function salvarEnderecoApi(corpo) {
   const resp = await fetch('/api/configurar-negocio', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ idToken: await auth.currentUser.getIdToken(), endereco: f })
+    body: JSON.stringify({ idToken: await auth.currentUser.getIdToken(), ...corpo })
   });
-  const corpo = await resp.json().catch(() => ({}));
-  if (!resp.ok) { const e = new Error(corpo.erro || 'Não foi possível salvar o endereço.'); e.mensagemUsuario = e.message; throw e; }
+  const resposta = await resp.json().catch(() => ({}));
+  if (!resp.ok) { const e = new Error(resposta.erro || 'Não foi possível salvar o endereço.'); e.mensagemUsuario = e.message; throw e; }
 }
 
 function renderizarConfiguracoes() {
@@ -2367,8 +2373,12 @@ async function salvarConfiguracoes(e) {
   try {
     // endereço passa pelo servidor (valida CEP, número, UF...); só chama se a pessoa mexeu nele
     const end = lerEnderecoForm();
-    if (enderecoMudou(end)) {
-      await salvarEnderecoApi(end);
+    const link = ($('#conf-link-mapa').value || '').trim();
+    const paraApi = {};
+    if (enderecoMudou(end)) paraApi.endereco = end;
+    if (link !== (state.barbearia.linkMapa || '')) paraApi.linkMapa = link;
+    if (Object.keys(paraApi).length) {
+      await salvarEnderecoApi(paraApi);
       const bloco = $('#bloco-endereco'); if (bloco) bloco.dataset.sujo = '';
     }
     await updateDoc(doc(db, 'barbearias', state.barbeariaId), dados);

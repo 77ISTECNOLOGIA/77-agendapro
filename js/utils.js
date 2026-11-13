@@ -14,6 +14,33 @@ export function fotoServicoValida(foto) {
   return typeof foto === 'string' && foto.length <= 150000 && /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(foto);
 }
 
+// ---- Botão "Ver no mapa" (link do cliente e teste nas Configurações). Mesma regra de api/_lib/endereco.js. ----
+// Busca pelo CEP + cidade (acerta a rua; o endereço por extenso erra quando há ruas de mesmo nome na cidade).
+// CEP terminado em -000 é de localidade (cidade inteira): nesse caso vale o endereço.
+export function consultaMapa(detalhe, enderecoCompleto) {
+  const d = detalhe || {};
+  const cep = String(d.cep || '');
+  if (/^\d{5}-\d{3}$/.test(cep) && !cep.endsWith('-000') && d.cidade && d.uf) return cep + ', ' + d.cidade + ' - ' + d.uf;
+  return String(enderecoCompleto || '').trim();
+}
+
+// Só links do Google Maps (https) são aceitos; qualquer outra coisa é ignorada (o valor vira um href).
+export function linkMapaValido(link) {
+  try {
+    const u = new URL(String(link || ''));
+    const h = u.hostname.toLowerCase();
+    return u.protocol === 'https:' && !u.username && !u.password && (h === 'maps.app.goo.gl'
+      || ((h === 'google.com' || h === 'www.google.com' || h === 'maps.google.com' || h === 'goo.gl') && u.pathname.startsWith('/maps')));
+  } catch (_) { return false; }
+}
+
+// Endereço do botão: o link exato do dono (se houver) ou a busca no Google Maps. '' = sem botão.
+export function urlMapa(linkMapa, consulta) {
+  if (linkMapaValido(linkMapa)) return String(linkMapa);
+  const q = String(consulta || '').trim();
+  return q ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q) : '';
+}
+
 // Serviço com `profissionaisIds` preenchido só é feito por esses profissionais;
 // lista ausente/vazia = QUALQUER um (padrão, e é o que vale pros serviços
 // antigos). Mesma regra do servidor (api/_lib/negocio.js).

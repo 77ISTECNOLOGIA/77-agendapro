@@ -6,7 +6,7 @@
 // (/api/negocio, /api/criar-agendamento, /api/agendamento-cliente), que
 // validam no servidor e só devolvem o que o visitante pode ver.
 import { aplicarTema } from './vocabulario.js';
-import { escapeHtml, profissionalRealizaServico, fotoServicoValida } from './utils.js';
+import { escapeHtml, profissionalRealizaServico, fotoServicoValida, urlMapa } from './utils.js';
 
 // ========================================
 // ESTADO GLOBAL
@@ -246,18 +246,12 @@ function mostrarErroBarbearia(titulo, mensagem, icone) {
   $('#erro-barbearia').classList.remove('hidden');
 }
 
-// Link do mapa a partir do endereço completo. O destino é sempre o google.com (o endereço entra codificado,
-// então não dá para "escapar" da URL); no celular abre o aplicativo de mapas.
-function urlMapa(endereco) {
-  const consulta = String(endereco || '').trim();
-  return consulta ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(consulta) : '';
-}
 
 function renderizarHeader() {
   $('#header-nome').textContent = state.barbearia.nome || 'Barbearia';
   $('#header-passo').textContent = state.barbearia.enderecoCurto || state.barbearia.endereco || '';
   const mapa = $('#btn-mapa');
-  const url = urlMapa(state.barbearia.endereco);
+  const url = urlMapa(state.barbearia.linkMapa, state.barbearia.consultaMapa || state.barbearia.endereco);
   if (mapa) {
     if (url) { mapa.href = url; mapa.classList.remove('hidden'); }
     else mapa.classList.add('hidden');             // sem endereço cadastrado: sem botão
