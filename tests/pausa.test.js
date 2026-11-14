@@ -158,3 +158,31 @@ test('telas: intervalo no horário do estabelecimento e no do profissional; só 
   assert.match(ler('css/admin.css'), /\.horario-pausa \{ grid-column: 1 \/ -1;/);
   assert.match(ler('js/app.js'), /pausa && m < pausa\.fim && m \+ duracaoTotal > pausa\.ini/);
 });
+
+// ---------------------------------------------------------------- "Copiar para todos os dias"
+test('copiar para todos os dias: repete horário e intervalo da linha clicada nas outras, sem mexer em quais dias estão abertos', () => {
+  const admin = ler('js/admin.js');
+  const campos = (ativo, ini, fim, pa, pi, pf) => ({ 'ativo': { checked: ativo }, 'inicio': { value: ini }, 'fim': { value: fim }, 'pausa-ativo': { checked: pa }, 'pausa-inicio': { value: pi }, 'pausa-fim': { value: pf } });
+  const mkLinha = (c) => ({ c, querySelector(sel) { return this.c[sel.replace(/^\.[a-z]+-/, '')]; }, closest: () => null });
+  const seg = mkLinha(campos(true, '10:00', '20:00', true, '13:00', '14:00'));
+  const ter = mkLinha(campos(false, '09:00', '18:00', false, '12:00', '13:00'));
+  const qua = mkLinha(campos(true, '08:00', '17:00', true, '11:00', '12:00'));
+  const container = { querySelectorAll: () => [seg, ter, qua] };
+  seg.parentElement = container; seg.closest = (s) => (s === '.horario-linha' ? seg : null);
+  const avisos = [];
+  const ctx = vm.createContext({ Array, toast: (m, t) => avisos.push(t + ':' + m) });
+  vm.runInContext(extrairFuncao(admin, 'copiarLinhaParaTodos'), ctx);
+  ctx.botao = { closest: (s) => (s === '.horario-linha' ? seg : null), dataset: { copiar: 'ht' } };
+  vm.runInContext('copiarLinhaParaTodos(botao)', ctx);
+  for (const l of [seg, ter, qua]) {
+    assert.equal(l.c.inicio.value, '10:00'); assert.equal(l.c.fim.value, '20:00');
+    assert.equal(l.c['pausa-ativo'].checked, true); assert.equal(l.c['pausa-inicio'].value, '13:00'); assert.equal(l.c['pausa-fim'].value, '14:00');
+  }
+  assert.equal(ter.c.ativo.checked, false, 'terça continua fechada');
+  assert.equal(qua.c.ativo.checked, true);
+  assert.match(avisos[0], /^sucesso:Horário e intervalo copiados/);
+  // sem o botão certo, não faz nada
+  assert.doesNotThrow(() => { ctx.botao = { closest: () => null, dataset: {} }; vm.runInContext('copiarLinhaParaTodos(botao)', ctx); });
+  assert.match(admin, /data-copiar="\${prefixo}"/);
+  assert.match(admin, /e\.target\.closest\('\.link-copiar'\)/);
+});

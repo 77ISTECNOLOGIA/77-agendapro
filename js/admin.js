@@ -2222,7 +2222,28 @@ function htmlPausa(prefixo, h) {
       <input type="time" class="horario-input ${prefixo}-pausa-inicio" value="${(h && h.pausaInicio) || '12:00'}">
       <span>às</span>
       <input type="time" class="horario-input ${prefixo}-pausa-fim" value="${(h && h.pausaFim) || '13:00'}">
+      <button type="button" class="link-copiar" data-copiar="${prefixo}" title="Repete o horário e o intervalo desta linha nos outros dias">Copiar para todos os dias</button>
     </div>`;
+}
+
+// Copia o horário de trabalho e o intervalo de UMA linha para todas as outras (não mexe em quais dias estão abertos).
+function copiarLinhaParaTodos(botao) {
+  const linha = botao.closest('.horario-linha');
+  const p = botao.dataset.copiar;
+  if (!linha || !p) return;
+  const campo = (l, nome) => l.querySelector('.' + p + '-' + nome);
+  const modelo = {
+    inicio: campo(linha, 'inicio').value, fim: campo(linha, 'fim').value,
+    pausaAtiva: campo(linha, 'pausa-ativo').checked, pausaInicio: campo(linha, 'pausa-inicio').value, pausaFim: campo(linha, 'pausa-fim').value
+  };
+  Array.from(linha.parentElement.querySelectorAll('.horario-linha')).forEach((l) => {
+    campo(l, 'inicio').value = modelo.inicio;
+    campo(l, 'fim').value = modelo.fim;
+    campo(l, 'pausa-ativo').checked = modelo.pausaAtiva;
+    campo(l, 'pausa-inicio').value = modelo.pausaInicio;
+    campo(l, 'pausa-fim').value = modelo.pausaFim;
+  });
+  toast('Horário e intervalo copiados para todos os dias. Confira e salve.', 'sucesso');
 }
 
 // Lê a linha de um dia (estabelecimento: prefixo 'hf'; profissional: 'ht'). Devolve { dia, erro }: o intervalo só é gravado se estiver marcado.
@@ -2494,6 +2515,10 @@ function inicializarEventosViews() {
   UFS.forEach((uf) => { const o = document.createElement('option'); o.value = uf; o.textContent = uf; $('#conf-uf').appendChild(o); });
   ligarBuscaCep({ cep: 'conf-cep', logradouro: 'conf-logradouro', numero: 'conf-numero', bairro: 'conf-bairro', cidade: 'conf-cidade', uf: 'conf-uf', aviso: 'conf-cep-aviso' });
   $('#bloco-endereco').addEventListener('input', () => { $('#bloco-endereco').dataset.sujo = '1'; });
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest && e.target.closest('.link-copiar');
+    if (b) copiarLinhaParaTodos(b);
+  });
   $('#sinal-ativo').addEventListener('change', () => { $('#sinal-campos').style.opacity = $('#sinal-ativo').checked ? '1' : '0.55'; });
   $('#btn-horarios-fixos').addEventListener('click', () => modalHorariosFixos());
 
