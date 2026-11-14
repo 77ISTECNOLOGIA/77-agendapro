@@ -5,7 +5,7 @@
 import { db } from './firebase-config.js';
 import { toast } from './toast.js';
 import { ligarBuscaCep, UFS } from './cep.js';
-import { urlMapa, consultaMapa, pausaDoDia, validarPausaDia, permissoesDe, clientesDosAgendamentos, servicoParaProfissional, precosProfissionalValidos } from './utils.js';
+import { urlMapa, consultaMapa, pausaDoDia, validarPausaDia, permissoesDe, clientesDosAgendamentos, servicoParaProfissional, precosProfissionalValidos, temPrecoPorProfissional } from './utils.js';
 import { escapeHtml, adicionarMostrarSenha, profissionalRealizaServico, calcularVinculosProfissional, atendimentosParaResolver, periodoPronto, resumoPeriodo, fotoServicoValida } from './utils.js';
 import { aplicarTema, resetarTema } from './vocabulario.js';
 import {
@@ -1855,7 +1855,7 @@ function renderizarServicos() {
           : ''}
         <div style="flex:1;">
           <div class="item-card-titulo">${escapeHtml(s.nome)}</div>
-          <div class="item-card-sub">${s.duracaoMin} min • ${formatarMoeda(s.preco)}</div>
+          <div class="item-card-sub">${s.duracaoMin} min • ${formatarMoeda(s.preco)}${temPrecoPorProfissional(s) ? ' • preços por profissional' : ''}</div>
           ${textoQuemRealiza(s)}
         </div>
         ${s.ativo === false ? '<span class="tag-inativo">Inativo</span>' : ''}
@@ -1948,10 +1948,11 @@ function modalServico(id = null) {
         <input type="number" id="serv-duracao" class="input" value="${s.duracaoMin}" min="5" step="5">
       </div>
       <div class="input-grupo">
-        <label class="input-label">PREÇO (R$)</label>
+        <label class="input-label">PREÇO PADRÃO (R$)</label>
         <input type="number" id="serv-preco" class="input" value="${s.preco}" min="0" step="0.5">
       </div>
     </div>
+    <p class="campo-help" style="margin:-6px 0 14px;">O preço e o tempo padrão valem para TODOS os profissionais. Para um profissional cobrar diferente, ele define o próprio em <strong>Profissionais → Editar → Meus preços</strong> (ou em <strong>Meu perfil</strong>).${temPrecoPorProfissional(s) ? ' <strong>Este serviço já tem preços próprios de alguns profissionais.</strong>' : ''}</p>
     <div class="input-grupo">
       <label class="input-label">FOTO DO SERVIÇO (OPCIONAL)</label>
       <div style="display:flex;gap:14px;align-items:center;">
