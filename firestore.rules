@@ -139,9 +139,15 @@ service cloud.firestore {
                    .hasOnly(['horarioTrabalho', 'bloqueios', 'nome', 'especialidade']));
       }
 
-      // Tokens de notificação push (por enquanto só quem vê tudo; por profissional vem depois).
+      // Tokens de notificação push. Quem vê tudo gerencia todos; cada pessoa da equipe lê, cria, atualiza e apaga só os
+      // PRÓPRIOS aparelhos (o campo uid de cada aparelho é o de quem o ativou; api/_lib/notificar.js usa isso para
+      // mandar a cada profissional só o que é dele).
       match /dispositivos/{deviceId} {
         allow read, write: if verTodos(slug) || isSuperAdmin();
+        allow get, list, delete: if membro(slug) && resource.data.get('uid', '') == request.auth.uid;
+        allow create: if membro(slug) && request.resource.data.get('uid', '') == request.auth.uid;
+        allow update: if membro(slug) && resource.data.get('uid', '') == request.auth.uid
+          && request.resource.data.get('uid', '') == request.auth.uid;
       }
 
       // Agendamentos: quem vê tudo acessa todos; os demais só os do PRÓPRIO profissional (a consulta precisa

@@ -325,7 +325,7 @@ async function ativarNotificacoes() {
     // Tokens ficam numa sub-coleção privada (antes ficavam no documento do negócio, legível por todos).
     const deviceId = obterDeviceId();
     const dispositivosRef = collection(db, 'barbearias', state.barbeariaId, 'dispositivos');
-    await setDoc(doc(dispositivosRef, deviceId), { token, atualizadoEm: new Date().toISOString(), aparelho: descreverAparelho() });
+    await setDoc(doc(dispositivosRef, deviceId), { token, uid: state.user.uid, atualizadoEm: new Date().toISOString(), aparelho: descreverAparelho() });
 
     toast('Notificações ativadas neste aparelho! 🔔', 'sucesso');
     await carregarStatusNotificacoes();
@@ -362,7 +362,9 @@ function descreverAparelho() {
 // Lê os aparelhos registrados e atualiza o texto/botões da tela de Configurações.
 async function carregarStatusNotificacoes() {
   try {
-    const snap = await getDocs(collection(db, 'barbearias', state.barbeariaId, 'dispositivos'));
+    const todos = collection(db, 'barbearias', state.barbeariaId, 'dispositivos');
+    // quem não vê tudo só consegue ler (e só mostra) os PRÓPRIOS aparelhos
+    const snap = await getDocs(state.papel.verTodos ? todos : query(todos, where('uid', '==', state.user.uid)));
     atualizarStatusNotificacoes(snap.size > 0, snap.size, snap.docs.map((d) => d.data().aparelho || 'Aparelho'));
   } catch (err) {
     console.error('Erro ao ler aparelhos de notificação:', err);
@@ -702,7 +704,10 @@ function aplicarPermissoesNaTela() {
   ocultar('#btn-horarios-fixos', !p.verTodos);
   ocultar('#filtro-profissional', !p.verTodos);
   ocultar('#btn-novo-profissional', !admin);
-  ocultar('#card-notificacoes-push', !p.verTodos);
+  // Notificações: todos recebem o que é do seu profissional. Quem não vê Configurações (onde fica o cartão) o encontra em Meu perfil.
+  const cartaoPush = $('#card-notificacoes-push');
+  const viewPerfil = $('#view-profissionais');
+  if (cartaoPush && viewPerfil && !p.gerirNegocio) { cartaoPush.style.marginTop = '20px'; viewPerfil.appendChild(cartaoPush); }
   const rotulo = document.querySelector('.nav-item[data-view="profissionais"] .nav-label');
   if (rotulo) rotulo.textContent = p.verTodos ? 'Profissionais' : 'Meu perfil';
 }
@@ -721,7 +726,7 @@ function renderizarViewAtual() {
     case 'dashboard': renderizarDashboard(); break;
     case 'agenda': renderizarAgenda(); break;
     case 'servicos': renderizarServicos(); break;
-    case 'profissionais': renderizarProfissionais(); break;
+    case 'profissionais': renderizarProfissionais(); if (!state.papel.gerirNegocio && !state.statusPushCarregado) { state.statusPushCarregado = true; carregarStatusNotificacoes(); } break;
     case 'relatorios': renderizarRelatorios(); break;
     case 'clientes': renderizarClientes(); break;
     case 'configuracoes': renderizarConfiguracoes(); break;
@@ -2574,7 +2579,7 @@ function renderizarConfiguracoes() {
   preencherRegrasAgendamento();
 
   // Status das notificações push (verifica se há pelo menos 1 dispositivo ativado)
-  if (state.papel.verTodos) carregarStatusNotificacoes();
+  carregarStatusNotificacoes();
 
   // Horários
   const dias = diasDaSemana();

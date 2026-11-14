@@ -4,8 +4,8 @@
 // ========================================
 // Botão "Enviar notificação de teste" em Configurações. Deixa o dono conferir, aparelho
 // por aparelho, se o aviso chega — sem precisar fazer um agendamento de mentira.
-// Só o próprio dono do negócio (token do Firebase verificado + usuarios/{uid}) consegue usar,
-// e só envia para os aparelhos DELE.
+// Qualquer pessoa da equipe (token do Firebase verificado + usuarios/{uid}) pode usar,
+// e só envia para os aparelhos DELA.
 
 const { db, auth } = require('./_lib/firebase');
 const { dentroDoLimite, dentroDoLimitePorChave, responder, ErroNegocio, tratarErro, corpoDe } = require('./_lib/http');
@@ -30,13 +30,13 @@ module.exports = async function handler(req, res) {
     const firestore = db();
     const vinculo = (await firestore.collection('usuarios').doc(decoded.uid).get()).data();
     if (!vinculo || !vinculo.barbeariaId) throw new ErroNegocio(403, 'Sua conta não está ligada a um negócio.');
-    if (!require('./_lib/equipe').permissoesDe(vinculo).verTodos) throw new ErroNegocio(403, 'Você não tem permissão para testar notificações.');
+    const permissoes = require('./_lib/equipe').permissoesDe(vinculo);
 
     const negocioRef = firestore.collection('barbearias').doc(vinculo.barbeariaId);
     const r = await enviarParaDispositivos(negocioRef, {
       titulo: '77 AgendaPro — teste',
       corpo: 'Tudo certo! As notificações estão funcionando neste aparelho. 🎉',
-      tag: `teste-${Date.now()}`,
+      tag: `teste-${Date.now()}`, uid: decoded.uid, uidVeTodos: permissoes.verTodos,
       dados: { tipo: 'teste' }
     });
 

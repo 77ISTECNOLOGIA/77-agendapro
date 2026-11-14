@@ -185,3 +185,29 @@ test('super-admin da 77 IS segue vendo tudo', async () => {
   assert.ok((await fs.ler(`${A}/profissionais/prof-1`, 'super1')).permitido);
   assert.ok((await fs.atualizar(A, { status: 'suspensa' }, 'super1')).permitido);
 });
+
+test('aparelhos de notificação: cada pessoa gerencia só os PRÓPRIOS; quem vê tudo gerencia todos', async () => {
+  const D = 'barbearias/neg-a/dispositivos';
+  // sócio cria, lê, lista, atualiza e apaga o próprio aparelho
+  assert.ok((await fs.criar(D, 'd-s1', { token: 't', uid: 'socio1' }, 'socio1')).permitido);
+  assert.ok((await fs.ler(`${D}/d-s1`, 'socio1')).permitido);
+  assert.ok((await fs.atualizar(`${D}/d-s1`, { token: 't2' }, 'socio1')).permitido);
+  assert.ok((await fs.consultar('barbearias/neg-a', 'dispositivos', [['uid', 'socio1']], 'socio1')).permitido, 'lista só os próprios');
+  assert.ok((await fs.consultar('barbearias/neg-a', 'dispositivos', [['uid', 'socio2']], 'socio1')).negado, 'lista filtrando pelo uid de outro');
+  // não mexe em aparelho de outro nem se passa por outro
+  assert.ok((await fs.criar(D, 'd-falso', { token: 't', uid: 'socio2' }, 'socio1')).negado, 'criar aparelho em nome de outro');
+  assert.ok((await fs.criar(D, 'd-sem-uid', { token: 't' }, 'socio1')).negado);
+  assert.ok((await fs.ler(`${D}/d1`, 'socio1')).negado, 'aparelho antigo (sem uid)');
+  assert.ok((await fs.listar(D, 'socio1')).negado, 'lista sem filtro');
+  await fs.semear(`${D}/d-s2`, { token: 'x', uid: 'socio2' });
+  assert.ok((await fs.ler(`${D}/d-s2`, 'socio1')).negado);
+  assert.ok((await fs.atualizar(`${D}/d-s2`, { token: 'roubado' }, 'socio1')).negado);
+  assert.ok((await fs.apagar(`${D}/d-s2`, 'socio1')).negado);
+  assert.ok((await fs.atualizar(`${D}/d-s1`, { uid: 'socio2' }, 'socio1')).negado, 'não passa o aparelho para outro');
+  assert.ok((await fs.apagar(`${D}/d-s1`, 'socio1')).permitido);
+  // de outro negócio: nada
+  assert.ok((await fs.criar(D, 'd-b', { token: 't', uid: 'dono-b' }, 'dono-b')).negado);
+  // quem vê tudo continua gerenciando todos
+  assert.ok((await fs.ler(`${D}/d-s2`, 'chefe')).permitido);
+  assert.ok((await fs.apagar(`${D}/d-s2`, 'chefe')).permitido);
+});

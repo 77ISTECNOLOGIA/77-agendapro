@@ -278,3 +278,48 @@ test('cancelar-convite apaga o convite; o link deixa de valer', async () => {
   assert.equal((await chamar(comoDono({ action: 'cancelar-convite', token }))).statusCode, 404);
   assert.equal((await chamar(comoDono({ action: 'cancelar-convite', token: '../x' }))).statusCode, 400);
 });
+
+// ---------------------------------------------------------------- notificações por profissional
+test('push: cada aviso vai só a quem vê tudo e ao dono do profissional do agendamento', async () => {
+  const { enviarParaDispositivos } = require('../api/_lib/notificar');
+  amb.notificacoes.length = 0;
+  amb.fake.seed('usuarios/socio2', { barbeariaId: SLUG, role: 'profissional', profissionalId: 'prof2', email: 's2@teste.com', permissoes: SOPROPRIO });
+  amb.fake.seed('usuarios/saiu', { barbeariaId: 'outra-barbearia', role: 'owner' });   // já não é deste negócio
+  const dispositivos = {
+    antigo: { token: 'tok-antigo' },                             // sem uid: aparelho do dono de antes da equipe
+    dono: { token: 'tok-dono', uid: 'dono1' },
+    s1: { token: 'tok-s1', uid: 'socio1' },
+    s2: { token: 'tok-s2', uid: 'socio2' },
+    fantasma: { token: 'tok-fantasma', uid: 'nao-existe' },
+    saiu: { token: 'tok-saiu', uid: 'saiu' }
+  };
+  Object.entries(dispositivos).forEach(([id, d]) => amb.fake.seed(`barbearias/${SLUG}/dispositivos/${id}`, d));
+  const negocioRef = amb.fake.collection('barbearias').doc(SLUG);
+  const enviados = async (opcoes) => {
+    amb.notificacoes.length = 0;
+    await enviarParaDispositivos(negocioRef, { corpo: 'x', tag: 't', ...opcoes });
+    return amb.notificacoes.map((m) => m.token).sort();
+  };
+  assert.deepEqual(await enviados({ profissionalId: 'prof1' }), ['tok-antigo', 'tok-dono', 'tok-s1'], 'prof1: quem vê tudo + o sócio dele, e ninguém do prof2');
+  assert.deepEqual(await enviados({ profissionalId: 'prof2' }), ['tok-antigo', 'tok-dono', 'tok-s2']);
+  assert.deepEqual(await enviados({}), ['tok-antigo', 'tok-dono'], 'aviso geral (ex.: resumo diário): só quem vê tudo');
+  // mudou o acesso: o aviso acompanha na hora
+  amb.fake.seed('usuarios/socio2', { barbeariaId: SLUG, role: 'profissional', profissionalId: 'prof2', permissoes: TOTAL });
+  assert.deepEqual(await enviados({ profissionalId: 'prof1' }), ['tok-antigo', 'tok-dono', 'tok-s1', 'tok-s2']);   // s2 agora vê tudo; s1 continua recebendo por ser o dono do prof1
+});
+
+test('push de teste: manda só para os aparelhos de quem pediu', async () => {
+  const handler = require('../api/testar-notificacao');
+  amb.notificacoes.length = 0;
+  amb.fake.seed(`barbearias/${SLUG}/dispositivos/d-dono`, { token: 'tok-dono', uid: 'dono1' });
+  amb.fake.seed(`barbearias/${SLUG}/dispositivos/d-s1`, { token: 'tok-s1', uid: 'socio1' });
+  amb.fake.seed(`barbearias/${SLUG}/dispositivos/d-antigo`, { token: 'tok-antigo' });
+  const r = res();
+  await handler(req('POST', { body: { idToken: 'tok-socio1' } }), r);
+  assert.equal(r.statusCode, 200);
+  assert.deepEqual(amb.notificacoes.map((m) => m.token), ['tok-s1'], 'o sócio não dispara aparelho do dono, nem o antigo');
+  amb.notificacoes.length = 0;
+  const r2 = res();
+  await handler(req('POST', { body: { idToken: 'tok-dono1' } }), r2);
+  assert.deepEqual(amb.notificacoes.map((m) => m.token).sort(), ['tok-antigo', 'tok-dono'], 'quem vê tudo também testa os aparelhos antigos');
+});
