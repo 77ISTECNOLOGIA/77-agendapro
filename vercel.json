@@ -13,10 +13,6 @@
       "destination": "/cadastro.html"
     },
     {
-      "source": "/convite",
-      "destination": "/convite.html"
-    },
-    {
       "source": "/((?!api/)(?!.*\\.).*)",
       "destination": "/index.html"
     }

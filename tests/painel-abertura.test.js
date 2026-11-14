@@ -16,20 +16,16 @@ function extrair(src, nome) {
   for (; i < src.length; i++) { if (src[i] === '{') n++; else if (src[i] === '}' && --n === 0) break; }
   return src.slice(m.index, i + 1);
 }
-const CODIGO = ['lerVinculoGuardado', 'guardarVinculo', 'inicializarAuth', 'ativarListenersTempoReal', 'desativarListeners', 'mostrarApp', 'lerPapelGuardado', 'guardarPapel', 'papelDe', 'mesmoPapel']
+const CODIGO = ['lerVinculoGuardado', 'guardarVinculo', 'inicializarAuth', 'ativarListenersTempoReal', 'desativarListeners', 'mostrarApp']
   .map((f) => extrair(admin, f)).join('\n');
 
 const flush = () => new Promise((r) => setImmediate(r));
 const SUBS = ['servicos', 'profissionais', 'agendamentos', 'clientes'];
 
-const PAPEL_TOTAL = { verTodos: true, gerirNegocio: true, profissionalId: '' };
-const utilsFonte = fs.readFileSync(path.join(__dirname, '..', 'js', 'utils.js'), 'utf8');
-const CODIGO_UTILS = ['permissoesDe', 'clientesDosAgendamentos'].map((f) => extrair(utilsFonte, f)).join('\n');
-
-function montar({ palpite = null, papelPalpite = PAPEL_TOTAL } = {}) {
+function montar({ palpite = null } = {}) {
   const log = [];                       // ordem em que as coisas aconteceram
   const escutas = [];                   // { path, cb, erro, cancelada }
-  const armazenamento = new Map(palpite ? [['ap_vinculo_u1', palpite], ['ap_papel_u1', JSON.stringify(papelPalpite)]] : []);
+  const armazenamento = new Map(palpite ? [['ap_vinculo_u1', palpite]] : []);
   let resolverUsuarios;
   const usuarios = new Promise((r) => { resolverUsuarios = r; });
   const el = () => ({ classList: { add() {}, remove() {} }, addEventListener() {}, textContent: '', disabled: false });
@@ -41,14 +37,11 @@ function montar({ palpite = null, papelPalpite = PAPEL_TOTAL } = {}) {
     localStorage: { getItem: (k) => (armazenamento.has(k) ? armazenamento.get(k) : null), setItem: (k, v) => armazenamento.set(k, v), removeItem: (k) => armazenamento.delete(k) },
     state: { user: null, barbeariaId: null, barbearia: null, negocioExiste: false, appPronto: false, dadosCarregados: false, listeners: [], servicos: {}, profissionais: {}, agendamentos: {}, clientes: {} },
     $: () => el(), db: {}, auth: {},
-    doc: (pai, ...seg) => ({ path: (pai && pai.path ? [pai.path, ...seg] : seg).join('/') }),
+    doc: (_db, ...seg) => ({ path: seg.join('/') }),
     collection: (ref, nome) => ({ path: ref.path + '/' + nome }),
     getDoc: (ref) => { log.push('getDoc:' + ref.path); return usuarios; },
     getDocs: () => { throw new Error('não pode baixar tudo de uma vez: os acompanhamentos em tempo real já fazem isso'); },
-    query: (ref, filtro) => ({ path: ref.path, filtro }),
-    where: (campo, op, valor) => ({ campo, op, valor }),
-    aplicarPermissoesNaTela: () => log.push('permissoes'),
-    onSnapshot: (ref, cb, erro) => { log.push('escuta:' + ref.path); const e = { path: ref.path, filtro: ref.filtro, cb, erro, cancelada: false }; escutas.push(e); return () => { e.cancelada = true; }; },
+    onSnapshot: (ref, cb, erro) => { log.push('escuta:' + ref.path); const e = { path: ref.path, cb, erro, cancelada: false }; escutas.push(e); return () => { e.cancelada = true; }; },
     onAuthStateChanged: (_a, cb) => { aoMudarAuth = cb; },
     signOut: async () => { log.push('signOut'); },
     adicionarMostrarSenha() {}, handleLogin() {}, handleEsqueciSenha() {}, handleLogout() {},
@@ -59,7 +52,6 @@ function montar({ palpite = null, papelPalpite = PAPEL_TOTAL } = {}) {
     tratarLinkDeNotificacao: () => log.push('linkNotificacao'),
     renovarHorariosFixos: () => log.push('renovar'), ouvirNotificacoesEmPrimeiroPlano: () => log.push('ouvirNotif'), atualizarServiceWorker: () => log.push('atualizarSW')
   });
-  vm.runInContext(CODIGO_UTILS, ctx);
   vm.runInContext(CODIGO, ctx);
   vm.runInContext('inicializarAuth()', ctx);
   assert.equal(typeof aoMudarAuth, 'function');
@@ -68,7 +60,7 @@ function montar({ palpite = null, papelPalpite = PAPEL_TOTAL } = {}) {
   return {
     ctx, log, escutas, armazenamento,
     entrar: () => aoMudarAuth({ uid: 'u1', email: 'dono@teste.com' }),
-    usuarioEncontrado: (barbeariaId, extra = {}) => resolverUsuarios({ exists: () => true, data: () => ({ barbeariaId, nome: 'Dono', ...extra }) }),
+    usuarioEncontrado: (barbeariaId) => resolverUsuarios({ exists: () => true, data: () => ({ barbeariaId, nome: 'Dono' }) }),
     usuarioSemVinculo: () => resolverUsuarios({ exists: () => false, data: () => undefined }),
     entregarTudo: (ativas, negocio = snap(true, { nome: 'Barbearia', tipoNegocio: 'barbearia' })) => {
       for (const e of ativas) {
@@ -200,78 +192,4 @@ test('arquivos: modulepreload, pacote de notificações sob demanda, QR Code sob
   const img = vercel.headers.find((h) => h.source === '/img/(.*)');
   assert.ok(img && /max-age=86400/.test(img.headers[0].value));
   assert.ok(!admin.includes('async function carregarBarbearia'), 'o download em dobro foi removido');
-});
-
-// ---------------------------------------------------------------- equipe: quem não vê tudo só consulta o que é dele
-const SOCIO = { role: 'profissional', profissionalId: 'prof1', permissoes: { verTodos: false, gerirNegocio: false } };
-
-test('quem não vê tudo (1ª visita): lê só o próprio profissional e só os agendamentos dele; não toca em clientes', async () => {
-  const t = montar();
-  const fim = t.entrar();
-  await flush();
-  t.usuarioEncontrado('lipao', SOCIO);
-  await flush();
-  const caminhos = t.escutas.map((e) => e.path).sort();
-  assert.deepEqual(caminhos, ['barbearias/lipao', 'barbearias/lipao/agendamentos', 'barbearias/lipao/profissionais/prof1', 'barbearias/lipao/servicos']);
-  const ag = t.escutas.find((e) => e.path.endsWith('/agendamentos'));
-  assert.deepEqual(ag.filtro, { campo: 'profissionalId', op: '==', valor: 'prof1' }, 'a consulta TEM de filtrar, senão as regras do banco recusam');
-  assert.ok(!t.escutas.some((e) => e.path.endsWith('/clientes') || e.path.endsWith('/profissionais')), 'nem a lista de clientes nem a de profissionais');
-  for (const e of t.escutas) {
-    if (e.path.endsWith('/agendamentos')) e.cb(t.snap(true, { a1: { clienteWhatsapp: '5521999990001', clienteNome: 'Ana', dataChave: '2026-12-01', status: 'confirmado' }, a2: { clienteWhatsapp: '5521999990001', clienteNome: 'Ana', dataChave: '2026-12-08', status: 'concluido' }, a3: { clienteWhatsapp: '5521999990002', clienteNome: 'Bia', dataChave: '2026-12-02', status: 'cancelado' } }));
-    else if (e.path.endsWith('/prof1')) e.cb({ exists: () => true, id: 'prof1', data: () => ({ nome: 'João' }) });
-    else if (e.path.split('/').length === 2) e.cb(t.snap(true, { nome: 'B', tipoNegocio: 'barbearia' }));
-    else e.cb(t.snap(true, {}));
-  }
-  await fim;
-  assert.deepEqual(Object.keys(t.ctx.state.profissionais), ['prof1']);
-  assert.deepEqual(Object.keys(t.ctx.state.clientes), ['5521999990001'], 'clientes vêm dos próprios agendamentos (cancelados não contam)');
-  assert.equal(t.ctx.state.clientes['5521999990001'].totalAgendamentos, 2);
-  assert.equal(t.ctx.state.dadosCarregados, true);
-  assert.equal(t.armazenamento.get('ap_papel_u1'), JSON.stringify({ verTodos: false, gerirNegocio: false, profissionalId: 'prof1' }));
-  t.ctx.__adiados.forEach((f) => f());
-  assert.ok(!t.log.includes('renovar'), 'horários fixos (API só de quem vê tudo) não são renovados por quem não vê tudo');
-});
-
-test('palpite de papel: sócio que antes via tudo e agora não vê recomeça as escutas com o filtro', async () => {
-  const t = montar({ palpite: 'lipao' });         // palpite = acesso total
-  const fim = t.entrar();
-  await flush();
-  assert.equal(t.escutas.length, 5);
-  t.usuarioEncontrado('lipao', SOCIO);
-  await flush();
-  assert.ok(t.escutas.slice(0, 5).every((e) => e.cancelada), 'as escutas sem filtro (que o banco recusaria) são canceladas');
-  const novas = t.escutas.slice(5);
-  assert.equal(novas.length, 4);
-  assert.ok(novas.some((e) => e.filtro && e.filtro.valor === 'prof1'));
-  t.escutas.slice(0, 5).forEach((e) => e.erro && e.erro(new Error('permission-denied')));
-  for (const e of novas) {
-    if (e.path.endsWith('/prof1')) e.cb({ exists: () => true, id: 'prof1', data: () => ({ nome: 'J' }) });
-    else if (e.path.split('/').length === 2) e.cb(t.snap(true, { nome: 'B', tipoNegocio: 'barbearia' }));
-    else e.cb(t.snap(true, {}));
-  }
-  await fim;
-  assert.equal(t.ctx.state.papel.verTodos, false);
-});
-
-test('sem palpite de papel guardado (aparelho antigo), nada começa em paralelo: só depois de saber o papel', async () => {
-  const t = montar();
-  t.armazenamento.set('ap_vinculo_u1', 'lipao');   // só o negócio, sem papel
-  const fim = t.entrar();
-  await flush();
-  assert.deepEqual(t.log, ['getDoc:usuarios/u1']);
-  t.usuarioEncontrado('lipao');
-  await flush();
-  t.entregarTudo(t.escutas);
-  await fim;
-  assert.equal(t.ctx.state.dadosCarregados, true);
-});
-
-test('permissoesDe do navegador dá o mesmo resultado que o do servidor', () => {
-  const servidor = require('../api/_lib/equipe');
-  const ctx = vm.createContext({});
-  vm.runInContext(extrair(utilsFonte, 'permissoesDe'), ctx);
-  for (const u of [null, {}, { role: 'owner' }, { role: 'profissional' }, { barbeariaId: 'x' }, { role: 'owner', permissoes: { verTodos: false, gerirNegocio: false } },
-    { permissoes: { verTodos: true, gerirNegocio: false } }, { permissoes: { verTodos: 'sim', gerirNegocio: 1 } }, { role: 'x', permissoes: {} }]) {
-    assert.deepEqual(JSON.parse(JSON.stringify(vm.runInContext('permissoesDe', ctx)(u))), servidor.permissoesDe(u), JSON.stringify(u));
-  }
 });

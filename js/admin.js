@@ -5,7 +5,7 @@
 import { db } from './firebase-config.js';
 import { toast } from './toast.js';
 import { ligarBuscaCep, UFS } from './cep.js';
-import { urlMapa, consultaMapa, pausaDoDia, validarPausaDia, permissoesDe, clientesDosAgendamentos, servicoParaProfissional, precosProfissionalValidos, temPrecoPorProfissional } from './utils.js';
+import { urlMapa, consultaMapa, pausaDoDia, validarPausaDia } from './utils.js';
 import { escapeHtml, adicionarMostrarSenha, profissionalRealizaServico, calcularVinculosProfissional, atendimentosParaResolver, periodoPronto, resumoPeriodo, fotoServicoValida } from './utils.js';
 import { aplicarTema, resetarTema } from './vocabulario.js';
 import {
@@ -29,9 +29,7 @@ import {
   deleteDoc,
   addDoc,
   writeBatch,
-  onSnapshot,
-  query,
-  where
+  onSnapshot
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const auth = getAuth(getApp());
@@ -71,21 +69,6 @@ function guardarVinculo(uid, barbeariaId) {
   } catch (_) { /* sem armazenamento: só perde a otimização */ }
 }
 
-// Papel (permissões + profissional) deste usuário, também guardado como palpite: sem ele não dá para saber COMO
-// consultar (quem não vê tudo precisa filtrar por profissional), então sem palpite de papel nada começa em paralelo.
-function lerPapelGuardado(uid) {
-  try {
-    const p = JSON.parse(localStorage.getItem('ap_papel_' + uid) || 'null');
-    if (p && typeof p.verTodos === 'boolean' && typeof p.gerirNegocio === 'boolean') return { verTodos: p.verTodos, gerirNegocio: p.gerirNegocio, profissionalId: String(p.profissionalId || '') };
-  } catch (_) { /* sem armazenamento */ }
-  return null;
-}
-function guardarPapel(uid, papel) {
-  try { localStorage.setItem('ap_papel_' + uid, JSON.stringify(papel)); } catch (_) { /* só perde a otimização */ }
-}
-function papelDe(usuario) { return { ...permissoesDe(usuario), profissionalId: String((usuario && usuario.profissionalId) || '') }; }
-function mesmoPapel(a, b) { return !!a && !!b && a.verTodos === b.verTodos && a.gerirNegocio === b.gerirNegocio && a.profissionalId === b.profissionalId; }
-
 // Chave gerada no Firebase Console > Configurações > Cloud Messaging > Certificados push da Web
 const VAPID_KEY = 'BBDdf4Estwxij9B1m3R7jZCrNNMul4EcIjAYJ9-Xw-8mgebCIgGwCUfPdYBko7scsVQ6VxMefFBYORQv9mzLYl4';
 
@@ -95,7 +78,6 @@ const VAPID_KEY = 'BBDdf4Estwxij9B1m3R7jZCrNNMul4EcIjAYJ9-Xw-8mgebCIgGwCUfPdYBko
 const state = {
   user: null,
   barbeariaId: null,
-  papel: { verTodos: true, gerirNegocio: true, profissionalId: '' },
   barbearia: null,
   negocioExiste: false,
   appPronto: false,        // true depois de mostrarApp(): antes disso os acompanhamentos em tempo real não redesenham nada
@@ -169,11 +151,9 @@ function inicializarAuth() {
         // sem palpite (1ª vez neste aparelho), começam logo depois dela. Os dados são baixados UMA vez só
         // (antes eram baixados por inteiro e, em seguida, de novo pelos acompanhamentos em tempo real).
         const palpite = lerVinculoGuardado(user.uid);
-        const papelPalpite = lerPapelGuardado(user.uid);
         let prontos = null;
-        if (palpite && papelPalpite) {
+        if (palpite) {
           state.barbeariaId = palpite;
-          state.papel = papelPalpite;
           prontos = ativarListenersTempoReal();
           prontos.catch(() => {});                 // palpite errado: tratado logo abaixo
         }
@@ -187,20 +167,16 @@ function inicializarAuth() {
         }
         const userData = snap.data();
         state.dadosCarregados = false;
-        const papelReal = papelDe(userData);
-        if (!palpite || !papelPalpite || userData.barbeariaId !== palpite || !mesmoPapel(papelReal, papelPalpite)) {   // 1ª visita neste aparelho, ou o vínculo/papel mudou
+        if (userData.barbeariaId !== palpite) {      // 1ª visita neste aparelho, ou o vínculo mudou
           state.barbeariaId = userData.barbeariaId;
-          state.papel = papelReal;
           prontos = ativarListenersTempoReal();
         }
         guardarVinculo(user.uid, userData.barbeariaId);
-        guardarPapel(user.uid, papelReal);
         await prontos;                               // 1º retrato de negócio, serviços, profissionais, agendamentos e clientes
         if (!state.negocioExiste) throw new Error('Barbearia não encontrada');
         aplicarTema(state.barbearia.tipoNegocio);
         $('#sidebar-barbearia').textContent = state.barbearia.nome || '—';
         renderizarUserInfo(userData);
-        aplicarPermissoesNaTela();
         mostrarApp();
         avisarSituacaoConta();
         await renderizarTudo();
@@ -208,7 +184,7 @@ function inicializarAuth() {
         tratarLinkDeNotificacao();                   // aberto pelo toque numa notificação: já mostra o agendamento
         // O que não é preciso para ver a tela fica para depois que ela já apareceu
         setTimeout(() => {
-          if (state.papel.verTodos) renovarHorariosFixos();   // reforço da rotina diária (no máximo 1x a cada 4 h por aparelho)
+          renovarHorariosFixos();                    // reforço da rotina diária (no máximo 1x a cada 4 h por aparelho)
           ouvirNotificacoesEmPrimeiroPlano();
           atualizarServiceWorker();
         }, 1500);
@@ -325,7 +301,7 @@ async function ativarNotificacoes() {
     // Tokens ficam numa sub-coleção privada (antes ficavam no documento do negócio, legível por todos).
     const deviceId = obterDeviceId();
     const dispositivosRef = collection(db, 'barbearias', state.barbeariaId, 'dispositivos');
-    await setDoc(doc(dispositivosRef, deviceId), { token, uid: state.user.uid, atualizadoEm: new Date().toISOString(), aparelho: descreverAparelho() });
+    await setDoc(doc(dispositivosRef, deviceId), { token, atualizadoEm: new Date().toISOString(), aparelho: descreverAparelho() });
 
     toast('Notificações ativadas neste aparelho! 🔔', 'sucesso');
     await carregarStatusNotificacoes();
@@ -362,9 +338,7 @@ function descreverAparelho() {
 // Lê os aparelhos registrados e atualiza o texto/botões da tela de Configurações.
 async function carregarStatusNotificacoes() {
   try {
-    const todos = collection(db, 'barbearias', state.barbeariaId, 'dispositivos');
-    // quem não vê tudo só consegue ler (e só mostra) os PRÓPRIOS aparelhos
-    const snap = await getDocs(state.papel.verTodos ? todos : query(todos, where('uid', '==', state.user.uid)));
+    const snap = await getDocs(collection(db, 'barbearias', state.barbeariaId, 'dispositivos'));
     atualizarStatusNotificacoes(snap.size > 0, snap.size, snap.docs.map((d) => d.data().aparelho || 'Aparelho'));
   } catch (err) {
     console.error('Erro ao ler aparelhos de notificação:', err);
@@ -612,10 +586,6 @@ function ativarListenersTempoReal() {
   state.negocioExiste = false;
   state.barbearia = null;
 
-  // Quem não vê tudo só pode ler o PRÓPRIO profissional e os agendamentos dele (as regras do Firestore recusam o resto):
-  // a consulta tem de filtrar, e a lista de clientes sai desses agendamentos.
-  const restrito = !state.papel.verTodos;
-  const meuProf = state.papel.profissionalId;
   const fontes = new Set(['negocio', 'servicos', 'profissionais', 'agendamentos', 'clientes']);
   const chegaram = new Set();
   let cumprir, falhar;
@@ -638,33 +608,16 @@ function ativarListenersTempoReal() {
     marcar('negocio');
   }, comErro('negocio')));
 
-  const origem = {
-    servicos: () => collection(negocioRef, 'servicos'),
-    profissionais: () => (restrito ? doc(negocioRef, 'profissionais', meuProf) : collection(negocioRef, 'profissionais')),
-    agendamentos: () => (restrito ? query(collection(negocioRef, 'agendamentos'), where('profissionalId', '==', meuProf)) : collection(negocioRef, 'agendamentos')),
-    clientes: () => collection(negocioRef, 'clientes')
-  };
-  if (restrito) {
-    state.clientes = {};
-    marcar('clientes');                                   // derivados dos agendamentos, não há o que baixar
-    if (!meuProf) {                                       // sem profissional vinculado não há nada deles para ver
-      state.profissionais = {}; state.agendamentos = {};
-      marcar('profissionais'); marcar('agendamentos');
-    }
-  }
   ['servicos', 'profissionais', 'agendamentos', 'clientes'].forEach((chave) => {
-    if (restrito && (chave === 'clientes' || (!meuProf && (chave === 'profissionais' || chave === 'agendamentos')))) return;
-    state.listeners.push(onSnapshot(origem[chave](), (snap) => {
+    state.listeners.push(onSnapshot(collection(negocioRef, chave), (snap) => {
       const dados = {};
-      if (chave === 'profissionais' && restrito) { if (snap.exists()) dados[snap.id] = snap.data(); }
-      else snap.forEach(d => { dados[d.id] = d.data(); });
+      snap.forEach(d => { dados[d.id] = d.data(); });
       if (chave === 'agendamentos') {
         Object.values(dados).forEach((a) => {
           if (a.status === 'aguardando_sinal' && a.sinalExpiraEm && Date.parse(a.sinalExpiraEm) <= Date.now()) { a.status = 'cancelado'; a._sinalExpirado = true; }
         });
       }
       state[chave] = dados;
-      if (chave === 'agendamentos' && restrito) state.clientes = clientesDosAgendamentos(dados);
       redesenhar();
       marcar(chave);
     }, comErro(chave)));
@@ -688,31 +641,7 @@ function inicializarNavegacao() {
   });
 }
 
-// O que cada papel enxerga. Quem não gere o negócio não vê Serviços/Configurações/Equipe; quem não vê tudo
-// só tem a própria agenda, os próprios clientes e o próprio perfil (as regras do Firestore garantem o resto).
-function viewPermitida(view) {
-  const p = state.papel;
-  if (view === 'servicos' || view === 'configuracoes' || view === 'equipe') return p.gerirNegocio;
-  return true;
-}
-
-function aplicarPermissoesNaTela() {
-  const p = state.papel;
-  $$('.nav-item').forEach((n) => { n.style.display = viewPermitida(n.dataset.view) ? '' : 'none'; });
-  const admin = p.verTodos && p.gerirNegocio;
-  const ocultar = (sel, esconder) => { const el = $(sel); if (el) el.style.display = esconder ? 'none' : ''; };
-  ocultar('#filtro-profissional', !p.verTodos);
-  ocultar('#btn-novo-profissional', !admin);
-  // Notificações: todos recebem o que é do seu profissional. Quem não vê Configurações (onde fica o cartão) o encontra em Meu perfil.
-  const cartaoPush = $('#card-notificacoes-push');
-  const viewPerfil = $('#view-profissionais');
-  if (cartaoPush && viewPerfil && !p.gerirNegocio) { cartaoPush.style.marginTop = '20px'; viewPerfil.appendChild(cartaoPush); }
-  const rotulo = document.querySelector('.nav-item[data-view="profissionais"] .nav-label');
-  if (rotulo) rotulo.textContent = p.verTodos ? 'Profissionais' : 'Meu perfil';
-}
-
 function irPara(view) {
-  if (!viewPermitida(view)) view = 'dashboard';
   state.viewAtual = view;
   $$('.nav-item').forEach(n => n.classList.toggle('ativo', n.dataset.view === view));
   $$('.view').forEach(v => v.classList.toggle('ativa', v.id === `view-${view}`));
@@ -725,11 +654,10 @@ function renderizarViewAtual() {
     case 'dashboard': renderizarDashboard(); break;
     case 'agenda': renderizarAgenda(); break;
     case 'servicos': renderizarServicos(); break;
-    case 'profissionais': renderizarProfissionais(); if (!state.papel.gerirNegocio && !state.statusPushCarregado) { state.statusPushCarregado = true; carregarStatusNotificacoes(); } break;
+    case 'profissionais': renderizarProfissionais(); break;
     case 'relatorios': renderizarRelatorios(); break;
     case 'clientes': renderizarClientes(); break;
     case 'configuracoes': renderizarConfiguracoes(); break;
-    case 'equipe': renderizarEquipe(); break;
   }
 }
 
@@ -1526,9 +1454,8 @@ function atualizarProfissionaisNovoAgendamento() {
 }
 
 function duracaoServicosSelecionadosNovoAgendamento() {
-  const profId = ($('#nag-profissional') || {}).value || '';
   return $$('#modal-body .nag-servico-check:checked')
-    .map(c => (state.servicos[c.value] ? servicoParaProfissional(state.servicos[c.value], profId).duracaoMin : 0) || 0)
+    .map(c => state.servicos[c.value]?.duracaoMin || 0)
     .reduce((s, d) => s + d, 0);
 }
 
@@ -1583,7 +1510,7 @@ async function salvarNovoAgendamento() {
 
   const whatsNorm = '55' + whatsDigitos;
   const servicos = servicoIds.map(id => ({
-    id, nome: state.servicos[id].nome, ...servicoParaProfissional(state.servicos[id], profId)   // preço e duração de quem atende
+    id, nome: state.servicos[id].nome, preco: state.servicos[id].preco, duracaoMin: state.servicos[id].duracaoMin
   }));
   const valorTotal = servicos.reduce((s, sv) => s + sv.preco, 0);
   const duracaoMin = servicos.reduce((s, sv) => s + sv.duracaoMin, 0);
@@ -1604,11 +1531,8 @@ async function salvarNovoAgendamento() {
     }
 
     const clienteRef = doc(db, 'barbearias', state.barbeariaId, 'clientes', whatsNorm);
-    const veTodos = state.papel.verTodos;     // quem só vê o próprio profissional não grava a ficha geral (regras do Firestore)
-    const clienteSnap = veTodos ? await getDoc(clienteRef) : null;
-    if (!veTodos) {
-      // o cliente aparece na lista dele pelos próprios agendamentos
-    } else if (clienteSnap.exists()) {
+    const clienteSnap = await getDoc(clienteRef);
+    if (clienteSnap.exists()) {
       const atual = clienteSnap.data();
       await setDoc(clienteRef, {
         ...atual,
@@ -1855,7 +1779,7 @@ function renderizarServicos() {
           : ''}
         <div style="flex:1;">
           <div class="item-card-titulo">${escapeHtml(s.nome)}</div>
-          <div class="item-card-sub">${s.duracaoMin} min • ${formatarMoeda(s.preco)}${temPrecoPorProfissional(s) ? ' • preços por profissional' : ''}</div>
+          <div class="item-card-sub">${s.duracaoMin} min • ${formatarMoeda(s.preco)}</div>
           ${textoQuemRealiza(s)}
         </div>
         ${s.ativo === false ? '<span class="tag-inativo">Inativo</span>' : ''}
@@ -1948,11 +1872,10 @@ function modalServico(id = null) {
         <input type="number" id="serv-duracao" class="input" value="${s.duracaoMin}" min="5" step="5">
       </div>
       <div class="input-grupo">
-        <label class="input-label">PREÇO PADRÃO (R$)</label>
+        <label class="input-label">PREÇO (R$)</label>
         <input type="number" id="serv-preco" class="input" value="${s.preco}" min="0" step="0.5">
       </div>
     </div>
-    <p class="campo-help" style="margin:-6px 0 14px;">O preço e o tempo padrão valem para TODOS os profissionais. Para um profissional cobrar diferente, ele define o próprio em <strong>Profissionais → Editar → Meus preços</strong> (ou em <strong>Meu perfil</strong>).${temPrecoPorProfissional(s) ? ' <strong>Este serviço já tem preços próprios de alguns profissionais.</strong>' : ''}</p>
     <div class="input-grupo">
       <label class="input-label">FOTO DO SERVIÇO (OPCIONAL)</label>
       <div style="display:flex;gap:14px;align-items:center;">
@@ -2076,8 +1999,8 @@ function renderizarProfissionais() {
           </div>
         </div>
         <div class="item-card-actions">
-          ${podeEditarProfissional(p.id) ? '<button class="btn-mini" data-acao="editar">Editar</button>' : ''}
-          ${state.papel.verTodos && state.papel.gerirNegocio ? '<button class="btn-mini perigo" data-acao="deletar">Excluir</button>' : ''}
+          <button class="btn-mini" data-acao="editar">Editar</button>
+          <button class="btn-mini perigo" data-acao="deletar">Excluir</button>
         </div>
       </div>
     `;
@@ -2085,20 +2008,12 @@ function renderizarProfissionais() {
 
   $$('#lista-profissionais-admin .item-card').forEach(card => {
     const id = card.dataset.id;
-    const bEditar = card.querySelector('[data-acao="editar"]'); if (bEditar) bEditar.addEventListener('click', () => modalProfissional(id));
-    const bDeletar = card.querySelector('[data-acao="deletar"]'); if (bDeletar) bDeletar.addEventListener('click', () => deletarProfissional(id));
+    card.querySelector('[data-acao="editar"]').addEventListener('click', () => modalProfissional(id));
+    card.querySelector('[data-acao="deletar"]').addEventListener('click', () => deletarProfissional(id));
   });
 }
 
-// Administrador pleno edita qualquer profissional por inteiro; os demais só o PRÓPRIO, e só nome, especialidade e horário.
-function podeEditarProfissional(id) {
-  const p = state.papel;
-  return (p.verTodos && p.gerirNegocio) || (!!id && p.profissionalId === id);
-}
-
 function modalProfissional(id = null) {
-  const completo = state.papel.verTodos && state.papel.gerirNegocio;
-  if (!podeEditarProfissional(id)) { toast('Você não tem permissão para isso.', 'erro'); return; }
   const p = id ? state.profissionais[id] : {
     nome: '', especialidade: '', comissao: 50, ativo: true,
     horarioTrabalho: diasDaSemana().reduce((acc, dia) => {
@@ -2113,7 +2028,7 @@ function modalProfissional(id = null) {
   // Serviços que este profissional realiza. Profissional novo já vem marcado nos
   // serviços sem restrição (que qualquer um faz); nos restritos a outros, não.
   const servicosLista = Object.entries(state.servicos).sort((a, b) => (a[1].ordem || 0) - (b[1].ordem || 0));
-  const blocoServicos = (!completo || servicosLista.length === 0) ? '' : `
+  const blocoServicos = servicosLista.length === 0 ? '' : `
     <div class="input-grupo">
       <label class="input-label">SERVIÇOS QUE REALIZA</label>
       <div class="nag-servicos-lista">
@@ -2130,38 +2045,6 @@ function modalProfissional(id = null) {
       }</small>
     </div>`;
 
-  // Preço/duração e Pix PRÓPRIOS: só o próprio profissional (ou o administrador pleno) mexe, pela API (não pelas regras do banco).
-  const pixAtual = (id && p.pix) || {};
-  const servicosAtivos = servicosLista.filter(([, s]) => s.ativo !== false);
-  const blocoPrecos = !id || servicosAtivos.length === 0 ? '' : `
-    <h4 style="margin:20px 0 6px;font-family:'Bricolage Grotesque';font-weight:700;font-size:14px;">Meus preços</h4>
-    <p class="campo-help" style="margin:0 0 10px;">Deixe em branco para cobrar o valor padrão do serviço (mostrado em cinza).</p>
-    <div class="precos-prof">
-      ${servicosAtivos.map(([sid, s]) => {
-        const o = precosProfissionalValidos(s.precosProfissional)[id] || {};
-        return `<div class="preco-prof-linha" data-sid="${escapeHtml(sid)}" style="display:grid;grid-template-columns:1fr 92px 82px;gap:8px;align-items:center;margin-bottom:8px;">
-          <span style="font-size:13px;">${escapeHtml(s.nome)}</span>
-          <input type="number" class="input pp-preco" min="0" step="0.5" placeholder="R$ ${Number(s.preco || 0).toFixed(2).replace('.', ',')}" value="${o.preco !== undefined ? o.preco : ''}">
-          <input type="number" class="input pp-duracao" min="5" step="5" placeholder="${s.duracaoMin} min" value="${o.duracaoMin !== undefined ? o.duracaoMin : ''}">
-        </div>`;
-      }).join('')}
-      <div class="campo-help" style="display:grid;grid-template-columns:1fr 92px 82px;gap:8px;"><span></span><span>Preço (R$)</span><span>Minutos</span></div>
-    </div>`;
-  const tiposPix = [['cpf', 'CPF'], ['cnpj', 'CNPJ'], ['telefone', 'Telefone'], ['email', 'E-mail'], ['aleatoria', 'Chave aleatória']];
-  const blocoPix = !id ? '' : `
-    <h4 style="margin:20px 0 6px;font-family:'Bricolage Grotesque';font-weight:700;font-size:14px;">Meu Pix para receber o sinal</h4>
-    <p class="campo-help" style="margin:0 0 10px;">Se o estabelecimento cobra sinal, o cliente paga direto para quem vai atender. Deixe a chave em branco para usar o Pix do estabelecimento.</p>
-    <div class="form-grid">
-      <div class="input-grupo"><label class="input-label">TIPO DA CHAVE</label>
-        <select id="pp-pix-tipo" class="input">${tiposPix.map(([v, r]) => `<option value="${v}" ${pixAtual.tipoChave === v ? 'selected' : ''}>${r}</option>`).join('')}</select></div>
-      <div class="input-grupo"><label class="input-label">CHAVE PIX</label><input type="text" id="pp-pix-chave" class="input" value="${escapeHtml(pixAtual.chavePix || '')}"></div>
-    </div>
-    <div class="form-grid">
-      <div class="input-grupo"><label class="input-label">NOME DE QUEM RECEBE</label><input type="text" id="pp-pix-nome" class="input" value="${escapeHtml(pixAtual.nomeRecebedor || '')}" placeholder="Como aparece no banco"></div>
-      <div class="input-grupo"><label class="input-label">CIDADE</label><input type="text" id="pp-pix-cidade" class="input" value="${escapeHtml(pixAtual.cidadeRecebedor || '')}"></div>
-    </div>
-    <div class="input-grupo"><label class="input-label">BANCO (OPCIONAL)</label><input type="text" id="pp-pix-banco" class="input" value="${escapeHtml((pixAtual.banco || '').replace(/^Banco /, ''))}" placeholder="Ex.: Inter, Nubank"></div>`;
-
   const corpo = `
     <div class="input-grupo">
       <label class="input-label">NOME</label>
@@ -2172,20 +2055,18 @@ function modalProfissional(id = null) {
         <label class="input-label">ESPECIALIDADE</label>
         <input type="text" id="prof-especialidade" class="input" value="${escapeHtml(p.especialidade || '')}" placeholder="Ex: Clássico, Moderno">
       </div>
-      ${completo ? `<div class="input-grupo">
+      <div class="input-grupo">
         <label class="input-label">COMISSÃO (%)</label>
         <input type="number" id="prof-comissao" class="input" value="${p.comissao || 50}" min="0" max="100">
-      </div>` : ''}
+      </div>
     </div>
-    ${completo ? `<div class="input-grupo">
+    <div class="input-grupo">
       <label style="display:flex;gap:10px;align-items:center;cursor:pointer;">
         <input type="checkbox" id="prof-ativo" ${p.ativo !== false ? 'checked' : ''}>
         <span>Profissional ativo</span>
       </label>
-    </div>` : ''}
+    </div>
     ${blocoServicos}
-    ${blocoPrecos}
-    ${blocoPix}
     <h4 style="margin:20px 0 6px;font-family:'Bricolage Grotesque';font-weight:700;font-size:14px;">Horário de trabalho</h4>
     <p class="campo-help" style="margin:0 0 12px;">Intervalo próprio (opcional): se ficar desmarcado, vale o intervalo do estabelecimento (em Configurações).</p>
     <div class="horarios-conf">
@@ -2229,23 +2110,11 @@ function modalProfissional(id = null) {
     const dados = {
       nome: $('#prof-nome').value.trim(),
       especialidade: $('#prof-especialidade').value.trim(),
+      comissao: Number($('#prof-comissao').value),
+      ativo: $('#prof-ativo').checked,
       horarioTrabalho
     };
-    if (completo) { dados.comissao = Number($('#prof-comissao').value); dados.ativo = $('#prof-ativo').checked; }
     if (!dados.nome) { toast('Digite o nome', 'erro'); return; }
-
-    if (!completo) {                                  // só o que as regras permitem a quem edita o próprio perfil
-      try {
-        await updateDoc(doc(db, 'barbearias', state.barbeariaId, 'profissionais', id), dados);
-        await salvarPrecosEPixDoProfissional(id);
-        toast('Perfil atualizado', 'sucesso');
-        fecharModal();
-      } catch (err) {
-        console.error('Erro ao salvar perfil:', err);
-        toast(`Erro ao salvar (${err.code || 'desconhecido'})`, 'erro');
-      }
-      return;
-    }
 
     // Profissional + vínculos com os serviços são gravados juntos (tudo ou nada).
     const profRef = id
@@ -2272,7 +2141,6 @@ function modalProfissional(id = null) {
         { profissionaisIds: a.profissionaisIds }
       ));
       await lote.commit();
-      if (id) await salvarPrecosEPixDoProfissional(id);
       toast(id ? 'Profissional atualizado' : 'Profissional criado', 'sucesso');
       fecharModal();
     } catch (err) {
@@ -2280,27 +2148,6 @@ function modalProfissional(id = null) {
       toast(`Erro ao salvar profissional (${err.code || 'desconhecido'})`, 'erro');
     }
   });
-}
-
-// Preços e Pix próprios vão pela API (api/equipe.js), que confere de quem é o perfil. Só envia o que a tela mostra.
-async function salvarPrecosEPixDoProfissional(id) {
-  const linhas = $$('#modal-body .preco-prof-linha');
-  if (linhas.length) {
-    const precos = {};
-    linhas.forEach((l) => {
-      const preco = l.querySelector('.pp-preco').value, dur = l.querySelector('.pp-duracao').value;
-      precos[l.dataset.sid] = (preco === '' && dur === '') ? null : { preco: preco === '' ? null : Number(preco), duracaoMin: dur === '' ? null : Number(dur) };
-    });
-    await chamarEquipe('precos-profissional', { profissionalId: id, precos });
-  }
-  const chave = $('#pp-pix-chave');
-  if (chave) {
-    const pix = chave.value.trim() === '' ? null : {
-      tipoChave: $('#pp-pix-tipo').value, chavePix: chave.value.trim(), nomeRecebedor: $('#pp-pix-nome').value,
-      cidadeRecebedor: $('#pp-pix-cidade').value, banco: $('#pp-pix-banco').value
-    };
-    await chamarEquipe('pix-profissional', { profissionalId: id, pix });
-  }
 }
 
 async function deletarProfissional(id) {
@@ -2311,177 +2158,6 @@ async function deletarProfissional(id) {
   } catch (err) {
     toast('Erro ao excluir', 'erro');
   }
-}
-
-// ========================================
-// VIEW: EQUIPE (convites e permissões)
-// ========================================
-// Quem decide e grava é o servidor (api/equipe.js): ninguém dá nem recebe acesso que não tem, e o negócio nunca
-// fica sem um gerente. Aqui só se monta a tela.
-async function chamarEquipe(action, dados = {}) {
-  const resp = await fetch('/api/equipe', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ idToken: await auth.currentUser.getIdToken(), action, ...dados })
-  });
-  const corpo = await resp.json().catch(() => ({}));
-  if (!resp.ok) throw new Error(corpo.erro || 'Não foi possível concluir. Tente de novo.');
-  return corpo;
-}
-
-function descricaoAcesso(p) {
-  if (p.verTodos && p.gerirNegocio) return 'Acesso total (vê tudo e gerencia o negócio)';
-  if (p.verTodos) return 'Vê a agenda e o faturamento de todos';
-  if (p.gerirNegocio) return 'Gerencia o negócio e vê só o próprio trabalho';
-  return 'Vê só o próprio trabalho';
-}
-
-let equipeCache = null;
-async function renderizarEquipe() {
-  const el = $('#lista-equipe');
-  if (!state.papel.gerirNegocio) { el.innerHTML = ''; return; }
-  try {
-    equipeCache = await chamarEquipe('listar');
-  } catch (err) {
-    el.innerHTML = '<div class="vazio-msg">' + escapeHtml(err.message) + '</div>';
-    return;
-  }
-  const { membros, convites } = equipeCache;
-  const cartoesMembros = membros.map((m) => `
-    <div class="item-card">
-      <div class="item-card-header">
-        <div class="item-card-emoji" style="background:var(--accent);color:#fff;font-family:'Bricolage Grotesque';font-weight:700;">${escapeHtml(iniciais(m.nome || m.email))}</div>
-        <div style="flex:1;min-width:0;">
-          <div class="item-card-titulo">${escapeHtml(m.nome || m.email)}${m.eu ? ' <span class="tag-inativo" style="background:var(--accent);color:#fff;">você</span>' : ''}</div>
-          <div class="item-card-sub">${escapeHtml(m.email)}${m.profissionalNome ? ' · Profissional: ' + escapeHtml(m.profissionalNome) : ''}</div>
-        </div>
-      </div>
-      <div class="item-card-sub" style="margin:8px 0;">${escapeHtml(descricaoAcesso(m.permissoes))}</div>
-      <div class="item-card-actions">
-        ${m.podeModificar || m.eu ? `<button class="btn-mini" data-acao="alterar" data-uid="${escapeHtml(m.uid)}">Alterar acesso</button>` : ''}
-        ${m.podeModificar ? `<button class="btn-mini perigo" data-acao="remover" data-uid="${escapeHtml(m.uid)}">Remover</button>` : ''}
-      </div>
-    </div>`).join('');
-  const cartoesConvites = convites.length === 0 ? '' : `
-    <h3 class="card-titulo" style="margin:22px 0 10px;">Convites pendentes</h3>` + convites.map((c) => `
-    <div class="item-card">
-      <div class="item-card-header">
-        <div style="flex:1;min-width:0;">
-          <div class="item-card-titulo">${escapeHtml(c.nome)}</div>
-          <div class="item-card-sub">${escapeHtml(c.email)}${c.profissionalNome ? ' · Profissional: ' + escapeHtml(c.profissionalNome) : ''}</div>
-        </div>
-      </div>
-      <div class="item-card-sub" style="margin:8px 0;">${escapeHtml(descricaoAcesso(c.permissoes))} · vale até ${escapeHtml(new Date(c.expiraEm).toLocaleDateString('pt-BR'))}</div>
-      <div class="item-card-actions">
-        <button class="btn-mini" data-acao="link" data-token="${escapeHtml(c.token)}">Copiar link</button>
-        <button class="btn-mini" data-acao="whats" data-token="${escapeHtml(c.token)}">Enviar no WhatsApp</button>
-        <button class="btn-mini perigo" data-acao="cancelar" data-token="${escapeHtml(c.token)}">Cancelar</button>
-      </div>
-    </div>`).join('');
-  el.innerHTML = cartoesMembros + cartoesConvites;
-
-  $$('#lista-equipe [data-acao]').forEach((b) => b.addEventListener('click', () => acaoEquipe(b.dataset.acao, b.dataset)));
-}
-
-async function acaoEquipe(acao, dados) {
-  const convite = equipeCache.convites.find((c) => c.token === dados.token);
-  try {
-    if (acao === 'link') {
-      await navigator.clipboard.writeText(convite.link);
-      toast('Link copiado', 'sucesso');
-    } else if (acao === 'whats') {
-      const msg = encodeURIComponent('Oi ' + convite.nome.split(' ')[0] + '! Você foi convidado(a) para a equipe de ' + (state.barbearia.nome || '') + ' no 77 AgendaPro. Crie seu acesso por este link (vale 7 dias): ' + convite.link);
-      window.open('https://wa.me/?text=' + msg, '_blank');
-    } else if (acao === 'cancelar') {
-      if (!confirm('Cancelar o convite de ' + convite.nome + '? O link deixa de funcionar.')) return;
-      await chamarEquipe('cancelar-convite', { token: dados.token });
-      toast('Convite cancelado', 'sucesso');
-      renderizarEquipe();
-    } else if (acao === 'remover') {
-      const m = equipeCache.membros.find((x) => x.uid === dados.uid);
-      if (!confirm('Remover o acesso de ' + (m.nome || m.email) + '? A pessoa deixa de entrar no painel (a agenda e os clientes continuam aqui).')) return;
-      await chamarEquipe('remover', { uid: dados.uid });
-      toast('Acesso removido', 'sucesso');
-      renderizarEquipe();
-    } else if (acao === 'alterar') {
-      modalAlterarAcesso(dados.uid);
-    }
-  } catch (err) {
-    toast(err.message, 'erro');
-  }
-}
-
-// Caixas de permissão: o que a própria pessoa que mexe NÃO tem fica desabilitado (o servidor também recusa).
-function htmlPermissoes(atuais) {
-  const eu = state.papel;
-  const linha = (id, rotulo, ajuda, marcado, pode) => `
-    <label class="nag-servico-item" style="align-items:flex-start;${pode ? '' : 'opacity:.5;'}">
-      <input type="checkbox" id="${id}" ${marcado ? 'checked' : ''} ${pode ? '' : 'disabled'}>
-      <span><strong>${rotulo}</strong><br><small class="campo-help">${ajuda}</small></span>
-    </label>`;
-  return `<div class="input-grupo"><label class="input-label">O QUE PODE FAZER</label><div class="nag-servicos-lista">
-    ${linha('perm-ver', 'Ver a agenda, os clientes e o faturamento de todos', 'Desmarcado: vê só o próprio trabalho (o do profissional ligado a essa pessoa).', atuais.verTodos, eu.verTodos)}
-    ${linha('perm-gerir', 'Gerenciar o negócio', 'Serviços, horário de funcionamento, Pix e esta equipe.', atuais.gerirNegocio, eu.gerirNegocio)}
-  </div></div>`;
-}
-const lerPermissoes = () => ({ verTodos: $('#perm-ver').checked, gerirNegocio: $('#perm-gerir').checked });
-
-function modalConvidar() {
-  const livres = equipeCache.profissionais.filter((p) => p.ativo && !p.vinculado);
-  const corpo = `
-    <div class="input-grupo"><label class="input-label">NOME</label><input type="text" id="conv-nome" class="input" placeholder="Nome da pessoa"></div>
-    <div class="input-grupo"><label class="input-label">E-MAIL (será o login da pessoa)</label><input type="email" id="conv-email" class="input" placeholder="pessoa@email.com" autocomplete="off"></div>
-    <div class="input-grupo">
-      <label class="input-label">PROFISSIONAL DESSA PESSOA</label>
-      <select id="conv-prof" class="input">
-        <option value="__novo">Criar um novo profissional com o nome da pessoa</option>
-        ${livres.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.nome)}</option>`).join('')}
-        <option value="__nenhum">Nenhum (só administra)</option>
-      </select>
-      <small class="campo-help">É a agenda que a pessoa enxerga. "Nenhum" só vale se a pessoa puder ver tudo.</small>
-    </div>
-    ${htmlPermissoes({ verTodos: false, gerirNegocio: false })}`;
-  const rodape = `<button class="btn-acao-secundario" id="modal-cancel">Cancelar</button><button class="btn-acao" id="modal-salvar">Gerar convite</button>`;
-  abrirModal('Convidar pessoa', corpo, rodape);
-  $('#modal-cancel').addEventListener('click', fecharModal);
-  $('#modal-salvar').addEventListener('click', async () => {
-    const nome = $('#conv-nome').value.trim();
-    const escolha = $('#conv-prof').value;
-    const dados = { nome, email: $('#conv-email').value.trim(), permissoes: lerPermissoes() };
-    if (escolha === '__novo') dados.novoProfissional = nome;
-    else if (escolha !== '__nenhum') dados.profissionalId = escolha;
-    const btn = $('#modal-salvar'); btn.disabled = true; btn.textContent = 'Gerando...';
-    try {
-      const r = await chamarEquipe('convidar', dados);
-      abrirModal('Convite pronto', `
-        <p style="color:var(--text-dim);font-size:14px;line-height:1.5;margin-bottom:14px;">Envie este link para <strong>${escapeHtml(nome)}</strong>. A pessoa cria a própria senha e já entra na equipe. O link vale 7 dias e só funciona com o e-mail informado.</p>
-        <input type="text" class="input" id="conv-link" readonly value="${escapeHtml(r.link)}">`,
-        `<button class="btn-acao-secundario" id="conv-copiar">Copiar link</button><button class="btn-acao" id="conv-whats">Enviar no WhatsApp</button>`);
-      $('#conv-copiar').addEventListener('click', async () => { try { await navigator.clipboard.writeText(r.link); toast('Link copiado', 'sucesso'); } catch (_) { $('#conv-link').select(); } });
-      $('#conv-whats').addEventListener('click', () => window.open('https://wa.me/?text=' + encodeURIComponent('Oi ' + nome.split(' ')[0] + '! Você foi convidado(a) para a equipe de ' + (state.barbearia.nome || '') + ' no 77 AgendaPro. Crie seu acesso por este link (vale 7 dias): ' + r.link), '_blank'));
-      renderizarEquipe();
-    } catch (err) {
-      toast(err.message, 'erro');
-      btn.disabled = false; btn.textContent = 'Gerar convite';
-    }
-  });
-}
-
-function modalAlterarAcesso(uid) {
-  const m = equipeCache.membros.find((x) => x.uid === uid);
-  const corpo = `<p style="color:var(--text-dim);font-size:14px;margin-bottom:14px;"><strong>${escapeHtml(m.nome || m.email)}</strong>${m.eu ? ' (você)' : ''}</p>${htmlPermissoes(m.permissoes)}`;
-  const rodape = `<button class="btn-acao-secundario" id="modal-cancel">Cancelar</button><button class="btn-acao" id="modal-salvar">Salvar</button>`;
-  abrirModal('Alterar acesso', corpo, rodape);
-  $('#modal-cancel').addEventListener('click', fecharModal);
-  $('#modal-salvar').addEventListener('click', async () => {
-    try {
-      await chamarEquipe('alterar', { uid, permissoes: lerPermissoes() });
-      toast('Acesso atualizado', 'sucesso');
-      fecharModal();
-      if (m.eu) location.reload();               // o próprio acesso mudou: recarrega para refazer as telas e consultas
-      else renderizarEquipe();
-    } catch (err) { toast(err.message, 'erro'); }
-  });
 }
 
 // ========================================
@@ -2692,18 +2368,6 @@ function preencherRegrasAgendamento() {
   $('#sinal-cidade-recebedor').value = sinal.cidadeRecebedor || '';
   $('#sinal-banco').value = sinal.banco || '';
   $('#limite-semana').value = state.barbearia.limiteAgendamentosSemana || 0;
-  // Chave Pix do negócio: só o administrador pleno altera (os demais gerentes usam o Pix próprio, em Meu perfil)
-  const soAdmin = !(state.papel.verTodos && state.papel.gerirNegocio);
-  ['#sinal-tipo-chave', '#sinal-chave', '#sinal-nome-recebedor', '#sinal-cidade-recebedor', '#sinal-banco'].forEach((s) => { $(s).disabled = soAdmin; });
-  let aviso = $('#aviso-pix-negocio');
-  if (!aviso) {
-    aviso = document.createElement('small');
-    aviso.id = 'aviso-pix-negocio';
-    aviso.className = 'campo-help';
-    aviso.style.cssText = 'display:block;margin:0 0 12px;';
-    $('#sinal-campos').appendChild(aviso);
-  }
-  aviso.textContent = soAdmin ? 'A chave Pix do estabelecimento só pode ser alterada pelo dono. Cada profissional define o próprio Pix em Meu perfil.' : '';
   $('#sinal-campos').style.opacity = $('#sinal-ativo').checked ? '1' : '0.55';
 }
 
@@ -2817,9 +2481,6 @@ function inicializarEventosViews() {
   $('#modal-overlay').addEventListener('click', (e) => {
     if (e.target.id === 'modal-overlay') fecharModal();
   });
-
-  // Equipe
-  $('#btn-convidar').addEventListener('click', () => { if (equipeCache) modalConvidar(); });
 
   // Dashboard
   $('#btn-atualizar-dash').addEventListener('click', renderizarDashboard);

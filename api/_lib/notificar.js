@@ -6,8 +6,7 @@
 // (criar-agendamento.js) dispara a notificação direto, sem expor endpoint.
 // Os tokens ficam em barbearias/{slug}/dispositivos/{deviceId} (privado).
 
-const { messaging, db } = require('./firebase');
-const { permissoesDe } = require('./equipe');
+const { messaging } = require('./firebase');
 
 const URL_BASE = process.env.APP_URL || 'https://77-agendapro.vercel.app';
 const ICONE_77 = `${URL_BASE}/img/icon-192.png`;
@@ -30,45 +29,17 @@ function montarCorpo(ag) {
 }
 
 /**
- * Escolhe QUEM recebe, entre os aparelhos de barbearias/{slug}/dispositivos. Cada aparelho guarda o `uid` de quem o ativou;
- * as permissões são lidas na hora do envio (mudou o acesso, mudou quem recebe):
- *  - aparelho sem uid = anterior à equipe, era do dono: recebe como quem vê tudo;
- *  - quem VÊ TUDO recebe tudo;
- *  - quem só vê o próprio profissional recebe só o que é do SEU profissional (`profissionalId`);
- *  - `uid`: só os aparelhos dessa pessoa (notificação de teste); `uidVeTodos` diz se os aparelhos antigos também valem para ela.
- * Aparelho de quem saiu do negócio não recebe nada.
- */
-async function escolherAparelhos(negocioRef, docs, { profissionalId, uid, uidVeTodos }) {
-  const usuarios = new Map();
-  const usuarioDe = async (u) => {
-    if (!usuarios.has(u)) usuarios.set(u, (await db().collection('usuarios').doc(u).get()).data() || null);
-    return usuarios.get(u);
-  };
-  const escolhidos = [];
-  for (const d of docs) {
-    const dono = d.data().uid;
-    if (uid) { if (dono === uid || (!dono && uidVeTodos)) escolhidos.push(d); continue; }
-    if (!dono) { escolhidos.push(d); continue; }
-    const u = await usuarioDe(dono);
-    if (!u || u.barbeariaId !== negocioRef.id) continue;
-    if (permissoesDe(u).verTodos || (profissionalId && u.profissionalId === profissionalId)) escolhidos.push(d);
-  }
-  return escolhidos;
-}
-
-/**
- * Envia a MESMA notificação aos aparelhos escolhidos (ver escolherAparelhos).
+ * Envia a MESMA notificação pra todos os aparelhos do dono (barbearias/{slug}/dispositivos).
  * Nunca lança. Remove tokens mortos. Devolve { total, enviadas, removidos, erros[] }.
  */
-async function enviarParaDispositivos(negocioRef, { titulo = '77 AgendaPro', corpo, tag, dados = {}, link, profissionalId, uid, uidVeTodos }) {
+async function enviarParaDispositivos(negocioRef, { titulo = '77 AgendaPro', corpo, tag, dados = {}, link }) {
   const resultado = { total: 0, enviadas: 0, removidos: 0, erros: [] };
   const snap = await negocioRef.collection('dispositivos').get();
-  const aparelhos = await escolherAparelhos(negocioRef, snap.docs, { profissionalId, uid, uidVeTodos });
-  resultado.total = aparelhos.length;
-  if (!aparelhos.length) return resultado;
+  resultado.total = snap.size;
+  if (snap.empty) return resultado;
 
   const urlPainel = link || `${process.env.APP_URL || 'https://77-agendapro.vercel.app'}/admin`;
-  await Promise.all(aparelhos.map(async (d) => {
+  await Promise.all(snap.docs.map(async (d) => {
     const token = d.data().token;
     if (!token) return;
     try {
@@ -122,7 +93,7 @@ async function notificarAlteracaoCliente(negocioRef, agendamentoId, { tipo, ag, 
       tag = `cancelou-${agendamentoId}`;
     }
     const r = await enviarParaDispositivos(negocioRef, {
-      titulo, corpo, tag, profissionalId: ag.profissionalId,
+      titulo, corpo, tag,
       dados: { agendamentoId, tipo },
       link: `${process.env.APP_URL || 'https://77-agendapro.vercel.app'}/admin?agendamento=${encodeURIComponent(agendamentoId)}`
     });
@@ -142,7 +113,7 @@ async function notificarSinalInformado(negocioRef, agendamentoId, ag) {
     const r = await enviarParaDispositivos(negocioRef, {
       titulo: '💰 Sinal informado',
       corpo: `${nome} informou o Pix de R$ ${valor} — ${dataHora(ag.dataChave, ag.horario)} — ${servicos}. Confira e confirme no painel.`,
-      tag: `sinal-${agendamentoId}`, profissionalId: ag.profissionalId,
+      tag: `sinal-${agendamentoId}`,
       dados: { agendamentoId, tipo: 'sinal' },
       link: `${process.env.APP_URL || 'https://77-agendapro.vercel.app'}/admin?agendamento=${encodeURIComponent(agendamentoId)}`
     });
@@ -160,7 +131,7 @@ async function notificarNovoAgendamento(negocioRef, agendamentoRef, agendamento)
     // e agendamentos diferentes continuam empilhando.
     const r = await enviarParaDispositivos(negocioRef, {
       corpo: montarCorpo(agendamento),
-      tag: `agendamento-${agendamentoRef.id}`, profissionalId: agendamento.profissionalId,
+      tag: `agendamento-${agendamentoRef.id}`,
       dados: { agendamentoId: agendamentoRef.id },
       // tocar na notificação abre direto ESTE agendamento no painel
       link: `${process.env.APP_URL || 'https://77-agendapro.vercel.app'}/admin?agendamento=${encodeURIComponent(agendamentoRef.id)}`

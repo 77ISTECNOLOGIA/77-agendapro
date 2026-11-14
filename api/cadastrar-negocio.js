@@ -125,7 +125,7 @@ module.exports = async function handler(req, res) {
       });
 
       tx.set(usuarioRef, {
-        email, nome: nomeResp, barbeariaId: slug, role: 'owner', permissoes: { verTodos: true, gerirNegocio: true }, criadoEm: agora, precisaOnboarding: true
+        email, nome: nomeResp, barbeariaId: slug, role: 'owner', criadoEm: agora, precisaOnboarding: true
       });
 
       tx.set(filaRef, {
