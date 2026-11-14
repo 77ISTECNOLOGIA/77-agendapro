@@ -12,6 +12,16 @@ const INTERVALO_MIN = 30;           // granularidade da grade de horários
 const ANTECEDENCIA_MIN = 30;        // não agenda "pra daqui a 5 minutos"
 const JANELA_MAX_DIAS = 90;         // não agenda além de 90 dias
 
+// Intervalo (almoço): o próprio do profissional no dia, ou, se ele não tiver, o do estabelecimento (igual a js/utils.js → pausaDoDia).
+const HHMM = /^\d{2}:\d{2}$/;
+function pausaValida(e) {
+  return !!e && HHMM.test(e.pausaInicio || '') && HHMM.test(e.pausaFim || '') && horaParaMinutos(e.pausaFim) > horaParaMinutos(e.pausaInicio);
+}
+function pausaDoDia(expedienteProfissional, expedienteNegocio) {
+  const fonte = pausaValida(expedienteProfissional) ? expedienteProfissional : (pausaValida(expedienteNegocio) ? expedienteNegocio : null);
+  return fonte ? { ini: horaParaMinutos(fonte.pausaInicio), fim: horaParaMinutos(fonte.pausaFim) } : null;
+}
+
 /**
  * @param {object} p
  * @param {object} p.prof            documento do profissional
@@ -31,8 +41,9 @@ function verificarSlot({ prof, info, agendamentos, dataChave, horario, duracaoMi
   if (dataChave > somarDias(agora.dataChave, JANELA_MAX_DIAS)) return { ok: false, motivo: 'Data muito distante' };
 
   const dia = diaSemanaDaChave(dataChave);
-  const expediente = (prof.horarioTrabalho && prof.horarioTrabalho[dia])
-    || ((info && info.horarioFuncionamento) || {})[dia];
+  const expedienteProf = prof.horarioTrabalho && prof.horarioTrabalho[dia];
+  const expedienteNegocio = ((info && info.horarioFuncionamento) || {})[dia];
+  const expediente = expedienteProf || expedienteNegocio;
   if (!expediente || !expediente.ativo) return { ok: false, motivo: 'Fora do horário de trabalho' };
 
   const inicioExp = horaParaMinutos(expediente.inicio || '09:00');
@@ -42,6 +53,10 @@ function verificarSlot({ prof, info, agendamentos, dataChave, horario, duracaoMi
 
   if (inicio < inicioExp || fim > fimExp) return { ok: false, motivo: 'Fora do horário de trabalho' };
   if ((inicio - inicioExp) % INTERVALO_MIN !== 0) return { ok: false, motivo: 'Horário inválido' };
+
+  // o atendimento não pode tocar no intervalo (começar antes e terminar dentro dele, ou começar dentro dele)
+  const pausa = pausaDoDia(expedienteProf, expedienteNegocio);
+  if (pausa && inicio < pausa.fim && fim > pausa.ini) return { ok: false, motivo: 'Horário de intervalo (almoço)' };
 
   if (dataChave === agora.dataChave && inicio < agora.minutos + ANTECEDENCIA_MIN) {
     return { ok: false, motivo: 'Horário muito próximo ou já passou' };
@@ -62,4 +77,4 @@ function verificarSlot({ prof, info, agendamentos, dataChave, horario, duracaoMi
   return { ok: true };
 }
 
-module.exports = { verificarSlot, INTERVALO_MIN, ANTECEDENCIA_MIN, JANELA_MAX_DIAS };
+module.exports = { verificarSlot, pausaDoDia, INTERVALO_MIN, ANTECEDENCIA_MIN, JANELA_MAX_DIAS };

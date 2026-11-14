@@ -7,7 +7,7 @@
 // validam no servidor e só devolvem o que o visitante pode ver.
 import { aplicarTema } from './vocabulario.js';
 import { toast } from './toast.js';
-import { escapeHtml, profissionalRealizaServico, fotoServicoValida, urlMapa, urlAppleMaps, ehAppleMobile } from './utils.js';
+import { escapeHtml, profissionalRealizaServico, fotoServicoValida, urlMapa, urlAppleMaps, ehAppleMobile, pausaDoDia } from './utils.js';
 
 // ========================================
 // ESTADO GLOBAL
@@ -701,6 +701,9 @@ function calcularHorariosDisponiveis(profissionalId, data, opcoes = {}) {
   const fim = horaParaMinutos(horarioTrabalho.fim || '20:00');
   const intervalo = 30;
 
+  // intervalo (almoço): o do profissional naquele dia ou, se não tiver, o do estabelecimento
+  const pausa = pausaDoDia(prof.horarioTrabalho && prof.horarioTrabalho[diaSemana], state.barbearia.horarioFuncionamento && state.barbearia.horarioFuncionamento[diaSemana]);
+
   const duracaoTotal = opcoes.duracaoTotalOverride != null
     ? opcoes.duracaoTotalOverride
     : state.servicosSelecionados
@@ -742,6 +745,7 @@ function calcularHorariosDisponiveis(profissionalId, data, opcoes = {}) {
     }
 
     if (!indisponivel && bloqueios.includes(hora)) indisponivel = true;
+    if (!indisponivel && pausa && m < pausa.fim && m + duracaoTotal > pausa.ini) indisponivel = true;
 
     slots.push({ hora, indisponivel });
   }

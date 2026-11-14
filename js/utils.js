@@ -55,6 +55,30 @@ export function urlAppleMaps(enderecoCompleto) {
   return q ? 'https://maps.apple.com/?q=' + encodeURIComponent(q) : '';
 }
 
+// ---- Intervalo (almoço) no horário de funcionamento. Mesma regra de api/_lib/disponibilidade.js. ----
+// Cada dia pode ter `pausaInicio`/`pausaFim` ("12:00"/"13:00"). Vale o intervalo PRÓPRIO do profissional naquele dia; se ele
+// não tiver, vale o do estabelecimento. Intervalo inválido (falta um horário, ou o fim não é depois do início) é ignorado.
+function horaEmMinutos(h) { const [a, b] = String(h).split(':').map(Number); return a * 60 + b; }
+function pausaValida(e) {
+  return !!e && /^\d{2}:\d{2}$/.test(e.pausaInicio || '') && /^\d{2}:\d{2}$/.test(e.pausaFim || '')
+    && horaEmMinutos(e.pausaFim) > horaEmMinutos(e.pausaInicio);
+}
+export function pausaDoDia(expedienteProfissional, expedienteNegocio) {
+  const fonte = pausaValida(expedienteProfissional) ? expedienteProfissional : (pausaValida(expedienteNegocio) ? expedienteNegocio : null);
+  return fonte ? { ini: horaEmMinutos(fonte.pausaInicio), fim: horaEmMinutos(fonte.pausaFim) } : null;
+}
+
+// Confere o intervalo digitado nas telas de horário. Devolve '' se está tudo certo, ou a mensagem para a pessoa.
+export function validarPausaDia(dia) {
+  if (!dia.pausaInicio && !dia.pausaFim) return '';
+  if (!/^\d{2}:\d{2}$/.test(dia.pausaInicio || '') || !/^\d{2}:\d{2}$/.test(dia.pausaFim || '')) return 'Preencha o início e o fim do intervalo.';
+  if (horaEmMinutos(dia.pausaFim) <= horaEmMinutos(dia.pausaInicio)) return 'O fim do intervalo precisa ser depois do início.';
+  if (dia.ativo && (horaEmMinutos(dia.pausaInicio) < horaEmMinutos(dia.inicio) || horaEmMinutos(dia.pausaFim) > horaEmMinutos(dia.fim))) {
+    return 'O intervalo precisa ficar dentro do horário de trabalho do dia.';
+  }
+  return '';
+}
+
 // Serviço com `profissionaisIds` preenchido só é feito por esses profissionais;
 // lista ausente/vazia = QUALQUER um (padrão, e é o que vale pros serviços
 // antigos). Mesma regra do servidor (api/_lib/negocio.js).

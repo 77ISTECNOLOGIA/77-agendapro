@@ -5,7 +5,7 @@
 import { db } from './firebase-config.js';
 import { toast } from './toast.js';
 import { ligarBuscaCep, UFS } from './cep.js';
-import { urlMapa, consultaMapa } from './utils.js';
+import { urlMapa, consultaMapa, pausaDoDia, validarPausaDia } from './utils.js';
 import { escapeHtml, adicionarMostrarSenha, profissionalRealizaServico, calcularVinculosProfissional, atendimentosParaResolver, periodoPronto, resumoPeriodo, fotoServicoValida } from './utils.js';
 import { aplicarTema, resetarTema } from './vocabulario.js';
 import {
@@ -1270,6 +1270,8 @@ function calcularHorariosDisponiveisAdmin(profissionalId, data, duracaoTotal, ig
   const fim = horaParaMinutos(horarioTrabalho.fim || '20:00');
   const intervalo = 30;
   const dataChave = dataParaChave(data);
+  // intervalo (almoço): o do profissional naquele dia ou, se não tiver, o do estabelecimento
+  const pausa = pausaDoDia(prof.horarioTrabalho && prof.horarioTrabalho[diaSemana], state.barbearia.horarioFuncionamento && state.barbearia.horarioFuncionamento[diaSemana]);
 
   const ocupados = Object.entries(state.agendamentos)
     .filter(([id, a]) => a.profissionalId === profissionalId && a.dataChave === dataChave && a.status !== 'cancelado' && id !== ignorarId)
@@ -1289,6 +1291,7 @@ function calcularHorariosDisponiveisAdmin(profissionalId, data, duracaoTotal, ig
     const ocupado = ocupados.some(o => slotInicio < o.fim && slotFim > o.inicio);
     if (ocupado) continue;
     if (bloqueios.includes(hora)) continue;
+    if (pausa && slotInicio < pausa.fim && slotFim > pausa.ini) continue;
     slots.push(hora);
   }
   return slots;
@@ -2064,7 +2067,8 @@ function modalProfissional(id = null) {
       </label>
     </div>
     ${blocoServicos}
-    <h4 style="margin:20px 0 12px;font-family:'Bricolage Grotesque';font-weight:700;font-size:14px;">Horário de trabalho</h4>
+    <h4 style="margin:20px 0 6px;font-family:'Bricolage Grotesque';font-weight:700;font-size:14px;">Horário de trabalho</h4>
+    <p class="campo-help" style="margin:0 0 12px;">Intervalo próprio (opcional): se ficar desmarcado, vale o intervalo do estabelecimento (em Configurações).</p>
     <div class="horarios-conf">
       ${dias.map(dia => {
         const h = p.horarioTrabalho?.[dia] || { ativo: false, inicio: '09:00', fim: '18:00' };
@@ -2079,6 +2083,7 @@ function modalProfissional(id = null) {
             </div>
             <input type="time" class="horario-input ht-inicio" value="${h.inicio || '09:00'}">
             <input type="time" class="horario-input ht-fim" value="${h.fim || '18:00'}">
+            ${htmlPausa('ht', h)}
           </div>
         `;
       }).join('')}
@@ -2093,14 +2098,14 @@ function modalProfissional(id = null) {
   $('#modal-cancel').addEventListener('click', fecharModal);
   $('#modal-salvar').addEventListener('click', async () => {
     const horarioTrabalho = {};
+    let erroHorario = '';
     $$('#modal-body .horario-linha').forEach(linha => {
       const dia = linha.dataset.dia;
-      horarioTrabalho[dia] = {
-        ativo: linha.querySelector('.ht-ativo').checked,
-        inicio: linha.querySelector('.ht-inicio').value,
-        fim: linha.querySelector('.ht-fim').value
-      };
+      const { dia: horario, erro } = lerLinhaHorario(linha, 'ht');
+      horarioTrabalho[dia] = horario;
+      if (erro && !erroHorario) erroHorario = labelsDias[dia] + ': ' + erro;
     });
+    if (erroHorario) { toast(erroHorario, 'erro'); return; }
 
     const dados = {
       nome: $('#prof-nome').value.trim(),
@@ -2208,6 +2213,32 @@ function renderizarClientes() {
 // ========================================
 // VIEW: CONFIGURAÇÕES
 // ========================================
+// ---- Intervalo (almoço) nos horários ----
+function htmlPausa(prefixo, h) {
+  const ativo = !!(h && h.pausaInicio && h.pausaFim);
+  return `
+    <div class="horario-pausa">
+      <label class="pausa-check"><input type="checkbox" class="${prefixo}-pausa-ativo" ${ativo ? 'checked' : ''}> Intervalo (almoço)</label>
+      <input type="time" class="horario-input ${prefixo}-pausa-inicio" value="${(h && h.pausaInicio) || '12:00'}">
+      <span>às</span>
+      <input type="time" class="horario-input ${prefixo}-pausa-fim" value="${(h && h.pausaFim) || '13:00'}">
+    </div>`;
+}
+
+// Lê a linha de um dia (estabelecimento: prefixo 'hf'; profissional: 'ht'). Devolve { dia, erro }: o intervalo só é gravado se estiver marcado.
+function lerLinhaHorario(linha, prefixo) {
+  const dia = {
+    ativo: linha.querySelector('.' + prefixo + '-ativo').checked,
+    inicio: linha.querySelector('.' + prefixo + '-inicio').value,
+    fim: linha.querySelector('.' + prefixo + '-fim').value
+  };
+  if (linha.querySelector('.' + prefixo + '-pausa-ativo').checked) {
+    dia.pausaInicio = linha.querySelector('.' + prefixo + '-pausa-inicio').value;
+    dia.pausaFim = linha.querySelector('.' + prefixo + '-pausa-fim').value;
+  }
+  return { dia, erro: validarPausaDia(dia) };
+}
+
 // ---- Endereço (Configurações) ----
 const CAMPOS_ENDERECO = ['cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'uf'];
 
@@ -2280,6 +2311,7 @@ function renderizarConfiguracoes() {
         </div>
         <input type="time" class="horario-input hf-inicio" value="${h.inicio || '09:00'}">
         <input type="time" class="horario-input hf-fim" value="${h.fim || '18:00'}">
+        ${htmlPausa('hf', h)}
       </div>
     `;
   }).join('');
@@ -2362,16 +2394,17 @@ async function salvarConfiguracoes(e) {
     telefone: $('#conf-telefone').value.trim(),
     horarioFuncionamento: {}
   };
+  const nomesDia = { domingo: 'Domingo', segunda: 'Segunda', terca: 'Terça', quarta: 'Quarta', quinta: 'Quinta', sexta: 'Sexta', sabado: 'Sábado' };
+  let erroHorario = '';
   $$('#horarios-funcionamento .horario-linha').forEach(linha => {
     const dia = linha.dataset.dia;
-    dados.horarioFuncionamento[dia] = {
-      ativo: linha.querySelector('.hf-ativo').checked,
-      inicio: linha.querySelector('.hf-inicio').value,
-      fim: linha.querySelector('.hf-fim').value
-    };
+    const { dia: horario, erro } = lerLinhaHorario(linha, 'hf');
+    dados.horarioFuncionamento[dia] = horario;
+    if (erro && !erroHorario) erroHorario = nomesDia[dia] + ': ' + erro;
   });
 
   try {
+    if (erroHorario) { const e = new Error(erroHorario); e.mensagemUsuario = erroHorario; throw e; }
     // endereço passa pelo servidor (valida CEP, número, UF...); só chama se a pessoa mexeu nele
     const end = lerEnderecoForm();
     const link = ($('#conf-link-mapa').value || '').trim();

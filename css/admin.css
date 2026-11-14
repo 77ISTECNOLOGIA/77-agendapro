@@ -1113,3 +1113,8 @@
 .cep-aviso[data-tipo="ok"] { color: #4ade80; }
 .cep-aviso[data-tipo="erro"] { color: #fbbf24; }
 @media (max-width: 480px) { .linha-cidade { grid-template-columns: 1fr 1fr; } .linha-cidade .input-grupo:last-child { grid-column: 1 / -1; } }
+
+/* intervalo (almoço) dentro da linha do dia */
+.horario-pausa { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding-top: 10px; border-top: 1px dashed var(--border); font-size: 13px; color: var(--text-dim); }
+.horario-pausa .pausa-check { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; margin-right: 4px; }
+.horario-pausa .horario-input { width: 110px; flex: 0 0 auto; }
