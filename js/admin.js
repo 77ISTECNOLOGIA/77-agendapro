@@ -157,7 +157,10 @@ function inicializarAuth() {
           prontos = ativarListenersTempoReal();
           prontos.catch(() => {});                 // palpite errado: tratado logo abaixo
         }
-        const snap = await getDoc(doc(db, 'usuarios', user.uid));
+        const snap = await Promise.race([
+          getDoc(doc(db, 'usuarios', user.uid)),
+          new Promise((_, rej) => setTimeout(() => { const e = new Error('vínculo'); e.code = 'tempo-esgotado'; e.faltam = 'vínculo do usuário'; rej(e); }, 20000))
+        ]);
         if (!snap.exists()) {
           desativarListeners();
           guardarVinculo(user.uid, null);
@@ -191,7 +194,9 @@ function inicializarAuth() {
       } catch (err) {
         desativarListeners();
         console.error('Erro ao carregar usuário:', err);
-        mostrarLogin('Erro ao carregar dados. Tente novamente.');
+        const motivo = err && err.code === 'tempo-esgotado' ? ' O banco não respondeu (' + err.faltam + '). Verifique a internet e tente de novo.'
+          : err && err.code === 'permission-denied' ? ' Sem permissão de leitura. Fale com o suporte.' : '';
+        mostrarLogin('Erro ao carregar dados.' + (motivo || ' Tente novamente.'));
       }
     } else {
       state.dadosCarregados = false;
@@ -590,6 +595,15 @@ function ativarListenersTempoReal() {
   const chegaram = new Set();
   let cumprir, falhar;
   const prontos = new Promise((ok, erro) => { cumprir = ok; falhar = erro; });
+  // Sem resposta em 20 s: em vez de ficar "Entrando..." para sempre, falha dizendo QUAL leitura não respondeu
+  const relogio = setTimeout(() => {
+    if (chegaram.size < fontes.size) {
+      const faltam = [...fontes].filter((f) => !chegaram.has(f)).join(', ');
+      console.error('Tempo esgotado esperando o Firestore. Sem resposta de: ' + faltam);
+      const e = new Error('Sem resposta de: ' + faltam); e.code = 'tempo-esgotado'; e.faltam = faltam; falhar(e);
+    }
+  }, 20000);
+  prontos.then(() => clearTimeout(relogio), () => clearTimeout(relogio));
   const marcar = (nome) => { chegaram.add(nome); if (chegaram.size === fontes.size) cumprir(); };
   const comErro = (nome) => (err) => {
     console.error('Erro ao acompanhar ' + nome + ':', err);

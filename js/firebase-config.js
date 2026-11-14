@@ -6,7 +6,7 @@
 // ========================================
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { initializeFirestore } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyD9NiwY8PgrHcyFzc-pDberzNyTbiNNKUY",
@@ -19,6 +19,8 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+// Se a conexão em tempo real (WebChannel) for bloqueada ou ficar muda (rede, extensão, proxy), o SDK troca sozinho
+// para "long polling" em vez de ficar esperando para sempre.
+const db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
 
 export { db, firebaseConfig };

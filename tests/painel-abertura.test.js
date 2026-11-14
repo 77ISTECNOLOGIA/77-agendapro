@@ -32,8 +32,9 @@ function montar({ palpite = null } = {}) {
   let aoMudarAuth = null;
 
   const ctx = vm.createContext({
-    console: { error() {}, log() {} }, Promise, Set, Object, RegExp, setTimeout: (f) => { log.push('adiado'); ctx.__adiados.push(f); return 0; },
-    __adiados: [],
+    console: { error() {}, log() {} }, Promise, Set, Object, RegExp, setTimeout: (f, ms) => { if (ms === 20000) { ctx.__limites.push(f); return 0; } log.push('adiado'); ctx.__adiados.push(f); return 0; },
+    clearTimeout() {},
+    __adiados: [], __limites: [],
     localStorage: { getItem: (k) => (armazenamento.has(k) ? armazenamento.get(k) : null), setItem: (k, v) => armazenamento.set(k, v), removeItem: (k) => armazenamento.delete(k) },
     state: { user: null, barbeariaId: null, barbearia: null, negocioExiste: false, appPronto: false, dadosCarregados: false, listeners: [], servicos: {}, profissionais: {}, agendamentos: {}, clientes: {} },
     $: () => el(), db: {}, auth: {},
@@ -192,4 +193,21 @@ test('arquivos: modulepreload, pacote de notificações sob demanda, QR Code sob
   const img = vercel.headers.find((h) => h.source === '/img/(.*)');
   assert.ok(img && /max-age=86400/.test(img.headers[0].value));
   assert.ok(!admin.includes('async function carregarBarbearia'), 'o download em dobro foi removido');
+});
+
+test('banco mudo (nenhuma resposta): em 20 s volta ao login dizendo QUAL leitura não respondeu, em vez de ficar travado', async () => {
+  const t = montar();
+  const fim = t.entrar();
+  await flush();
+  t.usuarioEncontrado('lipao');
+  await flush();
+  // negócio, serviços e profissionais respondem; agendamentos e clientes ficam mudos
+  t.escutas.filter((e) => !/agendamentos|clientes/.test(e.path)).forEach((e) => (e.path.split('/').length === 2 ? e.cb(t.snap(true, { nome: 'B' })) : e.cb(t.snap(true, {}))));
+  assert.ok(t.ctx.__limites.length >= 1, 'o tempo limite precisa estar armado');
+  t.ctx.__limites.forEach((f) => f());
+  await fim;
+  const msg = t.log.find((l) => l.startsWith('login:'));
+  assert.ok(msg && msg.includes('agendamentos') && msg.includes('clientes'), 'a mensagem deve dizer o que faltou: ' + msg);
+  assert.ok(!msg.includes('servicos'));
+  assert.ok(t.escutas.every((e) => e.cancelada));
 });
