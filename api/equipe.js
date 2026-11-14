@@ -19,6 +19,8 @@ const { db, auth } = require('./_lib/firebase');
 const { slugValido } = require('./_lib/negocio');
 const { dentroDoLimite, dentroDoLimitePorChave, responder, ErroNegocio, tratarErro, corpoDe } = require('./_lib/http');
 const E = require('./_lib/equipe');
+const { validarDadosPix } = require('./_lib/sinal');
+const { precosProfissionalValidos } = require('./_lib/negocio');
 
 const BASE = () => process.env.APP_URL || 'https://77-agendapro.vercel.app';
 const TOKEN_OK = /^[A-Za-z0-9_-]{20,64}$/;
@@ -137,7 +139,7 @@ async function alterar(firestore, ctx, b) {
   if (b.uid === ctx.uid) {
     if (!E.dentroDe(novas, atuais)) throw new ErroNegocio(403, 'Você não pode aumentar o seu próprio acesso.');
   } else {
-    if (!E.podeModificar(ctx.permissoes, atuais)) throw new ErroNegocio(403, 'Você não pode alterar alguém que tem mais acesso que você.');
+    if (!E.podeModificar(ctx.permissoes, atuais)) throw new ErroNegocio(403, 'Você só pode alterar quem tem menos acesso que você. Sócios com o mesmo nível não mandam um no outro: cada um ajusta o próprio acesso.');
     if (!E.dentroDe(novas, ctx.permissoes)) throw new ErroNegocio(403, 'Você não pode dar a outra pessoa um acesso que você mesmo não tem.');
   }
   const { membros } = await carregarEquipe(firestore, ctx);
@@ -154,7 +156,7 @@ async function remover(firestore, ctx, b) {
   exigirGerir(ctx);
   const alvo = await carregarAlvo(firestore, ctx, b.uid);
   if (b.uid !== ctx.uid && !E.podeModificar(ctx.permissoes, E.permissoesDe(alvo))) {
-    throw new ErroNegocio(403, 'Você não pode remover alguém que tem mais acesso que você.');
+    throw new ErroNegocio(403, 'Você só pode remover quem tem menos acesso que você. Sócios com o mesmo nível não removem um ao outro: cada um pode sair por conta própria.');
   }
   const { membros } = await carregarEquipe(firestore, ctx);
   if (gerentesRestantes(membros.filter((m) => m.uid !== b.uid)) < 1) {
@@ -170,6 +172,54 @@ async function cancelarConvite(firestore, ctx, b) {
   const ref = ctx.negocioRef.collection('convites').doc(String(b.token));
   if (!(await ref.get()).exists) throw new ErroNegocio(404, 'Convite não encontrado.');
   await ref.delete();
+  return { sucesso: true };
+}
+
+// ---------------------------------------------------------------- perfil do profissional: Pix e preços próprios
+// Quem pode: o PRÓPRIO profissional (a pessoa ligada a ele) ou o administrador pleno (vê tudo + gerencia). Dois sócios que
+// só gerenciam NÃO mexem na chave Pix nem nos preços um do outro — é dinheiro de cada um.
+function profissionalAlvo(ctx, b) {
+  const id = String(b.profissionalId || ctx.usuario.profissionalId || '');
+  if (!id || id.length > 64 || id.includes('/')) throw new ErroNegocio(400, 'Profissional inválido.');
+  const admin = ctx.permissoes.verTodos && ctx.permissoes.gerirNegocio;
+  if (!admin && ctx.usuario.profissionalId !== id) throw new ErroNegocio(403, 'Você só pode alterar o seu próprio perfil.');
+  return id;
+}
+
+async function pixProfissional(firestore, ctx, b) {
+  const id = profissionalAlvo(ctx, b);
+  const profRef = ctx.negocioRef.collection('profissionais').doc(id);
+  if (!(await profRef.get()).exists) throw new ErroNegocio(404, 'Profissional não encontrado.');
+  const vazio = b.pix === null || (b.pix && typeof b.pix === 'object' && !String(b.pix.chavePix || '').trim());
+  if (b.pix !== null && (!b.pix || typeof b.pix !== 'object')) throw new ErroNegocio(400, 'Dados do Pix inválidos.');
+  const pix = vazio ? null : validarDadosPix(b.pix);
+  await profRef.update({ pix });                                   // null = volta a valer o Pix do negócio
+  return { sucesso: true, pix };
+}
+
+async function precosProfissional(firestore, ctx, b) {
+  const id = profissionalAlvo(ctx, b);
+  if (!(await ctx.negocioRef.collection('profissionais').doc(id).get()).exists) throw new ErroNegocio(404, 'Profissional não encontrado.');
+  if (!b.precos || typeof b.precos !== 'object' || Array.isArray(b.precos)) throw new ErroNegocio(400, 'Preços inválidos.');
+  const pedido = {};
+  Object.entries(b.precos).forEach(([servicoId, v]) => {
+    if (!servicoId || servicoId.length > 64 || servicoId.includes('/')) throw new ErroNegocio(400, 'Serviço inválido.');
+    const e = precosProfissionalValidos({ [id]: v || {} })[id];
+    const nulo = (x) => x === null || x === undefined || x === '';
+    if (v && ((!nulo(v.preco) && !(e && e.preco !== undefined)) || (!nulo(v.duracaoMin) && !(e && e.duracaoMin !== undefined)))) {
+      throw new ErroNegocio(400, 'Confira os valores: o preço vai de 0 a 100.000 e a duração de 1 a 720 minutos.');
+    }
+    pedido[servicoId] = e || null;                                 // null = volta ao padrão do serviço
+  });
+  await firestore.runTransaction(async (tx) => {
+    const snaps = await Promise.all(Object.keys(pedido).map((sid) => tx.get(ctx.negocioRef.collection('servicos').doc(sid))));
+    snaps.forEach((s) => { if (!s.exists) throw new ErroNegocio(404, 'Serviço não encontrado.'); });
+    snaps.forEach((s) => {
+      const mapa = precosProfissionalValidos(s.data().precosProfissional);
+      if (pedido[s.id]) mapa[id] = pedido[s.id]; else delete mapa[id];
+      tx.update(s.ref, { precosProfissional: mapa });
+    });
+  });
   return { sucesso: true };
 }
 
@@ -233,6 +283,8 @@ module.exports = async function handler(req, res) {
       case 'convidar': return responder(res, 201, await convidar(firestore, await contexto(b, firestore), b));
       case 'alterar': return responder(res, 200, await alterar(firestore, await contexto(b, firestore), b));
       case 'remover': return responder(res, 200, await remover(firestore, await contexto(b, firestore), b));
+      case 'pix-profissional': return responder(res, 200, await pixProfissional(firestore, await contexto(b, firestore), b));
+      case 'precos-profissional': return responder(res, 200, await precosProfissional(firestore, await contexto(b, firestore), b));
       case 'cancelar-convite': return responder(res, 200, await cancelarConvite(firestore, await contexto(b, firestore), b));
       default: return responder(res, 400, { erro: 'Ação inválida' });
     }

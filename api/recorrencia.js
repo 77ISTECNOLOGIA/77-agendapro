@@ -66,7 +66,10 @@ module.exports = async function handler(req, res) {
     const firestore = db();
     const vinculo = (await firestore.collection('usuarios').doc(decoded.uid).get()).data();
     if (!vinculo || !vinculo.barbeariaId) throw new ErroNegocio(403, 'Sua conta não está ligada a um negócio.');
-    if (!require('./_lib/equipe').permissoesDe(vinculo).verTodos) throw new ErroNegocio(403, 'Você não tem permissão para gerenciar horários fixos.');
+    // Quem vê tudo gerencia os horários fixos de todos; quem só vê o próprio profissional, só os DELE.
+    const veTodos = require('./_lib/equipe').permissoesDe(vinculo).verTodos;
+    const meuProfissional = String(vinculo.profissionalId || '');
+    if (!veTodos && !meuProfissional) throw new ErroNegocio(403, 'Você não tem permissão para gerenciar horários fixos.');
 
     const negocioRef = firestore.collection('barbearias').doc(vinculo.barbeariaId);
     const negocioSnap = await negocioRef.get();
@@ -85,6 +88,7 @@ module.exports = async function handler(req, res) {
     // ------------------------------------------------------------ previa / criar
     if (b.action === 'previa' || b.action === 'criar') {
       const serie = lerSerie(b);
+      if (!veTodos && serie.profissionalId !== meuProfissional) throw new ErroNegocio(403, 'Você só pode criar horários fixos na sua própria agenda.');
       const ctx = await carregarContexto(negocioRef, serie);
       if (ctx.erro) throw new ErroNegocio(409, ctx.erro);
 
@@ -122,6 +126,7 @@ module.exports = async function handler(req, res) {
       const series = [];
       for (const d of snap.docs) {
         const s = d.data();
+        if (!veTodos && s.profissionalId !== meuProfissional) continue;
         const ags = (await negocioRef.collection('agendamentos').where('recorrenciaId', '==', d.id).get()).docs.map((x) => x.data());
         const proximas = ags.filter((a) => a.status === 'confirmado' && a.dataChave >= hojeChave).length;
         const nomes = ags.length ? (ags[0].servicos || []).map((x) => x.nome) : [];
@@ -141,7 +146,7 @@ module.exports = async function handler(req, res) {
       if (!serieId || serieId.includes('/')) throw new ErroNegocio(400, 'Série inválida');
       const serieRef = seriesRef.doc(serieId);
       const serieSnap = await serieRef.get();
-      if (!serieSnap.exists) throw new ErroNegocio(404, 'Horário fixo não encontrado');
+      if (!serieSnap.exists || (!veTodos && serieSnap.data().profissionalId !== meuProfissional)) throw new ErroNegocio(404, 'Horário fixo não encontrado');
 
       const aPartirDe = dataChaveValida(b.aPartirDe) ? b.aPartirDe : hojeChave;
       const ags = await negocioRef.collection('agendamentos').where('recorrenciaId', '==', serieId).get();
@@ -159,6 +164,7 @@ module.exports = async function handler(req, res) {
 
     // ------------------------------------------------------------ renovar
     if (b.action === 'renovar') {
+      if (!veTodos) return responder(res, 200, { sucesso: true, criadas: 0, erros: 0 });   // a rotina diária renova; quem só vê o próprio trabalho não dispara a renovação do negócio todo
       const r = await renovarSeries({ firestore, negocioRef, info, hojeChave, agora });
       return responder(res, 200, { sucesso: true, ...r });
     }

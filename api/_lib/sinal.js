@@ -66,19 +66,53 @@ function normalizarBanco(entrada) {
   return capitalizar((ehSemPrefixo ? '' : 'Banco ') + t).slice(0, 40);   // capitaliza o nome completo ("Banco do Brasil", conector em minúscula)
 }
 
-/** Configuração do sinal do negócio, já validada/normalizada. */
-function configSinal(info) {
+/**
+ * Valida os dados de QUEM RECEBE o Pix (chave, nome, cidade, banco) e devolve já normalizados. Lança ErroNegocio.
+ * Guardamos o texto como a pessoa digitou (é o que o cliente lê); o limite de 25/15 letras sem acento do BR Code só
+ * vale na hora de gerar o Pix (api/_lib/pix.js).
+ */
+function validarDadosPix(s) {
+  const { ErroNegocio } = require('./http');
+  const { normalizarChavePix } = require('./pix');
+  const limpo = (v, max) => String(v || '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
+  const chave = normalizarChavePix(s && s.tipoChave, s && s.chavePix);
+  if (!chave.ok) throw new ErroNegocio(400, chave.erro);
+  const out = {
+    tipoChave: s.tipoChave, chavePix: chave.chave,
+    nomeRecebedor: limpo(s.nomeRecebedor, 60), cidadeRecebedor: limpo(s.cidadeRecebedor, 40),
+    banco: normalizarBanco(limpo(s.banco, 40))
+  };
+  if (!out.nomeRecebedor) throw new ErroNegocio(400, 'Informe o nome de quem recebe o Pix (como aparece no banco).');
+  if (!out.cidadeRecebedor) throw new ErroNegocio(400, 'Informe a cidade de quem recebe o Pix.');
+  return out;
+}
+
+/** Pix próprio do profissional (`profissionais/{id}.pix`), se completo; senão null e vale o do negócio. */
+function pixDoProfissional(prof) {
+  const p = prof && prof.pix;
+  if (!p || !p.chavePix || !p.nomeRecebedor) return null;
+  return { tipoChave: p.tipoChave || '', chavePix: p.chavePix, nomeRecebedor: p.nomeRecebedor, cidadeRecebedor: p.cidadeRecebedor || '', banco: normalizarBanco(p.banco) };
+}
+
+/**
+ * Configuração do sinal, já validada/normalizada. Percentual, prazo e se o sinal está LIGADO são do negócio; quem recebe
+ * (chave, nome, cidade, banco) é o profissional que atende, se ele cadastrou o próprio Pix, senão o do negócio.
+ */
+function configSinal(info, prof) {
   const s = (info && info.sinal) || {};
-  const ativo = s.ativo === true && !!s.chavePix && !!s.nomeRecebedor;
+  const proprio = pixDoProfissional(prof);
+  const dest = proprio || s;
+  const ativo = s.ativo === true && !!dest.chavePix && !!dest.nomeRecebedor;
   return {
     ativo,
     percentual: Number.isFinite(s.percentual) ? Math.min(100, Math.max(1, Math.round(s.percentual))) : PERCENTUAL_PADRAO,
     prazoHoras: Number.isFinite(s.prazoHoras) ? Math.min(72, Math.max(1, Math.round(s.prazoHoras))) : PRAZO_PADRAO_HORAS,
-    tipoChave: s.tipoChave || '',
-    chavePix: s.chavePix || '',
-    nomeRecebedor: s.nomeRecebedor || '',
-    cidadeRecebedor: s.cidadeRecebedor || '',
-    banco: normalizarBanco(s.banco)
+    tipoChave: dest.tipoChave || '',
+    chavePix: dest.chavePix || '',
+    nomeRecebedor: dest.nomeRecebedor || '',
+    cidadeRecebedor: dest.cidadeRecebedor || '',
+    banco: normalizarBanco(dest.banco),
+    pixProprio: !!proprio
   };
 }
 
@@ -122,5 +156,5 @@ function limiteSemanal(info) {
 module.exports = {
   STATUS_SINAL, PRAZO_PADRAO_HORAS, PERCENTUAL_PADRAO,
   instanteDoAgendamento, sinalExpirado, statusEfetivo, ocupaHorario,
-  configSinal, normalizarBanco, calcularSinal, calcularExpiracao, semanaDaChave, contarNaSemana, limiteSemanal
+  configSinal, pixDoProfissional, validarDadosPix, normalizarBanco, calcularSinal, calcularExpiracao, semanaDaChave, contarNaSemana, limiteSemanal
 };

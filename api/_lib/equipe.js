@@ -32,10 +32,11 @@ function permissoesValidas(p) {
 function dentroDe(a, b) { return (!a.verTodos || b.verTodos) && (!a.gerirNegocio || b.gerirNegocio); }
 
 /**
- * Quem pode mexer em quem: só em usuários cujas permissões ATUAIS cabem nas de quem mexe. Assim um sócio que não vê
- * tudo não consegue rebaixar nem remover quem vê tudo, e ninguém ganha poder que não tem.
+ * Quem pode mexer em quem: só em quem tem ESTRITAMENTE menos acesso (cabe nas permissões de quem mexe, e não tem tudo o que
+ * ele tem). Assim ninguém rebaixa nem remove quem tem o mesmo nível ou mais — dois sócios iguais não mandam um no outro
+ * (ninguém é patrão de ninguém); cada um só pode abrir mão do próprio acesso. Ninguém ganha poder que não tem.
  */
-function podeModificar(quemMexe, alvo) { return dentroDe(alvo, quemMexe); }
+function podeModificar(quemMexe, alvo) { return dentroDe(alvo, quemMexe) && !dentroDe(quemMexe, alvo); }
 
 function gerarToken() { return crypto.randomBytes(24).toString('base64url'); }
 

@@ -11,9 +11,8 @@
 
 const { db, auth } = require('./_lib/firebase');
 const { dentroDoLimite, dentroDoLimitePorChave, responder, ErroNegocio, tratarErro, corpoDe } = require('./_lib/http');
-const { normalizarChavePix } = require('./_lib/pix');
 const { normalizarEndereco, camposDoEndereco, validarLinkMapa } = require('./_lib/endereco');
-const { normalizarBanco } = require('./_lib/sinal');
+const { validarDadosPix } = require('./_lib/sinal');
 
 const texto = (v, max) => String(v || '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
 
@@ -28,17 +27,7 @@ function validarSinal(s) {
   const out = { ativo, percentual, prazoHoras, tipoChave: '', chavePix: '', nomeRecebedor: '', cidadeRecebedor: '', banco: '' };
   const temChave = !!texto(s.chavePix, 100);
   if (ativo || temChave) {
-    const chave = normalizarChavePix(s.tipoChave, s.chavePix);
-    if (!chave.ok) throw new ErroNegocio(400, chave.erro);
-    out.tipoChave = s.tipoChave;
-    out.chavePix = chave.chave;
-    // Guardamos o texto como a pessoa digitou (é o que o cliente lê na tela). O limite de 25/15 letras sem acento
-    // do BR Code é aplicado só na hora de gerar o Pix (api/_lib/pix.js).
-    out.nomeRecebedor = texto(s.nomeRecebedor, 60);
-    out.cidadeRecebedor = texto(s.cidadeRecebedor, 40);
-    out.banco = normalizarBanco(texto(s.banco, 40));   // sempre "Banco X", sem duplicar
-    if (!out.nomeRecebedor) throw new ErroNegocio(400, 'Informe o nome de quem recebe o Pix (como aparece no banco).');
-    if (!out.cidadeRecebedor) throw new ErroNegocio(400, 'Informe a cidade de quem recebe o Pix.');
+    Object.assign(out, validarDadosPix(s));
   }
   return out;
 }

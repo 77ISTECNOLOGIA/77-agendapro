@@ -89,6 +89,27 @@ function profissionalRealizaServico(servico, profissionalId) {
   return !Array.isArray(ids) || ids.length === 0 || ids.includes(profissionalId);
 }
 
+// Preço e duração POR PROFISSIONAL. O serviço guarda `precosProfissional: { [profissionalId]: { preco?, duracaoMin? } }`;
+// o que não estiver lá vale o preço/duração padrão do serviço. A MESMA regra está em js/utils.js (teste confere).
+function precosProfissionalValidos(bruto) {
+  const saida = {};
+  if (!bruto || typeof bruto !== 'object' || Array.isArray(bruto)) return saida;
+  Object.entries(bruto).forEach(([pid, v]) => {
+    if (!pid || pid.length > 64 || pid.includes('/') || !v || typeof v !== 'object') return;
+    const e = {};
+    if (typeof v.preco === 'number' && Number.isFinite(v.preco) && v.preco >= 0 && v.preco <= 100000) e.preco = Math.round(v.preco * 100) / 100;
+    if (Number.isInteger(v.duracaoMin) && v.duracaoMin > 0 && v.duracaoMin <= 720) e.duracaoMin = v.duracaoMin;
+    if (Object.keys(e).length) saida[pid] = e;
+  });
+  return saida;
+}
+
+/** Preço e duração que valem para ESTE profissional neste serviço. */
+function servicoParaProfissional(servico, profissionalId) {
+  const o = precosProfissionalValidos(servico && servico.precosProfissional)[profissionalId] || {};
+  return { preco: o.preco !== undefined ? o.preco : servico.preco, duracaoMin: o.duracaoMin !== undefined ? o.duracaoMin : servico.duracaoMin };
+}
+
 // Foto do serviço: JPEG em data URL, tamanho limitado. O valor vai pra um <img src> no
 // navegador do cliente, então qualquer outra coisa é descartada aqui (mesma regra do painel).
 function fotoServicoValida(foto) {
@@ -104,6 +125,7 @@ function servicoPublico(id, s) {
     ordem: s.ordem || 0,
     ativo: s.ativo !== false,
     profissionaisIds: Array.isArray(s.profissionaisIds) ? s.profissionaisIds : [],
+    precosProfissional: precosProfissionalValidos(s.precosProfissional),
     foto: fotoServicoValida(s.foto) ? s.foto : ''
   };
 }
@@ -117,5 +139,5 @@ function servicoPublicoLeve(id, s) {
 
 module.exports = {
   CARENCIA_TRIAL_DIAS, SLUGS_RESERVADOS, TIPOS_NEGOCIO,
-  slugValido, situacaoNegocio, infoPublica, profissionalPublico, servicoPublico, servicoPublicoLeve, profissionalRealizaServico, fotoServicoValida
+  slugValido, situacaoNegocio, infoPublica, profissionalPublico, servicoPublico, servicoPublicoLeve, profissionalRealizaServico, fotoServicoValida, precosProfissionalValidos, servicoParaProfissional
 };

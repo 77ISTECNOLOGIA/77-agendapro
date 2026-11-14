@@ -18,6 +18,7 @@ const PORTA = Number(process.env.PORT) || 3000;
 semearNegocio(fake, 'barbearia-do-joao', { nome: 'Barbearia do João' });
 fake.seed('barbearias/barbearia-do-joao/profissionais/prof2', { nome: 'Carlos Lima', especialidade: 'Barbeiro', ativo: true, comissao: 35 });
 fake.seed('barbearias/barbearia-do-joao/servicos/srv3', { nome: 'Corte + Barba', duracaoMin: 60, preco: 65, emoji: '💈', ativo: true, ordem: 3 });
+fake.seed('barbearias/barbearia-do-joao/servicos/srv1', { ...fake.get('barbearias/barbearia-do-joao/servicos/srv1'), precosProfissional: { prof2: { preco: 55, duracaoMin: 45 } } });   // Carlos cobra mais e demora mais no Corte
 semearNegocio(fake, 'trial-vencido', { nome: 'Salão Trial Vencido', status: 'trial', trialFim: '2020-01-01T00:00:00.000Z' });
 semearNegocio(fake, 'estudio-suspenso', { nome: 'Estúdio Suspenso', status: 'suspensa' });
 

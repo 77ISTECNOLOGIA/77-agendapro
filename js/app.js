@@ -7,7 +7,7 @@
 // validam no servidor e só devolvem o que o visitante pode ver.
 import { aplicarTema } from './vocabulario.js';
 import { toast } from './toast.js';
-import { escapeHtml, profissionalRealizaServico, fotoServicoValida, urlMapa, urlAppleMaps, ehAppleMobile, pausaDoDia } from './utils.js';
+import { escapeHtml, profissionalRealizaServico, fotoServicoValida, urlMapa, urlAppleMaps, ehAppleMobile, pausaDoDia, servicoParaProfissional, temPrecoPorProfissional } from './utils.js';
 
 // ========================================
 // ESTADO GLOBAL
@@ -497,17 +497,27 @@ function toggleServico(id) {
   atualizarResumoTela2();
 }
 
+// Serviços escolhidos, com o preço e a duração de QUEM VAI ATENDER (cada profissional pode ter os seus).
+// Sem profissional escolhido ainda, vale o padrão do serviço. O servidor refaz a conta ao agendar.
+function servicosEscolhidos(profissionalId = state.profissionalId) {
+  return state.servicosSelecionados.map((id) => {
+    const s = state.servicos[id];
+    return { ...s, ...servicoParaProfissional(s, profissionalId) };
+  });
+}
+
 function atualizarResumoTela2() {
-  const servicos = state.servicosSelecionados.map(id => state.servicos[id]);
+  const servicos = servicosEscolhidos(null);
   const total = servicos.reduce((sum, s) => sum + s.preco, 0);
   const duracaoTotal = servicos.reduce((sum, s) => sum + s.duracaoMin, 0);
+  const variaPorProfissional = state.servicosSelecionados.some((id) => temPrecoPorProfissional(state.servicos[id]));
 
   if (servicos.length === 0) {
     $('#resumo-servicos').innerHTML = '<span>Nenhum serviço selecionado</span>';
     $('#total-valor').textContent = 'R$ 0';
     $('#btn-continuar-2').disabled = true;
   } else {
-    $('#resumo-servicos').innerHTML = `<span>${servicos.length} ${servicos.length === 1 ? 'serviço' : 'serviços'} • ${duracaoTotal} min</span>`;
+    $('#resumo-servicos').innerHTML = `<span>${servicos.length} ${servicos.length === 1 ? 'serviço' : 'serviços'} • ${duracaoTotal} min${variaPorProfissional ? ' • o valor pode variar conforme o profissional' : ''}</span>`;
     $('#total-valor').textContent = formatarMoeda(total);
     $('#btn-continuar-2').disabled = false;
   }
@@ -551,6 +561,7 @@ function renderizarProfissionais() {
   container.innerHTML = '';
 
   const profsArray = profissionaisElegiveis();
+  const variaPorProfissional = state.servicosSelecionados.some((sid) => temPrecoPorProfissional(state.servicos[sid]));
 
   if (profsArray.length === 0) {
     const algumAtivo = Object.values(state.profissionais).some((p) => p.ativo !== false);
@@ -571,6 +582,7 @@ function renderizarProfissionais() {
       <div class="prof-foto" style="background: linear-gradient(135deg, var(--accent), var(--accent-dark));">${escapeHtml(iniciais)}</div>
       <div class="prof-nome">${escapeHtml(p.nome.split(' ')[0])}</div>
       <div class="prof-spec">${escapeHtml(p.especialidade) || 'Profissional'}</div>
+      ${variaPorProfissional ? `<div class="prof-spec"><strong>${formatarMoeda(servicosEscolhidos(id).reduce((t, s) => t + s.preco, 0))}</strong> • ${servicosEscolhidos(id).reduce((t, s) => t + s.duracaoMin, 0)} min</div>` : ''}
     `;
     card.addEventListener('click', () => selecionarProfissional(id));
     container.appendChild(card);
@@ -707,7 +719,7 @@ function calcularHorariosDisponiveis(profissionalId, data, opcoes = {}) {
   const duracaoTotal = opcoes.duracaoTotalOverride != null
     ? opcoes.duracaoTotalOverride
     : state.servicosSelecionados
-        .map(id => state.servicos[id].duracaoMin)
+        .map(id => servicoParaProfissional(state.servicos[id], profissionalId).duracaoMin)
         .reduce((sum, d) => sum + d, 0);
 
   const dataChave = dataParaChave(data);
@@ -768,7 +780,7 @@ function validarBtnContinuar3() {
 // TELA 4: REVISÃO
 // ========================================
 function renderizarResumoFinal() {
-  const servicos = state.servicosSelecionados.map(id => state.servicos[id]);
+  const servicos = servicosEscolhidos();
   const total = servicos.reduce((sum, s) => sum + s.preco, 0);
   const duracao = servicos.reduce((sum, s) => sum + s.duracaoMin, 0);
   const prof = state.profissionais[state.profissionalId];
@@ -1049,7 +1061,7 @@ async function abrirPagamentoSinal(agendamentoId) {
 // TELA 5: SUCESSO
 // ========================================
 function renderizarTelaSucesso(agendamentoId) {
-  const servicos = state.servicosSelecionados.map(id => state.servicos[id]);
+  const servicos = servicosEscolhidos();
   const total = servicos.reduce((sum, s) => sum + s.preco, 0);
   const duracao = servicos.reduce((sum, s) => sum + s.duracaoMin, 0);
   const prof = state.profissionais[state.profissionalId];

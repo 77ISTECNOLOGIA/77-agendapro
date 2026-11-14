@@ -5,7 +5,7 @@
 import { db } from './firebase-config.js';
 import { toast } from './toast.js';
 import { ligarBuscaCep, UFS } from './cep.js';
-import { urlMapa, consultaMapa, pausaDoDia, validarPausaDia, permissoesDe, clientesDosAgendamentos } from './utils.js';
+import { urlMapa, consultaMapa, pausaDoDia, validarPausaDia, permissoesDe, clientesDosAgendamentos, servicoParaProfissional, precosProfissionalValidos } from './utils.js';
 import { escapeHtml, adicionarMostrarSenha, profissionalRealizaServico, calcularVinculosProfissional, atendimentosParaResolver, periodoPronto, resumoPeriodo, fotoServicoValida } from './utils.js';
 import { aplicarTema, resetarTema } from './vocabulario.js';
 import {
@@ -701,7 +701,6 @@ function aplicarPermissoesNaTela() {
   $$('.nav-item').forEach((n) => { n.style.display = viewPermitida(n.dataset.view) ? '' : 'none'; });
   const admin = p.verTodos && p.gerirNegocio;
   const ocultar = (sel, esconder) => { const el = $(sel); if (el) el.style.display = esconder ? 'none' : ''; };
-  ocultar('#btn-horarios-fixos', !p.verTodos);
   ocultar('#filtro-profissional', !p.verTodos);
   ocultar('#btn-novo-profissional', !admin);
   // Notificações: todos recebem o que é do seu profissional. Quem não vê Configurações (onde fica o cartão) o encontra em Meu perfil.
@@ -1527,8 +1526,9 @@ function atualizarProfissionaisNovoAgendamento() {
 }
 
 function duracaoServicosSelecionadosNovoAgendamento() {
+  const profId = ($('#nag-profissional') || {}).value || '';
   return $$('#modal-body .nag-servico-check:checked')
-    .map(c => state.servicos[c.value]?.duracaoMin || 0)
+    .map(c => (state.servicos[c.value] ? servicoParaProfissional(state.servicos[c.value], profId).duracaoMin : 0) || 0)
     .reduce((s, d) => s + d, 0);
 }
 
@@ -1583,7 +1583,7 @@ async function salvarNovoAgendamento() {
 
   const whatsNorm = '55' + whatsDigitos;
   const servicos = servicoIds.map(id => ({
-    id, nome: state.servicos[id].nome, preco: state.servicos[id].preco, duracaoMin: state.servicos[id].duracaoMin
+    id, nome: state.servicos[id].nome, ...servicoParaProfissional(state.servicos[id], profId)   // preço e duração de quem atende
   }));
   const valorTotal = servicos.reduce((s, sv) => s + sv.preco, 0);
   const duracaoMin = servicos.reduce((s, sv) => s + sv.duracaoMin, 0);
@@ -2129,6 +2129,38 @@ function modalProfissional(id = null) {
       }</small>
     </div>`;
 
+  // Preço/duração e Pix PRÓPRIOS: só o próprio profissional (ou o administrador pleno) mexe, pela API (não pelas regras do banco).
+  const pixAtual = (id && p.pix) || {};
+  const servicosAtivos = servicosLista.filter(([, s]) => s.ativo !== false);
+  const blocoPrecos = !id || servicosAtivos.length === 0 ? '' : `
+    <h4 style="margin:20px 0 6px;font-family:'Bricolage Grotesque';font-weight:700;font-size:14px;">Meus preços</h4>
+    <p class="campo-help" style="margin:0 0 10px;">Deixe em branco para cobrar o valor padrão do serviço (mostrado em cinza).</p>
+    <div class="precos-prof">
+      ${servicosAtivos.map(([sid, s]) => {
+        const o = precosProfissionalValidos(s.precosProfissional)[id] || {};
+        return `<div class="preco-prof-linha" data-sid="${escapeHtml(sid)}" style="display:grid;grid-template-columns:1fr 92px 82px;gap:8px;align-items:center;margin-bottom:8px;">
+          <span style="font-size:13px;">${escapeHtml(s.nome)}</span>
+          <input type="number" class="input pp-preco" min="0" step="0.5" placeholder="R$ ${Number(s.preco || 0).toFixed(2).replace('.', ',')}" value="${o.preco !== undefined ? o.preco : ''}">
+          <input type="number" class="input pp-duracao" min="5" step="5" placeholder="${s.duracaoMin} min" value="${o.duracaoMin !== undefined ? o.duracaoMin : ''}">
+        </div>`;
+      }).join('')}
+      <div class="campo-help" style="display:grid;grid-template-columns:1fr 92px 82px;gap:8px;"><span></span><span>Preço (R$)</span><span>Minutos</span></div>
+    </div>`;
+  const tiposPix = [['cpf', 'CPF'], ['cnpj', 'CNPJ'], ['telefone', 'Telefone'], ['email', 'E-mail'], ['aleatoria', 'Chave aleatória']];
+  const blocoPix = !id ? '' : `
+    <h4 style="margin:20px 0 6px;font-family:'Bricolage Grotesque';font-weight:700;font-size:14px;">Meu Pix para receber o sinal</h4>
+    <p class="campo-help" style="margin:0 0 10px;">Se o estabelecimento cobra sinal, o cliente paga direto para quem vai atender. Deixe a chave em branco para usar o Pix do estabelecimento.</p>
+    <div class="form-grid">
+      <div class="input-grupo"><label class="input-label">TIPO DA CHAVE</label>
+        <select id="pp-pix-tipo" class="input">${tiposPix.map(([v, r]) => `<option value="${v}" ${pixAtual.tipoChave === v ? 'selected' : ''}>${r}</option>`).join('')}</select></div>
+      <div class="input-grupo"><label class="input-label">CHAVE PIX</label><input type="text" id="pp-pix-chave" class="input" value="${escapeHtml(pixAtual.chavePix || '')}"></div>
+    </div>
+    <div class="form-grid">
+      <div class="input-grupo"><label class="input-label">NOME DE QUEM RECEBE</label><input type="text" id="pp-pix-nome" class="input" value="${escapeHtml(pixAtual.nomeRecebedor || '')}" placeholder="Como aparece no banco"></div>
+      <div class="input-grupo"><label class="input-label">CIDADE</label><input type="text" id="pp-pix-cidade" class="input" value="${escapeHtml(pixAtual.cidadeRecebedor || '')}"></div>
+    </div>
+    <div class="input-grupo"><label class="input-label">BANCO (OPCIONAL)</label><input type="text" id="pp-pix-banco" class="input" value="${escapeHtml((pixAtual.banco || '').replace(/^Banco /, ''))}" placeholder="Ex.: Inter, Nubank"></div>`;
+
   const corpo = `
     <div class="input-grupo">
       <label class="input-label">NOME</label>
@@ -2151,6 +2183,8 @@ function modalProfissional(id = null) {
       </label>
     </div>` : ''}
     ${blocoServicos}
+    ${blocoPrecos}
+    ${blocoPix}
     <h4 style="margin:20px 0 6px;font-family:'Bricolage Grotesque';font-weight:700;font-size:14px;">Horário de trabalho</h4>
     <p class="campo-help" style="margin:0 0 12px;">Intervalo próprio (opcional): se ficar desmarcado, vale o intervalo do estabelecimento (em Configurações).</p>
     <div class="horarios-conf">
@@ -2202,6 +2236,7 @@ function modalProfissional(id = null) {
     if (!completo) {                                  // só o que as regras permitem a quem edita o próprio perfil
       try {
         await updateDoc(doc(db, 'barbearias', state.barbeariaId, 'profissionais', id), dados);
+        await salvarPrecosEPixDoProfissional(id);
         toast('Perfil atualizado', 'sucesso');
         fecharModal();
       } catch (err) {
@@ -2236,6 +2271,7 @@ function modalProfissional(id = null) {
         { profissionaisIds: a.profissionaisIds }
       ));
       await lote.commit();
+      if (id) await salvarPrecosEPixDoProfissional(id);
       toast(id ? 'Profissional atualizado' : 'Profissional criado', 'sucesso');
       fecharModal();
     } catch (err) {
@@ -2243,6 +2279,27 @@ function modalProfissional(id = null) {
       toast(`Erro ao salvar profissional (${err.code || 'desconhecido'})`, 'erro');
     }
   });
+}
+
+// Preços e Pix próprios vão pela API (api/equipe.js), que confere de quem é o perfil. Só envia o que a tela mostra.
+async function salvarPrecosEPixDoProfissional(id) {
+  const linhas = $$('#modal-body .preco-prof-linha');
+  if (linhas.length) {
+    const precos = {};
+    linhas.forEach((l) => {
+      const preco = l.querySelector('.pp-preco').value, dur = l.querySelector('.pp-duracao').value;
+      precos[l.dataset.sid] = (preco === '' && dur === '') ? null : { preco: preco === '' ? null : Number(preco), duracaoMin: dur === '' ? null : Number(dur) };
+    });
+    await chamarEquipe('precos-profissional', { profissionalId: id, precos });
+  }
+  const chave = $('#pp-pix-chave');
+  if (chave) {
+    const pix = chave.value.trim() === '' ? null : {
+      tipoChave: $('#pp-pix-tipo').value, chavePix: chave.value.trim(), nomeRecebedor: $('#pp-pix-nome').value,
+      cidadeRecebedor: $('#pp-pix-cidade').value, banco: $('#pp-pix-banco').value
+    };
+    await chamarEquipe('pix-profissional', { profissionalId: id, pix });
+  }
 }
 
 async function deletarProfissional(id) {

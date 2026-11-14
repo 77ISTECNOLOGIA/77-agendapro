@@ -244,3 +244,31 @@ export function clientesDosAgendamentos(agendamentos) {
   });
   return mapa;
 }
+
+// ========================================
+// PREÇO E DURAÇÃO POR PROFISSIONAL (MESMA regra de api/_lib/negocio.js; teste confere)
+// ========================================
+// O serviço guarda `precosProfissional: { [profissionalId]: { preco?, duracaoMin? } }`; o que faltar vale o padrão do serviço.
+export function precosProfissionalValidos(bruto) {
+  const saida = {};
+  if (!bruto || typeof bruto !== 'object' || Array.isArray(bruto)) return saida;
+  Object.entries(bruto).forEach(([pid, v]) => {
+    if (!pid || pid.length > 64 || pid.includes('/') || !v || typeof v !== 'object') return;
+    const e = {};
+    if (typeof v.preco === 'number' && Number.isFinite(v.preco) && v.preco >= 0 && v.preco <= 100000) e.preco = Math.round(v.preco * 100) / 100;
+    if (Number.isInteger(v.duracaoMin) && v.duracaoMin > 0 && v.duracaoMin <= 720) e.duracaoMin = v.duracaoMin;
+    if (Object.keys(e).length) saida[pid] = e;
+  });
+  return saida;
+}
+
+/** Preço e duração que valem para ESTE profissional neste serviço (sem profissional: o padrão do serviço). */
+export function servicoParaProfissional(servico, profissionalId) {
+  const o = (profissionalId && precosProfissionalValidos(servico && servico.precosProfissional)[profissionalId]) || {};
+  return { preco: o.preco !== undefined ? o.preco : servico.preco, duracaoMin: o.duracaoMin !== undefined ? o.duracaoMin : servico.duracaoMin };
+}
+
+/** O serviço tem preço ou duração diferente para algum profissional? */
+export function temPrecoPorProfissional(servico) {
+  return Object.keys(precosProfissionalValidos(servico && servico.precosProfissional)).length > 0;
+}
