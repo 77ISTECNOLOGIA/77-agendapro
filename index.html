@@ -130,8 +130,16 @@
     <section id="tela-2" class="tela">
       <div class="tela-body">
         <div class="tela-rotulo">Etapa 1 de 3</div>
-        <h1 class="tela-h1">Qual serviço?</h1>
-        <p class="tela-sub">Você pode escolher mais de um.</p>
+        <h1 class="tela-h1" id="tela2-titulo">Com quem e o quê?</h1>
+        <p class="tela-sub" id="tela2-sub">Escolha o profissional e depois os serviços (pode escolher mais de um).</p>
+
+        <div id="bloco-profissional">
+          <div class="subsecao-titulo">PROFISSIONAL</div>
+          <div id="grid-profissionais" class="profs-grid">
+            <!-- Profissionais renderizados dinamicamente -->
+          </div>
+          <div class="subsecao-titulo">SERVIÇOS</div>
+        </div>
 
         <div id="lista-servicos" class="lista-servicos">
           <!-- Serviços renderizados dinamicamente -->
@@ -147,21 +155,16 @@
         </div>
         <div class="botoes-row">
           <button id="btn-voltar-2" class="btn btn-outline" type="button">← Voltar</button>
-          <button id="btn-continuar-2" class="btn" type="button" disabled>Profissional →</button>
+          <button id="btn-continuar-2" class="btn" type="button" disabled>Data e horário →</button>
         </div>
       </div>
     </section>
 
-    <!-- ============ TELA 3: PROFISSIONAL + HORÁRIO ============ -->
+    <!-- ============ TELA 3: DATA + HORÁRIO ============ -->
     <section id="tela-3" class="tela">
       <div class="tela-body">
         <div class="tela-rotulo">Etapa 2 de 3</div>
-        <h1 class="tela-h1">Com quem e quando?</h1>
-
-        <div class="subsecao-titulo">PROFISSIONAL</div>
-        <div id="grid-profissionais" class="profs-grid">
-          <!-- Profissionais renderizados dinamicamente -->
-        </div>
+        <h1 class="tela-h1">Quando?</h1>
 
         <div class="subsecao-titulo">DATA</div>
         <div class="seletor-data-wrapper">
@@ -174,7 +177,7 @@
 
         <div class="subsecao-titulo">HORÁRIO DISPONÍVEL</div>
         <div id="grid-horarios" class="horarios-grid">
-          <div class="horario-placeholder">Selecione um profissional e data</div>
+          <div class="horario-placeholder">Selecione uma data</div>
         </div>
       </div>
       <div class="tela-footer">
