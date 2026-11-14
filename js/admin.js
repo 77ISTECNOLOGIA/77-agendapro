@@ -2692,6 +2692,18 @@ function preencherRegrasAgendamento() {
   $('#sinal-cidade-recebedor').value = sinal.cidadeRecebedor || '';
   $('#sinal-banco').value = sinal.banco || '';
   $('#limite-semana').value = state.barbearia.limiteAgendamentosSemana || 0;
+  // Chave Pix do negócio: só o administrador pleno altera (os demais gerentes usam o Pix próprio, em Meu perfil)
+  const soAdmin = !(state.papel.verTodos && state.papel.gerirNegocio);
+  ['#sinal-tipo-chave', '#sinal-chave', '#sinal-nome-recebedor', '#sinal-cidade-recebedor', '#sinal-banco'].forEach((s) => { $(s).disabled = soAdmin; });
+  let aviso = $('#aviso-pix-negocio');
+  if (!aviso) {
+    aviso = document.createElement('small');
+    aviso.id = 'aviso-pix-negocio';
+    aviso.className = 'campo-help';
+    aviso.style.cssText = 'display:block;margin:0 0 12px;';
+    $('#sinal-campos').appendChild(aviso);
+  }
+  aviso.textContent = soAdmin ? 'A chave Pix do estabelecimento só pode ser alterada pelo dono. Cada profissional define o próprio Pix em Meu perfil.' : '';
   $('#sinal-campos').style.opacity = $('#sinal-ativo').checked ? '1' : '0.55';
 }
 

@@ -50,7 +50,9 @@ module.exports = async function handler(req, res) {
     if (!vinculo || !vinculo.barbeariaId) throw new ErroNegocio(403, 'Sua conta não está ligada a um negócio.');
     if (!require('./_lib/equipe').permissoesDe(vinculo).gerirNegocio) throw new ErroNegocio(403, 'Você não tem permissão para alterar as configurações do negócio.');
     const negocioRef = firestore.collection('barbearias').doc(vinculo.barbeariaId);
-    if (!(await negocioRef.get()).exists) throw new ErroNegocio(404, 'Negócio não encontrado');
+    const negocioSnap = await negocioRef.get();
+    if (!negocioSnap.exists) throw new ErroNegocio(404, 'Negócio não encontrado');
+    const permissoes = require('./_lib/equipe').permissoesDe(vinculo);
 
     const mudancas = {};
     const resposta = { sucesso: true };
@@ -62,6 +64,13 @@ module.exports = async function handler(req, res) {
       resposta.limiteAgendamentosSemana = limite;
     }
     if (b.sinal !== undefined) {
+      // A chave Pix do NEGÓCIO (e quem recebe) só o administrador pleno (vê tudo + gerencia) altera: ela vale para todo
+      // profissional sem Pix próprio, e sócios de mesmo nível não podem desviar o sinal um do outro. Os demais gerentes
+      // ajustam ligar/desligar, percentual e prazo; os dados de quem recebe vêm sempre do que já está gravado.
+      if (!(permissoes.verTodos && permissoes.gerirNegocio) && b.sinal && typeof b.sinal === 'object') {
+        const atual = (negocioSnap.data() || {}).sinal || {};
+        ['tipoChave', 'chavePix', 'nomeRecebedor', 'cidadeRecebedor', 'banco'].forEach((campo) => { b.sinal[campo] = atual[campo] || ''; });
+      }
       mudancas.sinal = validarSinal(b.sinal);
       resposta.sinal = mudancas.sinal;
     }

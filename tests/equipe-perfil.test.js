@@ -189,3 +189,26 @@ test('cliente fixo: quem só vê o próprio trabalho cria, lista e encerra SÓ n
   const ren = await rec({ idToken: 'tok-solo2', action: 'renovar' });
   assert.deepEqual([ren.statusCode, ren.body.criadas], [200, 0]);
 });
+
+test('chave Pix do negócio: só o administrador pleno altera; sócio gerente ajusta percentual e prazo sem tocar em quem recebe', async () => {
+  const configurar = require('../api/configurar-negocio');
+  const cfg = async (idToken, sinal) => { const r = res(); await configurar(req('POST', { body: { idToken, sinal } }), r); limparLimites(); return r; };
+  const NOVO = { ...SINAL_NEGOCIO, chavePix: 'ladrao@x.com', nomeRecebedor: 'LADRAO', cidadeRecebedor: 'SP', banco: 'xyz' };
+  // o dono grava a chave do negócio
+  assert.equal((await cfg('tok-dono1', SINAL_NEGOCIO)).statusCode, 200);
+  assert.equal(amb.fake.get(`barbearias/${SLUG}`).sinal.chavePix, 'dono@barbearia.com');
+  // sócio que só gerencia manda outra chave (e ajusta o percentual): a chave NÃO muda, o percentual sim
+  const r = await cfg('tok-socio1', { ...NOVO, percentual: 30, prazoHoras: 12 });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  const s = amb.fake.get(`barbearias/${SLUG}`).sinal;
+  assert.equal(s.chavePix, 'dono@barbearia.com');
+  assert.equal(s.nomeRecebedor, 'JOAO SILVA');
+  assert.deepEqual([s.percentual, s.prazoHoras], [30, 12]);
+  // e pode desligar o sinal
+  assert.equal((await cfg('tok-socio1', { ...NOVO, ativo: false, percentual: 30, prazoHoras: 12 })).statusCode, 200);
+  assert.equal(amb.fake.get(`barbearias/${SLUG}`).sinal.ativo, false);
+  assert.equal(amb.fake.get(`barbearias/${SLUG}`).sinal.chavePix, 'dono@barbearia.com');
+  // o dono troca a chave normalmente
+  assert.equal((await cfg('tok-dono1', { ...NOVO, chavePix: 'novo@barbearia.com', nomeRecebedor: 'JOAO NOVO' })).statusCode, 200);
+  assert.equal(amb.fake.get(`barbearias/${SLUG}`).sinal.chavePix, 'novo@barbearia.com');
+});
