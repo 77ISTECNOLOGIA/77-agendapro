@@ -59,6 +59,7 @@ module.exports = async function handler(req, res) {
     const firestore = db();
     const vinculo = (await firestore.collection('usuarios').doc(decoded.uid).get()).data();
     if (!vinculo || !vinculo.barbeariaId) throw new ErroNegocio(403, 'Sua conta não está ligada a um negócio.');
+    if (!require('./_lib/equipe').permissoesDe(vinculo).gerirNegocio) throw new ErroNegocio(403, 'Você não tem permissão para alterar as configurações do negócio.');
     const negocioRef = firestore.collection('barbearias').doc(vinculo.barbeariaId);
     if (!(await negocioRef.get()).exists) throw new ErroNegocio(404, 'Negócio não encontrado');
 

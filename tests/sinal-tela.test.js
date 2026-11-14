@@ -24,7 +24,7 @@ test('regras do Firestore: aceitam os dois status novos e nada além disso', () 
   const regras = ler('firestore.rules');
   assert.match(regras, /function statusAgOk\(v\)\s*\{ return v in \['confirmado', 'concluido', 'cancelado', 'aguardando_sinal', 'sinal_informado'\]; \}/);
   // criar agendamento pelo navegador do dono continua exigindo status válido; o do cliente só nasce no servidor
-  assert.match(regras, /allow create: if \(isDonoNegocio\(slug\) \|\| isSuperAdmin\(\)\) && agendamentoNovoOk/);
+  assert.match(regras, /allow create: if \(verTodos\(slug\) \|\| isSuperAdmin\(\) \|\| souOProfissional\(slug, request\.resource\.data\.profissionalId\)\)\s*&& agendamentoNovoOk/);
 });
 
 test('tela do cliente: funções do Pix (telefone, data, mensagem do WhatsApp, rótulo do botão)', () => {

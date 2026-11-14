@@ -62,7 +62,7 @@ test('admin e painel77: a tecla ESC fecha a janela (modal) aberta', () => {
 
 test('páginas: ícones oficiais da 77 e nenhum resto de ícone antigo solto no <head>', () => {
   const fs2 = require('node:fs'), path2 = require('node:path');
-  for (const f of ['admin.html', 'painel77.html', 'index.html', 'cadastro.html']) {
+  for (const f of ['admin.html', 'painel77.html', 'index.html', 'cadastro.html', 'convite.html']) {
     const h = fs2.readFileSync(path2.join(__dirname, '..', f), 'utf8');
     const head = h.slice(0, h.indexOf('</head>'));
     assert.match(head, /rel="icon"[^>]*href="\/img\/favicon-32\.png"/, f);

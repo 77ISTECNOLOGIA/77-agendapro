@@ -10,7 +10,7 @@ const { configSinal, limiteSemanal } = require('./sinal');
 const { consultaMapa, linkMapaSeguro } = require('./endereco');
 
 const SLUGS_RESERVADOS = [
-  'admin', 'cadastro', 'painel77', 'api', 'css', 'js', 'assets', 'index', 'login',
+  'admin', 'cadastro', 'convite', 'painel77', 'api', 'css', 'js', 'assets', 'index', 'login',
   'manifest', 'firebase-messaging-sw', 'favicon', 'robots', 'sitemap', 'www', 'app'
 ];
 

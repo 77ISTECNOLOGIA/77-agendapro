@@ -66,6 +66,7 @@ module.exports = async function handler(req, res) {
     const firestore = db();
     const vinculo = (await firestore.collection('usuarios').doc(decoded.uid).get()).data();
     if (!vinculo || !vinculo.barbeariaId) throw new ErroNegocio(403, 'Sua conta não está ligada a um negócio.');
+    if (!require('./_lib/equipe').permissoesDe(vinculo).verTodos) throw new ErroNegocio(403, 'Você não tem permissão para gerenciar horários fixos.');
 
     const negocioRef = firestore.collection('barbearias').doc(vinculo.barbeariaId);
     const negocioSnap = await negocioRef.get();
