@@ -126,6 +126,10 @@
         <span class="nav-icon">👤</span>
         <span class="nav-label">Clientes</span>
       </button>
+      <button class="nav-item" data-view="equipe">
+        <span class="nav-icon">🤝</span>
+        <span class="nav-label">Equipe</span>
+      </button>
       <button class="nav-item" data-view="configuracoes">
         <span class="nav-icon">⚙️</span>
         <span class="nav-label">Configurações</span>
@@ -293,6 +297,20 @@
 
         <div id="lista-profissionais-admin" class="tabela-cards">
           <div class="vazio-msg">Carregando profissionais...</div>
+        </div>
+      </section>
+
+      <!-- ============ VIEW: EQUIPE ============ -->
+      <section class="view" id="view-equipe">
+        <div class="view-header">
+          <div>
+            <h1 class="view-titulo">Equipe</h1>
+            <p class="view-sub">Cada pessoa entra com o próprio login e vê só o que você permitir</p>
+          </div>
+          <button id="btn-convidar" class="btn-acao">+ Convidar pessoa</button>
+        </div>
+        <div id="lista-equipe" class="tabela-cards">
+          <div class="vazio-msg">Carregando equipe...</div>
         </div>
       </section>
 
@@ -502,7 +520,7 @@
           </div>
 
           <!-- Notificações Push -->
-          <div class="card-grande" style="margin-top: 20px;">
+          <div class="card-grande" id="card-notificacoes-push" style="margin-top: 20px;">
             <div class="card-header">
               <h3 class="card-titulo">Notificações push</h3>
             </div>

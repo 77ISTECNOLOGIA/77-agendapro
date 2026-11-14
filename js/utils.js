@@ -216,3 +216,31 @@ export function resumoPeriodo(agendamentos, de, ate) {
   r.profissionais = Object.values(profs).sort((x, y) => y.valor - x.valor);
   return r;
 }
+
+// ========================================
+// EQUIPE: permissões (MESMA regra de api/_lib/equipe.js e firestore.rules; teste confere)
+// ========================================
+// verTodos     → vê agenda, clientes e faturamento de todos os profissionais
+// gerirNegocio → edita dados do negócio, serviços, Pix e equipe
+// Conta antiga (role 'owner' sem "permissoes") tem as duas.
+export function permissoesDe(usuario) {
+  if (!usuario || typeof usuario !== 'object') return { verTodos: false, gerirNegocio: false };
+  if (usuario.permissoes && typeof usuario.permissoes === 'object') {
+    return { verTodos: usuario.permissoes.verTodos === true, gerirNegocio: usuario.permissoes.gerirNegocio === true };
+  }
+  const papel = usuario.role === undefined ? 'owner' : usuario.role;
+  return papel === 'owner' ? { verTodos: true, gerirNegocio: true } : { verTodos: false, gerirNegocio: false };
+}
+
+/** Clientes de quem só enxerga o próprio profissional: montados a partir dos PRÓPRIOS agendamentos (a coleção `clientes` é só de quem vê tudo). */
+export function clientesDosAgendamentos(agendamentos) {
+  const mapa = {};
+  Object.values(agendamentos || {}).forEach((a) => {
+    if (!a || !a.clienteWhatsapp || a.status === 'cancelado') return;
+    const c = mapa[a.clienteWhatsapp] || (mapa[a.clienteWhatsapp] = { nome: a.clienteNome || '', whatsapp: a.clienteWhatsapp, totalAgendamentos: 0, ultimoAgendamento: '' });
+    c.totalAgendamentos += 1;
+    const quando = a.dataChave || '';
+    if (quando >= c.ultimoAgendamento) { c.ultimoAgendamento = quando; c.nome = a.clienteNome || c.nome; }
+  });
+  return mapa;
+}
