@@ -43,7 +43,8 @@ async function executarSinal({ firestore, negocioRef, agendamentoId, whatsNorm, 
     throw new ErroNegocio(400, 'Este agendamento não está aguardando o pagamento do sinal.');
   }
   const info = infoSnap.data();
-  const cfg = configSinal(info, profSnap && profSnap.exists ? profSnap.data() : null);
+  const privSnap = ag.profissionalId ? await negocioRef.collection('profissionais').doc(ag.profissionalId).collection('privado').doc('config').get() : null;
+  const cfg = configSinal(info, profSnap && profSnap.exists ? profSnap.data() : null, privSnap && privSnap.exists ? privSnap.data() : null);
   if (!cfg.chavePix) throw new ErroNegocio(409, 'O estabelecimento está sem chave Pix configurada. Fale direto com eles.');
   const valor = ag.sinalValor || calcularSinal(ag.valorTotal, ag.sinalPercentual || cfg.percentual);
   return {

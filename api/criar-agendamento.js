@@ -64,9 +64,10 @@ module.exports = async function handler(req, res) {
     const negocioRef = firestore.collection('barbearias').doc(slug);
     const agsRef = negocioRef.collection('agendamentos');
 
-    const [infoSnap, profSnap, ...servicosSnaps] = await Promise.all([
+    const [infoSnap, profSnap, privSnap, ...servicosSnaps] = await Promise.all([
       negocioRef.get(),
       negocioRef.collection('profissionais').doc(profissionalId).get(),
+      negocioRef.collection('profissionais').doc(profissionalId).collection('privado').doc('config').get(),   // Pix e sinal DA PESSOA (privado)
       ...servicosIds.map(id => negocioRef.collection('servicos').doc(id).get())
     ]);
 
@@ -126,7 +127,7 @@ module.exports = async function handler(req, res) {
     };
 
     // Sinal por Pix: o horário fica reservado (aguardando_sinal) até o cliente pagar e avisar, ou o prazo vencer
-    const cfgSinal = configSinal(info, prof);   // quem recebe o Pix é quem atende (se tiver o próprio)
+    const cfgSinal = configSinal(info, prof, privSnap.exists ? privSnap.data() : null);   // sinal e Pix de quem atende
     const agoraMs = Date.now();
     let sinal = null;
     if (cfgSinal.ativo) {

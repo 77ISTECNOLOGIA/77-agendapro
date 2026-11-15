@@ -18,6 +18,7 @@ const {
 const { dentroDoLimite, responder, tratarErro } = require('./_lib/http');
 const { ocupaHorario } = require('./_lib/sinal');
 const { comCache } = require('./_lib/cache');
+const { configSinal } = require('./_lib/sinal');
 
 // Por quanto tempo repetir a mesma resposta sem reler o banco
 const TTL_NEGOCIO_MS = 20000, TTL_FOTOS_MS = 120000;   // vale também para "não existe" (tentar links inventados não relê o banco a cada tentativa)
@@ -40,8 +41,14 @@ async function montarResposta(slug, querOcupados) {
   const servicos = {};
   servicosSnap.docs.forEach((d) => { servicos[d.id] = servicoPublicoLeve(d.id, d.data()); });
 
+  // SINAL POR PESSOA: cada profissional pode cobrar (ou não) o sinal; a tela precisa saber, do profissional escolhido, se há
+  // sinal, quanto e em quanto tempo — sem nunca receber a chave Pix (essa só sai ao reservar).
+  const privados = await Promise.all(profsSnap.docs.map((d) => d.ref.collection('privado').doc('config').get()));
   const profissionais = {};
-  profsSnap.docs.forEach((d) => { profissionais[d.id] = profissionalPublico(d.id, d.data(), hoje); });
+  profsSnap.docs.forEach((d, i) => {
+    const cfg = configSinal(info, d.data(), privados[i] && privados[i].exists ? privados[i].data() : null);
+    profissionais[d.id] = { ...profissionalPublico(d.id, d.data(), hoje), sinal: { ativo: cfg.ativo, percentual: cfg.percentual, prazoHoras: cfg.prazoHoras } };
+  });
 
   const ocupados = ocupadosSnap.docs
     .map((d) => ({ id: d.id, ...d.data() }))

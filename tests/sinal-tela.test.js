@@ -35,7 +35,7 @@ test('tela do cliente: funções do Pix (telefone, data, mensagem do WhatsApp, r
     formatarMoeda: (v) => 'R$ ' + v.toFixed(2).replace('.', ','),
     Date, String, encodeURIComponent
   });
-  ['telefoneParaWhatsapp', 'textoDataHora', 'mensagemWhatsSinal', 'rotuloConfirmar'].forEach((f) => vm.runInContext(extrair(app, f), ctx));
+  ['telefoneParaWhatsapp', 'textoDataHora', 'mensagemWhatsSinal', 'sinalDoProfissional', 'rotuloConfirmar'].forEach((f) => vm.runInContext(extrair(app, f), ctx));
   const r = (js) => vm.runInContext(js, ctx);
   assert.equal(r("telefoneParaWhatsapp('(21) 99999-0000')"), '5521999990000');
   assert.equal(r("telefoneParaWhatsapp('5521999990000')"), '5521999990000');

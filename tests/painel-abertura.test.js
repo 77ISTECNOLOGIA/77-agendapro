@@ -22,9 +22,9 @@ const CODIGO = ['lerVinculoGuardado', 'guardarVinculo', 'inicializarAuth', 'ativ
 const flush = () => new Promise((r) => setImmediate(r));
 const SUBS = ['servicos', 'profissionais', 'agendamentos'];   // clientes NÃO é mais escutado na abertura (sob demanda)
 
-const PAPEL_TOTAL = { verTodos: true, gerirNegocio: true, profissionalId: '' };
+const PAPEL_TOTAL = { verTodos: true, gerirNegocio: true, profissionalId: '', papel: 'dono' };
 const utilsFonte = fs.readFileSync(path.join(__dirname, '..', 'js', 'utils.js'), 'utf8');
-const CODIGO_UTILS = ['permissoesDe', 'clientesDosAgendamentos'].map((f) => extrair(utilsFonte, f)).join('\n');
+const CODIGO_UTILS = ['permissoesDe', 'clientesDosAgendamentos'].map((f) => extrair(utilsFonte, f)).join('\n') + '\n' + extrair(utilsFonte, 'papelDe').replace('function papelDe', 'function papelNomeDe');   // utils.papelDe entra com outro nome (admin.js tem o seu papelDe)
 
 function montar({ palpite = null, papelPalpite = PAPEL_TOTAL } = {}) {
   const log = [];                       // ordem em que as coisas aconteceram
@@ -247,7 +247,7 @@ test('quem não vê tudo (1ª visita): lê só o próprio profissional e só os 
   assert.deepEqual(Object.keys(t.ctx.state.clientes), ['5521999990001'], 'clientes vêm dos próprios agendamentos (cancelados não contam)');
   assert.equal(t.ctx.state.clientes['5521999990001'].totalAgendamentos, 2);
   assert.equal(t.ctx.state.dadosCarregados, true);
-  assert.equal(t.armazenamento.get('ap_papel_u1'), JSON.stringify({ verTodos: false, gerirNegocio: false, profissionalId: 'prof1' }));
+  assert.equal(t.armazenamento.get('ap_papel_u1'), JSON.stringify({ verTodos: false, gerirNegocio: false, profissionalId: 'prof1', papel: 'socio' }));
   t.ctx.__adiados.forEach((f) => f());
   assert.ok(!t.log.includes('renovar'), 'horários fixos (API só de quem vê tudo) não são renovados por quem não vê tudo');
 });
@@ -305,13 +305,14 @@ test('entrar e sair várias vezes não liga os botões de novo, e cada abertura 
 test('auditoria 2026-11-14: perfil herda o horário do estabelecimento, cartão de push volta ao trocar de conta, título "Meu perfil"', () => {
   assert.match(admin, /const herdado = id && !p\.horarioTrabalho \? \(state\.barbearia\.horarioFuncionamento \|\| \{\}\)\[dia\] : null;/);
   assert.match(admin, /cartaoPushOrigem\.pai\.insertBefore\(cartaoPush, cartaoPushOrigem\.proximo\)/);
-  assert.match(admin, /tituloPerfil\.textContent = p\.verTodos \? 'Profissionais' : 'Meu perfil'/);
+  assert.match(admin, /tituloPerfil\.textContent = nomeTela;/);
+  assert.match(admin, /const ROTULO_PERFIL = \{ dono: 'Profissionais', socio: 'Minhas configurações', funcionario: 'Meu perfil' \};/);
   assert.match(admin, /toast\(err\.code \? `Erro ao salvar profissional \(\$\{err\.code\}\)` : err\.message, 'erro'\)/);
 });
 
 test('negócio novo sem profissional: o painel mostra o aviso "primeiros passos" só para quem administra tudo', () => {
   assert.match(admin, /function renderizarPrimeirosPassos\(\) \{[\s\S]*?state\.papel\.verTodos && state\.papel\.gerirNegocio[\s\S]*?p\.ativo !== false[\s\S]*?modalProfissional\(\)/);
-  assert.match(admin, /function renderizarPendencias\(\) \{\s*renderizarPrimeirosPassos\(\);/);
+  assert.match(admin, /function renderizarPendencias\(\) \{\s*renderizarPerguntaEquipe\(\);\s*renderizarPrimeirosPassos\(\);/);
   assert.match(fs.readFileSync(path.join(__dirname, '..', 'admin.html'), 'utf8'), /id="primeiros-passos"/);
 });
 

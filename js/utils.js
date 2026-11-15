@@ -272,3 +272,10 @@ export function servicoParaProfissional(servico, profissionalId) {
 export function temPrecoPorProfissional(servico) {
   return Object.keys(precosProfissionalValidos(servico && servico.precosProfissional)).length > 0;
 }
+
+/** Papel efetivo (MESMA regra de api/_lib/equipe.js; teste confere): o gravado; sem ele, tudo = dono, conta antiga restrita = sócio. */
+export function papelDe(usuario) {
+  if (usuario && ['dono', 'socio', 'funcionario'].includes(usuario.papel)) return usuario.papel;
+  const p = permissoesDe(usuario);
+  return p.verTodos && p.gerirNegocio ? 'dono' : 'socio';
+}

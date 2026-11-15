@@ -87,6 +87,21 @@ function validarDadosPix(s) {
   return out;
 }
 
+/** Valida a configuração de sinal de UMA pessoa: { modo: 'herdar'|'ativo'|'desativado', percentual?, prazoHoras? }. */
+function validarSinalPessoa(s) {
+  const { ErroNegocio } = require('./http');
+  if (!s || typeof s !== 'object' || !['herdar', 'ativo', 'desativado'].includes(s.modo)) throw new ErroNegocio(400, 'Escolha se cobra sinal: sim, não ou como o estabelecimento.');
+  const out = { modo: s.modo };
+  if (s.modo === 'ativo') {
+    const percentual = Math.round(Number(s.percentual));
+    const prazoHoras = Math.round(Number(s.prazoHoras));
+    if (!Number.isFinite(percentual) || percentual < 10 || percentual > 100) throw new ErroNegocio(400, 'O percentual do sinal deve ficar entre 10% e 100%.');
+    if (!Number.isFinite(prazoHoras) || prazoHoras < 1 || prazoHoras > 72) throw new ErroNegocio(400, 'O prazo para pagar deve ficar entre 1 e 72 horas.');
+    out.percentual = percentual; out.prazoHoras = prazoHoras;
+  }
+  return out;
+}
+
 /** Pix próprio do profissional (`profissionais/{id}.pix`), se completo; senão null e vale o do negócio. */
 function pixDoProfissional(prof) {
   const p = prof && prof.pix;
@@ -98,12 +113,27 @@ function pixDoProfissional(prof) {
  * Configuração do sinal, já validada/normalizada. Percentual, prazo e se o sinal está LIGADO são do negócio; quem recebe
  * (chave, nome, cidade, banco) é o profissional que atende, se ele cadastrou o próprio Pix, senão o do negócio.
  */
-function configSinal(info, prof) {
+function configSinal(info, prof, priv) {
   const s = (info && info.sinal) || {};
-  const proprio = pixDoProfissional(prof);
+  const proprio = pixDoProfissional(priv && priv.pix ? priv : prof);       // config privada (profissionais/{id}/privado/config) ou, nos dados antigos, o próprio documento
+  const meu = (priv && priv.sinal) || null;
+  const modo = meu && ['ativo', 'desativado'].includes(meu.modo) ? meu.modo : 'herdar';
+  // SINAL POR PESSOA: 'herdar' = vale o do estabelecimento (funcionários e o próprio dono); 'desativado' = esta pessoa não cobra;
+  // 'ativo' = esta pessoa cobra, com a chave Pix DELA (nunca cai na chave de outra pessoa) e o percentual/prazo dela.
+  if (modo === 'desativado') return { ativo: false, percentual: PERCENTUAL_PADRAO, prazoHoras: PRAZO_PADRAO_HORAS, tipoChave: '', chavePix: '', nomeRecebedor: '', cidadeRecebedor: '', banco: '', pixProprio: !!proprio, modo };
+  if (modo === 'ativo') {
+    const perc = Number.isFinite(meu.percentual) ? Math.min(100, Math.max(1, Math.round(meu.percentual))) : (Number.isFinite(s.percentual) ? Math.min(100, Math.max(1, Math.round(s.percentual))) : PERCENTUAL_PADRAO);
+    const prazo = Number.isFinite(meu.prazoHoras) ? Math.min(72, Math.max(1, Math.round(meu.prazoHoras))) : (Number.isFinite(s.prazoHoras) ? Math.min(72, Math.max(1, Math.round(s.prazoHoras))) : PRAZO_PADRAO_HORAS);
+    return {
+      ativo: !!proprio, percentual: perc, prazoHoras: prazo,
+      tipoChave: proprio ? proprio.tipoChave : '', chavePix: proprio ? proprio.chavePix : '', nomeRecebedor: proprio ? proprio.nomeRecebedor : '',
+      cidadeRecebedor: proprio ? proprio.cidadeRecebedor : '', banco: proprio ? normalizarBanco(proprio.banco) : '', pixProprio: !!proprio, modo
+    };
+  }
   const dest = proprio || s;
   const ativo = s.ativo === true && !!dest.chavePix && !!dest.nomeRecebedor;
   return {
+    modo,
     ativo,
     percentual: Number.isFinite(s.percentual) ? Math.min(100, Math.max(1, Math.round(s.percentual))) : PERCENTUAL_PADRAO,
     prazoHoras: Number.isFinite(s.prazoHoras) ? Math.min(72, Math.max(1, Math.round(s.prazoHoras))) : PRAZO_PADRAO_HORAS,
@@ -156,5 +186,5 @@ function limiteSemanal(info) {
 module.exports = {
   STATUS_SINAL, PRAZO_PADRAO_HORAS, PERCENTUAL_PADRAO,
   instanteDoAgendamento, sinalExpirado, statusEfetivo, ocupaHorario,
-  configSinal, pixDoProfissional, validarDadosPix, normalizarBanco, calcularSinal, calcularExpiracao, semanaDaChave, contarNaSemana, limiteSemanal
+  configSinal, pixDoProfissional, validarDadosPix, validarSinalPessoa, normalizarBanco, calcularSinal, calcularExpiracao, semanaDaChave, contarNaSemana, limiteSemanal
 };

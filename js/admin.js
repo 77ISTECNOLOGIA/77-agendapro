@@ -5,7 +5,7 @@
 import { db } from './firebase-config.js';
 import { toast } from './toast.js';
 import { ligarBuscaCep, UFS } from './cep.js';
-import { urlMapa, consultaMapa, pausaDoDia, validarPausaDia, permissoesDe, clientesDosAgendamentos, servicoParaProfissional, precosProfissionalValidos, temPrecoPorProfissional } from './utils.js';
+import { urlMapa, consultaMapa, pausaDoDia, validarPausaDia, permissoesDe, papelDe as papelNomeDe, clientesDosAgendamentos, servicoParaProfissional, precosProfissionalValidos, temPrecoPorProfissional } from './utils.js';
 import { escapeHtml, adicionarMostrarSenha, profissionalRealizaServico, calcularVinculosProfissional, atendimentosParaResolver, periodoPronto, resumoPeriodo, fotoServicoValida } from './utils.js';
 import { aplicarTema, resetarTema } from './vocabulario.js';
 import {
@@ -76,7 +76,7 @@ function guardarVinculo(uid, barbeariaId) {
 function lerPapelGuardado(uid) {
   try {
     const p = JSON.parse(localStorage.getItem('ap_papel_' + uid) || 'null');
-    if (p && typeof p.verTodos === 'boolean' && typeof p.gerirNegocio === 'boolean') return { verTodos: p.verTodos, gerirNegocio: p.gerirNegocio, profissionalId: String(p.profissionalId || '') };
+    if (p && typeof p.verTodos === 'boolean' && typeof p.gerirNegocio === 'boolean' && typeof p.papel === 'string') return { verTodos: p.verTodos, gerirNegocio: p.gerirNegocio, profissionalId: String(p.profissionalId || ''), papel: p.papel };
   } catch (_) { /* sem armazenamento */ }
   return null;
 }
@@ -93,8 +93,8 @@ function anotarAbertura(dados) {
   } catch (_) { /* sem armazenamento: sem diagnóstico */ }
 }
 
-function papelDe(usuario) { return { ...permissoesDe(usuario), profissionalId: String((usuario && usuario.profissionalId) || '') }; }
-function mesmoPapel(a, b) { return !!a && !!b && a.verTodos === b.verTodos && a.gerirNegocio === b.gerirNegocio && a.profissionalId === b.profissionalId; }
+function papelDe(usuario) { return { ...permissoesDe(usuario), profissionalId: String((usuario && usuario.profissionalId) || ''), papel: papelNomeDe(usuario) }; }
+function mesmoPapel(a, b) { return !!a && !!b && a.verTodos === b.verTodos && a.gerirNegocio === b.gerirNegocio && a.profissionalId === b.profissionalId && a.papel === b.papel; }
 
 // Chave gerada no Firebase Console > Configurações > Cloud Messaging > Certificados push da Web
 const VAPID_KEY = 'BBDdf4Estwxij9B1m3R7jZCrNNMul4EcIjAYJ9-Xw-8mgebCIgGwCUfPdYBko7scsVQ6VxMefFBYORQv9mzLYl4';
@@ -105,7 +105,8 @@ const VAPID_KEY = 'BBDdf4Estwxij9B1m3R7jZCrNNMul4EcIjAYJ9-Xw-8mgebCIgGwCUfPdYBko
 const state = {
   user: null,
   barbeariaId: null,
-  papel: { verTodos: true, gerirNegocio: true, profissionalId: '' },
+  papel: { verTodos: true, gerirNegocio: true, profissionalId: '', papel: 'dono' },
+  equipeAtiva: undefined,   // o dono já respondeu "tenho equipe"? (undefined = ainda não respondeu)
   barbearia: null,
   negocioExiste: false,
   appPronto: false,        // true depois de mostrarApp(): antes disso os acompanhamentos em tempo real não redesenham nada
@@ -208,6 +209,7 @@ function inicializarAuth() {
           state.papel = papelReal;
           prontos = ativarListenersTempoReal();
         }
+        state.equipeAtiva = userData.equipeAtiva;
         guardarVinculo(user.uid, userData.barbeariaId);
         guardarPapel(user.uid, papelReal);
         tempos.palpite = !!(palpite && papelPalpite);
@@ -796,17 +798,26 @@ function inicializarNavegacao() {
 
 // O que cada papel enxerga. Quem não gere o negócio não vê Serviços/Configurações/Equipe; quem não vê tudo
 // só tem a própria agenda, os próprios clientes e o próprio perfil (as regras do Firestore garantem o resto).
+function souDono() { return state.papel.verTodos && state.papel.gerirNegocio; }
+const ROTULO_PERFIL = { dono: 'Profissionais', socio: 'Minhas configurações', funcionario: 'Meu perfil' };
+
 function viewPermitida(view) {
-  const p = state.papel;
-  if (view === 'servicos' || view === 'configuracoes' || view === 'equipe') return p.gerirNegocio;
+  const papel = state.papel.papel;
+  if (view === 'configuracoes' || view === 'equipe') return souDono();
+  if (view === 'servicos') return souDono() || papel === 'socio';     // sócio vê o catálogo e cuida dos serviços que são só dele
   return true;
 }
 
 let cartaoPushOrigem = null;   // onde o cartão de notificações mora em Configurações (para devolvê-lo ao trocar de conta)
+const ocultarSeNao = (sel, mostrar) => { const el = document.querySelector(sel); if (el) el.style.display = mostrar ? '' : 'none'; };
 function aplicarPermissoesNaTela() {
   const p = state.papel;
   $$('.nav-item').forEach((n) => { n.style.display = viewPermitida(n.dataset.view) ? '' : 'none'; });
   const admin = p.verTodos && p.gerirNegocio;
+  // Aba Equipe: só aparece depois que o dono diz que tem equipe (ou na Configurações, onde ele pode ligar quando quiser)
+  const navEquipe = document.querySelector('.nav-item[data-view="equipe"]');
+  if (navEquipe) navEquipe.style.display = admin && state.equipeAtiva === true ? '' : 'none';
+  ocultarSeNao('#btn-novo-servico', admin || p.papel === 'socio');
   const ocultar = (sel, esconder) => { const el = $(sel); if (el) el.style.display = esconder ? 'none' : ''; };
   ocultar('#filtro-profissional', !p.verTodos);
   ocultar('#btn-novo-profissional', !admin);
@@ -817,10 +828,12 @@ function aplicarPermissoesNaTela() {
   if (cartaoPush && viewPerfil && !p.gerirNegocio) { cartaoPush.style.marginTop = '20px'; viewPerfil.appendChild(cartaoPush); }
   else if (cartaoPush && cartaoPushOrigem && cartaoPush.parentNode !== cartaoPushOrigem.pai) cartaoPushOrigem.pai.insertBefore(cartaoPush, cartaoPushOrigem.proximo);   // troca de conta sem recarregar: volta para Configurações
   const rotulo = document.querySelector('.nav-item[data-view="profissionais"] .nav-label');
-  if (rotulo) rotulo.textContent = p.verTodos ? 'Profissionais' : 'Meu perfil';
+  const nomeTela = ROTULO_PERFIL[p.papel] || 'Meu perfil';
+  if (rotulo) rotulo.textContent = nomeTela;
   const tituloPerfil = document.querySelector('#view-profissionais .view-titulo'), subPerfil = document.querySelector('#view-profissionais .view-sub');
-  if (tituloPerfil) tituloPerfil.textContent = p.verTodos ? 'Profissionais' : 'Meu perfil';
-  if (subPerfil) subPerfil.textContent = p.verTodos ? 'Gerencie a equipe e horários de trabalho' : 'Seus dados, horário de trabalho, preços e Pix';
+  if (tituloPerfil) tituloPerfil.textContent = nomeTela;
+  if (subPerfil) subPerfil.textContent = admin ? 'Gerencie a equipe e horários de trabalho'
+    : (p.papel === 'socio' ? 'Seus dados, horário, preços, Pix e se você cobra sinal — só você vê e altera' : 'Seus dados e horário de trabalho (o dono configura tudo por aqui)');
 }
 
 function irPara(view) {
@@ -840,7 +853,7 @@ function renderizarViewAtual() {
     case 'profissionais': renderizarProfissionais(); if (!state.papel.gerirNegocio && !state.statusPushCarregado) { state.statusPushCarregado = true; carregarStatusNotificacoes(); } break;
     case 'relatorios': renderizarRelatorios(); break;
     case 'clientes': renderizarClientes(); break;
-    case 'configuracoes': renderizarConfiguracoes(); break;
+    case 'configuracoes': renderizarConfiguracoes(); renderizarCartaoEquipeConfig(); break;
     case 'equipe': renderizarEquipe(); break;
   }
 }
@@ -1392,6 +1405,7 @@ function renderizarPrimeirosPassos() {
 }
 
 function renderizarPendencias() {
+  renderizarPerguntaEquipe();
   renderizarPrimeirosPassos();
   const lista = atendimentosParaResolver(state.agendamentos, new Date(), MARGEM_PENDENCIA_MIN);
   const totalPagamentos = renderizarPagamentos();
@@ -1989,6 +2003,12 @@ function enviarLembreteWhatsapp(a) {
 // ========================================
 // VIEW: SERVIÇOS (CRUD)
 // ========================================
+// Serviço que é SÓ do sócio logado (profissionaisIds = [ele])
+function servicoEhMeu(s) {
+  const ids = Array.isArray(s.profissionaisIds) ? s.profissionaisIds : [];
+  return ids.length === 1 && ids[0] === state.papel.profissionalId;
+}
+
 function renderizarServicos() {
   const lista = Object.entries(state.servicos)
     .map(([id, s]) => ({ ...s, id }))
@@ -2013,16 +2033,17 @@ function renderizarServicos() {
         ${s.ativo === false ? '<span class="tag-inativo">Inativo</span>' : ''}
       </div>
       <div class="item-card-actions">
-        <button class="btn-mini" data-acao="editar">Editar</button>
-        <button class="btn-mini perigo" data-acao="deletar">Excluir</button>
+        ${souDono() || servicoEhMeu(s) ? `<button class="btn-mini" data-acao="editar">Editar</button>
+        <button class="btn-mini perigo" data-acao="deletar">Excluir</button>` : '<span class="item-card-sub">Serviço do estabelecimento</span>'}
       </div>
     </div>
   `).join('');
 
   $$('#lista-servicos-admin .item-card').forEach(card => {
     const id = card.dataset.id;
-    card.querySelector('[data-acao="editar"]').addEventListener('click', () => modalServico(id));
-    card.querySelector('[data-acao="deletar"]').addEventListener('click', () => deletarServico(id));
+    const bEditar = card.querySelector('[data-acao="editar"]'), bApagar = card.querySelector('[data-acao="deletar"]');
+    if (bEditar) bEditar.addEventListener('click', () => modalServico(id));
+    if (bApagar) bApagar.addEventListener('click', () => deletarServico(id));
   });
 }
 
@@ -2075,7 +2096,8 @@ function modalServico(id = null) {
   const profsAtivos = Object.entries(state.profissionais).filter(([, p]) => p.ativo !== false);
   const restritos = Array.isArray(s.profissionaisIds) ? s.profissionaisIds : [];
   const marcado = (pid) => restritos.length === 0 || restritos.includes(pid);
-  const blocoProfissionais = profsAtivos.length === 0 ? '' : `
+  const doSocio = state.papel.papel === 'socio';      // sócio: o serviço é só dele (a API grava; o catálogo do dono não muda)
+  const blocoProfissionais = (doSocio || profsAtivos.length === 0) ? '' : `
     <div class="input-grupo">
       <label class="input-label">QUEM REALIZA ESTE SERVIÇO?</label>
       <div class="nag-servicos-lista">
@@ -2167,10 +2189,13 @@ function modalServico(id = null) {
     };
     if (!dados.nome) { toast('Digite o nome do serviço', 'erro'); return; }
     if (dados.duracaoMin < 5) { toast('Duração mínima de 5 minutos', 'erro'); return; }
-    if (profsAtivos.length > 0 && marcados.length === 0) { toast('Marque ao menos um profissional que realiza este serviço', 'erro'); return; }
+    if (!doSocio && profsAtivos.length > 0 && marcados.length === 0) { toast('Marque ao menos um profissional que realiza este serviço', 'erro'); return; }
 
     try {
-      if (id) {
+      if (doSocio) {
+        await chamarEquipe('servico-proprio', { ...(id ? { id } : {}), nome: dados.nome, duracaoMin: dados.duracaoMin, preco: dados.preco, foto: dados.foto, ativo: dados.ativo });
+        toast(id ? 'Serviço atualizado' : 'Serviço criado', 'sucesso');
+      } else if (id) {
         await updateDoc(doc(db, 'barbearias', state.barbeariaId, 'servicos', id), dados);
         toast('Serviço atualizado', 'sucesso');
       } else {
@@ -2179,7 +2204,7 @@ function modalServico(id = null) {
       }
       fecharModal();
     } catch (err) {
-      toast('Erro ao salvar', 'erro');
+      toast(err.code ? 'Erro ao salvar' : err.message, 'erro');
     }
   });
 }
@@ -2187,7 +2212,8 @@ function modalServico(id = null) {
 async function deletarServico(id) {
   if (!confirm(`Excluir o serviço "${state.servicos[id].nome}"?`)) return;
   try {
-    await deleteDoc(doc(db, 'barbearias', state.barbeariaId, 'servicos', id));
+    if (state.papel.papel === 'socio') await chamarEquipe('servico-proprio', { operacao: 'apagar', id });
+    else await deleteDoc(doc(db, 'barbearias', state.barbeariaId, 'servicos', id));
     toast('Serviço excluído', 'sucesso');
   } catch (err) {
     toast('Erro ao excluir', 'erro');
@@ -2215,7 +2241,7 @@ function renderizarProfissionais() {
             <div class="item-card-titulo">${escapeHtml(p.nome)}</div>
             <div class="item-card-sub">${escapeHtml(p.especialidade || 'Profissional')}</div>
           </div>
-          ${p.ativo === false ? '<span class="tag-inativo">Inativo</span>' : ''}
+          ${p.socio ? '<span class="tag-inativo" style="background:var(--accent);color:#fff;">Sócio</span>' : ''}${p.ativo === false ? '<span class="tag-inativo">Inativo</span>' : ''}
         </div>
         <div class="item-card-stats">
           <div>
@@ -2245,12 +2271,27 @@ function renderizarProfissionais() {
 // Administrador pleno edita qualquer profissional por inteiro; os demais só o PRÓPRIO, e só nome, especialidade e horário.
 function podeEditarProfissional(id) {
   const p = state.papel;
-  return (p.verTodos && p.gerirNegocio) || (!!id && p.profissionalId === id);
+  return (p.verTodos && p.gerirNegocio) || (!!id && p.profissionalId === id && p.papel === 'socio');   // funcionário só vê o próprio cadastro
 }
 
-function modalProfissional(id = null) {
+// Pix, sinal e preços de UMA pessoa: o sócio mexe nos DELE; o dono mexe nos dos demais (os de sócio são privados do sócio)
+function podeConfigurarPessoa(id) {
+  const p = state.papel, pessoa = state.profissionais[id] || {};
+  if (souDono()) return !pessoa.socio;
+  return p.papel === 'socio' && p.profissionalId === id;
+}
+
+async function modalProfissional(id = null) {
   const completo = state.papel.verTodos && state.papel.gerirNegocio;
   if (!podeEditarProfissional(id)) { toast('Você não tem permissão para isso.', 'erro'); return; }
+  const configurar = !!id && podeConfigurarPessoa(id);
+  let cfg = {};                                       // Pix e sinal da pessoa (documento privado: só ela e, se não for sócio, o dono leem)
+  if (configurar) {
+    try {
+      const snapCfg = await getDoc(doc(db, 'barbearias', state.barbeariaId, 'profissionais', id, 'privado', 'config'));
+      cfg = snapCfg.exists() ? snapCfg.data() : {};
+    } catch (err) { console.error('Erro ao ler a configuração privada:', err); }
+  }
   const p = id ? state.profissionais[id] : {
     nome: '', especialidade: '', comissao: 50, ativo: true,
     horarioTrabalho: diasDaSemana().reduce((acc, dia) => {
@@ -2283,10 +2324,11 @@ function modalProfissional(id = null) {
     </div>`;
 
   // Preço/duração e Pix PRÓPRIOS: só o próprio profissional (ou o administrador pleno) mexe, pela API (não pelas regras do banco).
-  const pixAtual = (id && p.pix) || {};
+  const pixAtual = cfg.pix || {};
+  const sinalAtual = cfg.sinal || { modo: state.papel.papel === 'socio' ? 'desativado' : 'herdar' };
   const servicosAtivos = servicosLista.filter(([, s]) => s.ativo !== false);
-  const blocoPrecos = !id || servicosAtivos.length === 0 ? '' : `
-    <h4 style="margin:20px 0 6px;font-family:'Bricolage Grotesque';font-weight:700;font-size:14px;">Meus preços</h4>
+  const blocoPrecos = !configurar || servicosAtivos.length === 0 ? '' : `
+    <h4 style="margin:20px 0 6px;font-family:'Bricolage Grotesque';font-weight:700;font-size:14px;">${state.papel.papel === 'socio' ? 'Meus preços' : 'Preços desta pessoa'}</h4>
     <p class="campo-help" style="margin:0 0 10px;">Deixe em branco para cobrar o valor padrão do serviço (mostrado em cinza).</p>
     <div class="precos-prof">
       ${servicosAtivos.map(([sid, s]) => {
@@ -2300,9 +2342,21 @@ function modalProfissional(id = null) {
       <div class="campo-help" style="display:grid;grid-template-columns:1fr 92px 82px;gap:8px;"><span></span><span>Preço (R$)</span><span>Minutos</span></div>
     </div>`;
   const tiposPix = [['cpf', 'CPF'], ['cnpj', 'CNPJ'], ['telefone', 'Telefone'], ['email', 'E-mail'], ['aleatoria', 'Chave aleatória']];
-  const blocoPix = !id ? '' : `
-    <h4 style="margin:20px 0 6px;font-family:'Bricolage Grotesque';font-weight:700;font-size:14px;">Meu Pix para receber o sinal</h4>
-    <p class="campo-help" style="margin:0 0 10px;">Se o estabelecimento cobra sinal, o cliente paga direto para quem vai atender. Deixe a chave em branco para usar o Pix do estabelecimento.</p>
+  const ehSocioLogado = state.papel.papel === 'socio';
+  const opcoesSinal = ehSocioLogado
+    ? [['desativado', 'Não cobrar sinal'], ['ativo', 'Cobrar sinal por Pix']]
+    : [['herdar', 'Seguir o padrão do estabelecimento'], ['ativo', 'Cobrar sinal com a chave Pix desta pessoa'], ['desativado', 'Não cobrar sinal']];
+  const blocoSinal = !configurar ? '' : `
+    <h4 style="margin:20px 0 6px;font-family:'Bricolage Grotesque';font-weight:700;font-size:14px;">Sinal por Pix</h4>
+    <p class="campo-help" style="margin:0 0 10px;">${ehSocioLogado ? 'Você decide se cobra sinal dos seus clientes e em qual chave Pix o dinheiro cai. Ninguém mais vê isso.' : 'Como esta pessoa cobra o sinal nos agendamentos dela.'}</p>
+    <div class="input-grupo"><select id="pp-sinal-modo" class="input">${opcoesSinal.map(([v, r]) => `<option value="${v}" ${sinalAtual.modo === v ? 'selected' : ''}>${r}</option>`).join('')}</select></div>
+    <div class="form-grid" id="pp-sinal-detalhes">
+      <div class="input-grupo"><label class="input-label">VALOR DO SINAL (% DO SERVIÇO)</label><input type="number" id="pp-sinal-perc" class="input" min="10" max="100" step="5" value="${sinalAtual.percentual || 50}"></div>
+      <div class="input-grupo"><label class="input-label">PRAZO PARA PAGAR (HORAS)</label><input type="number" id="pp-sinal-prazo" class="input" min="1" max="72" step="1" value="${sinalAtual.prazoHoras || 24}"></div>
+    </div>`;
+  const blocoPix = !configurar ? '' : `
+    <h4 style="margin:20px 0 6px;font-family:'Bricolage Grotesque';font-weight:700;font-size:14px;">${ehSocioLogado ? 'Meu Pix para receber o sinal' : 'Pix para receber o sinal'}</h4>
+    <p class="campo-help" style="margin:0 0 10px;">O cliente paga direto para quem vai atender. Necessário se o sinal for cobrado com a chave desta pessoa.</p>
     <div class="form-grid">
       <div class="input-grupo"><label class="input-label">TIPO DA CHAVE</label>
         <select id="pp-pix-tipo" class="input">${tiposPix.map(([v, r]) => `<option value="${v}" ${pixAtual.tipoChave === v ? 'selected' : ''}>${r}</option>`).join('')}</select></div>
@@ -2337,6 +2391,7 @@ function modalProfissional(id = null) {
     </div>` : ''}
     ${blocoServicos}
     ${blocoPrecos}
+    ${blocoSinal}
     ${blocoPix}
     <h4 style="margin:20px 0 6px;font-family:'Bricolage Grotesque';font-weight:700;font-size:14px;">Horário de trabalho</h4>
     <p class="campo-help" style="margin:0 0 12px;">Intervalo próprio (opcional): se ficar desmarcado, vale o intervalo do estabelecimento (em Configurações).</p>
@@ -2368,6 +2423,11 @@ function modalProfissional(id = null) {
     <button class="btn-acao" id="modal-salvar">Salvar</button>
   `;
   abrirModal(id ? 'Editar profissional' : 'Novo profissional', corpo, rodape);
+  const modoSinalEl = $('#pp-sinal-modo');
+  if (modoSinalEl) {
+    const mostrarDetalhes = () => { $('#pp-sinal-detalhes').style.display = modoSinalEl.value === 'ativo' ? '' : 'none'; };
+    modoSinalEl.addEventListener('change', mostrarDetalhes); mostrarDetalhes();
+  }
 
   $('#modal-cancel').addEventListener('click', fecharModal);
   $('#modal-salvar').addEventListener('click', async () => {
@@ -2456,6 +2516,10 @@ async function salvarPrecosEPixDoProfissional(id) {
     };
     await chamarEquipe('pix-profissional', { profissionalId: id, pix });
   }
+  const modoSinal = $('#pp-sinal-modo');
+  if (modoSinal) {
+    await chamarEquipe('sinal-profissional', { profissionalId: id, sinal: { modo: modoSinal.value, percentual: Number($('#pp-sinal-perc').value), prazoHoras: Number($('#pp-sinal-prazo').value) } });
+  }
 }
 
 async function deletarProfissional(id) {
@@ -2469,10 +2533,17 @@ async function deletarProfissional(id) {
 }
 
 // ========================================
-// VIEW: EQUIPE (convites e permissões)
+// VIEW: EQUIPE (sócios e funcionários, com convite por link)
 // ========================================
-// Quem decide e grava é o servidor (api/equipe.js): ninguém dá nem recebe acesso que não tem, e o negócio nunca
-// fica sem um gerente. Aqui só se monta a tela.
+// Quem decide e grava é o servidor (api/equipe.js). Dois papéis convidáveis, em linguagem de dono de barbearia:
+//  - Sócio: trabalha por conta própria no seu estabelecimento; cuida das próprias configurações (horário, preços, Pix, sinal);
+//  - Funcionário: trabalha para o dono; vê só a própria agenda; o dono configura tudo dele.
+const PAPEL_ROTULO = { dono: 'Dono', socio: 'Sócio', funcionario: 'Funcionário' };
+const PAPEL_DESCRICAO = {
+  socio: 'Trabalha por conta própria no seu estabelecimento. Vê só a própria agenda e cuida das próprias configurações: horário, preços, chave Pix e se cobra sinal. Você não vê o Pix dele.',
+  funcionario: 'Trabalha para você. Vê só a própria agenda e os avisos dos agendamentos dele. Você configura tudo dele (horário, preços e sinal).'
+};
+
 async function chamarEquipe(action, dados = {}) {
   const resp = await fetch('/api/equipe', {
     method: 'POST',
@@ -2484,17 +2555,10 @@ async function chamarEquipe(action, dados = {}) {
   return corpo;
 }
 
-function descricaoAcesso(p) {
-  if (p.verTodos && p.gerirNegocio) return 'Acesso total (vê tudo e gerencia o negócio)';
-  if (p.verTodos) return 'Vê a agenda e o faturamento de todos';
-  if (p.gerirNegocio) return 'Gerencia o negócio e vê só o próprio trabalho';
-  return 'Vê só o próprio trabalho';
-}
-
 let equipeCache = null;
 async function renderizarEquipe() {
   const el = $('#lista-equipe');
-  if (!state.papel.gerirNegocio) { el.innerHTML = ''; return; }
+  if (!souDono()) { el.innerHTML = ''; return; }
   try {
     equipeCache = await chamarEquipe('listar');
   } catch (err) {
@@ -2508,45 +2572,50 @@ async function renderizarEquipe() {
         <div class="item-card-emoji" style="background:var(--accent);color:#fff;font-family:'Bricolage Grotesque';font-weight:700;">${escapeHtml(iniciais(m.nome || m.email))}</div>
         <div style="flex:1;min-width:0;">
           <div class="item-card-titulo">${escapeHtml(m.nome || m.email)}${m.eu ? ' <span class="tag-inativo" style="background:var(--accent);color:#fff;">você</span>' : ''}</div>
-          <div class="item-card-sub">${escapeHtml(m.email)}${m.profissionalNome ? ' · Profissional: ' + escapeHtml(m.profissionalNome) : ''}</div>
+          <div class="item-card-sub">${escapeHtml(m.email)}${m.profissionalNome ? ' · Atende como ' + escapeHtml(m.profissionalNome) : ''}</div>
         </div>
+        <span class="tag-inativo" style="background:var(--surface-2);color:var(--text);">${escapeHtml(PAPEL_ROTULO[m.papel] || m.papel)}</span>
       </div>
-      <div class="item-card-sub" style="margin:8px 0;">${escapeHtml(descricaoAcesso(m.permissoes))}</div>
       <div class="item-card-actions">
-        ${m.podeModificar || m.eu ? `<button class="btn-mini" data-acao="alterar" data-uid="${escapeHtml(m.uid)}">Alterar acesso</button>` : ''}
-        ${m.podeModificar ? `<button class="btn-mini perigo" data-acao="remover" data-uid="${escapeHtml(m.uid)}">Remover</button>` : ''}
+        ${m.podeModificar && m.papel !== 'dono' ? `<button class="btn-mini" data-acao="papel" data-uid="${escapeHtml(m.uid)}">Mudar papel</button>
+        <button class="btn-mini perigo" data-acao="remover" data-uid="${escapeHtml(m.uid)}">Remover</button>` : ''}
       </div>
     </div>`).join('');
   const cartoesConvites = convites.length === 0 ? '' : `
-    <h3 class="card-titulo" style="margin:22px 0 10px;">Convites pendentes</h3>` + convites.map((c) => `
+    <h3 class="card-titulo" style="margin:22px 0 10px;">Convites enviados (aguardando)</h3>` + convites.map((c) => `
     <div class="item-card">
       <div class="item-card-header">
         <div style="flex:1;min-width:0;">
           <div class="item-card-titulo">${escapeHtml(c.nome)}</div>
-          <div class="item-card-sub">${escapeHtml(c.email)}${c.profissionalNome ? ' · Profissional: ' + escapeHtml(c.profissionalNome) : ''}</div>
+          <div class="item-card-sub">${escapeHtml(c.email)}${c.profissionalNome ? ' · Atenderá como ' + escapeHtml(c.profissionalNome) : ''} · vale até ${escapeHtml(new Date(c.expiraEm).toLocaleDateString('pt-BR'))}</div>
         </div>
+        <span class="tag-inativo" style="background:var(--surface-2);color:var(--text);">${escapeHtml(PAPEL_ROTULO[c.papel] || c.papel)}</span>
       </div>
-      <div class="item-card-sub" style="margin:8px 0;">${escapeHtml(descricaoAcesso(c.permissoes))} · vale até ${escapeHtml(new Date(c.expiraEm).toLocaleDateString('pt-BR'))}</div>
       <div class="item-card-actions">
         <button class="btn-mini" data-acao="link" data-token="${escapeHtml(c.token)}">Copiar link</button>
         <button class="btn-mini" data-acao="whats" data-token="${escapeHtml(c.token)}">Enviar no WhatsApp</button>
         <button class="btn-mini perigo" data-acao="cancelar" data-token="${escapeHtml(c.token)}">Cancelar</button>
       </div>
     </div>`).join('');
-  el.innerHTML = cartoesMembros + cartoesConvites;
+  const vazio = membros.length <= 1 && convites.length === 0
+    ? '<div class="vazio-msg" style="margin-top:14px;">Você ainda não convidou ninguém. Clique em "+ Convidar pessoa" para chamar um <strong>sócio</strong> ou um <strong>funcionário</strong>.</div>' : '';
+  el.innerHTML = cartoesMembros + vazio + cartoesConvites;
 
   $$('#lista-equipe [data-acao]').forEach((b) => b.addEventListener('click', () => acaoEquipe(b.dataset.acao, b.dataset)));
 }
 
+function textoConviteWhats(nome, link) {
+  return 'Oi ' + nome.split(' ')[0] + '! Você foi convidado(a) para a equipe de ' + (state.barbearia.nome || '') + ' no 77 AgendaPro. Crie seu acesso por este link (vale 7 dias): ' + link;
+}
+
 async function acaoEquipe(acao, dados) {
-  const convite = equipeCache.convites.find((c) => c.token === dados.token);
+  const convite = (equipeCache.convites || []).find((c) => c.token === dados.token);
   try {
     if (acao === 'link') {
       await navigator.clipboard.writeText(convite.link);
       toast('Link copiado', 'sucesso');
     } else if (acao === 'whats') {
-      const msg = encodeURIComponent('Oi ' + convite.nome.split(' ')[0] + '! Você foi convidado(a) para a equipe de ' + (state.barbearia.nome || '') + ' no 77 AgendaPro. Crie seu acesso por este link (vale 7 dias): ' + convite.link);
-      window.open('https://wa.me/?text=' + msg, '_blank');
+      window.open('https://wa.me/?text=' + encodeURIComponent(textoConviteWhats(convite.nome, convite.link)), '_blank');
     } else if (acao === 'cancelar') {
       if (!confirm('Cancelar o convite de ' + convite.nome + '? O link deixa de funcionar.')) return;
       await chamarEquipe('cancelar-convite', { token: dados.token });
@@ -2558,53 +2627,47 @@ async function acaoEquipe(acao, dados) {
       await chamarEquipe('remover', { uid: dados.uid });
       toast('Acesso removido', 'sucesso');
       renderizarEquipe();
-    } else if (acao === 'alterar') {
-      modalAlterarAcesso(dados.uid);
+    } else if (acao === 'papel') {
+      modalPapel(dados.uid);
     }
   } catch (err) {
     toast(err.message, 'erro');
   }
 }
 
-// Caixas de permissão: o que a própria pessoa que mexe NÃO tem fica desabilitado (o servidor também recusa).
-function htmlPermissoes(atuais) {
-  const eu = state.papel;
-  const linha = (id, rotulo, ajuda, marcado, pode) => `
-    <label class="nag-servico-item" style="align-items:flex-start;${pode ? '' : 'opacity:.5;'}">
-      <input type="checkbox" id="${id}" ${marcado ? 'checked' : ''} ${pode ? '' : 'disabled'}>
-      <span><strong>${rotulo}</strong><br><small class="campo-help">${ajuda}</small></span>
+// Escolha de papel com cartões que explicam o que cada um enxerga (nada de "permissões" técnicas)
+function htmlEscolhaPapel(atual) {
+  const cartao = (valor, titulo) => `
+    <label class="nag-servico-item" style="align-items:flex-start;border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:8px;">
+      <input type="radio" name="conv-papel" value="${valor}" ${atual === valor ? 'checked' : ''}>
+      <span><strong>${titulo}</strong><br><small class="campo-help">${escapeHtml(PAPEL_DESCRICAO[valor])}</small></span>
     </label>`;
-  return `<div class="input-grupo"><label class="input-label">O QUE PODE FAZER</label><div class="nag-servicos-lista">
-    ${linha('perm-ver', 'Ver a agenda, os clientes e o faturamento de todos', 'Desmarcado: vê só o próprio trabalho (o do profissional ligado a essa pessoa).', atuais.verTodos, eu.verTodos)}
-    ${linha('perm-gerir', 'Gerenciar o negócio', 'Serviços, horário de funcionamento, Pix e esta equipe.', atuais.gerirNegocio, eu.gerirNegocio)}
-  </div></div>`;
+  return `<div class="input-grupo"><label class="input-label">QUEM É ESSA PESSOA?</label>${cartao('socio', 'Sócio')}${cartao('funcionario', 'Funcionário')}</div>`;
 }
-const lerPermissoes = () => ({ verTodos: $('#perm-ver').checked, gerirNegocio: $('#perm-gerir').checked });
+const lerPapel = () => ($('input[name="conv-papel"]:checked') || {}).value || '';
 
 function modalConvidar() {
   const livres = equipeCache.profissionais.filter((p) => p.ativo && !p.vinculado);
   const corpo = `
     <div class="input-grupo"><label class="input-label">NOME</label><input type="text" id="conv-nome" class="input" placeholder="Nome da pessoa"></div>
     <div class="input-grupo"><label class="input-label">E-MAIL (será o login da pessoa)</label><input type="email" id="conv-email" class="input" placeholder="pessoa@email.com" autocomplete="off"></div>
+    ${htmlEscolhaPapel('funcionario')}
     <div class="input-grupo">
-      <label class="input-label">PROFISSIONAL DESSA PESSOA</label>
+      <label class="input-label">AGENDA DESSA PESSOA</label>
       <select id="conv-prof" class="input">
-        <option value="__novo">Criar um novo profissional com o nome da pessoa</option>
+        <option value="__novo">Criar uma agenda nova com o nome da pessoa</option>
         ${livres.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.nome)}</option>`).join('')}
-        <option value="__nenhum">Nenhum (só administra)</option>
       </select>
-      <small class="campo-help">É a agenda que a pessoa enxerga. "Nenhum" só vale se a pessoa puder ver tudo.</small>
-    </div>
-    ${htmlPermissoes({ verTodos: false, gerirNegocio: false })}`;
+      <small class="campo-help">É a agenda que os clientes enxergam para agendar com essa pessoa.</small>
+    </div>`;
   const rodape = `<button class="btn-acao-secundario" id="modal-cancel">Cancelar</button><button class="btn-acao" id="modal-salvar">Gerar convite</button>`;
   abrirModal('Convidar pessoa', corpo, rodape);
   $('#modal-cancel').addEventListener('click', fecharModal);
   $('#modal-salvar').addEventListener('click', async () => {
     const nome = $('#conv-nome').value.trim();
     const escolha = $('#conv-prof').value;
-    const dados = { nome, email: $('#conv-email').value.trim(), permissoes: lerPermissoes() };
-    if (escolha === '__novo') dados.novoProfissional = nome;
-    else if (escolha !== '__nenhum') dados.profissionalId = escolha;
+    const dados = { nome, email: $('#conv-email').value.trim(), papel: lerPapel() };
+    if (escolha === '__novo') dados.novoProfissional = nome; else dados.profissionalId = escolha;
     const btn = $('#modal-salvar'); btn.disabled = true; btn.textContent = 'Gerando...';
     try {
       const r = await chamarEquipe('convidar', dados);
@@ -2613,7 +2676,7 @@ function modalConvidar() {
         <input type="text" class="input" id="conv-link" readonly value="${escapeHtml(r.link)}">`,
         `<button class="btn-acao-secundario" id="conv-copiar">Copiar link</button><button class="btn-acao" id="conv-whats">Enviar no WhatsApp</button>`);
       $('#conv-copiar').addEventListener('click', async () => { try { await navigator.clipboard.writeText(r.link); toast('Link copiado', 'sucesso'); } catch (_) { $('#conv-link').select(); } });
-      $('#conv-whats').addEventListener('click', () => window.open('https://wa.me/?text=' + encodeURIComponent('Oi ' + nome.split(' ')[0] + '! Você foi convidado(a) para a equipe de ' + (state.barbearia.nome || '') + ' no 77 AgendaPro. Crie seu acesso por este link (vale 7 dias): ' + r.link), '_blank'));
+      $('#conv-whats').addEventListener('click', () => window.open('https://wa.me/?text=' + encodeURIComponent(textoConviteWhats(nome, r.link)), '_blank'));
       renderizarEquipe();
     } catch (err) {
       toast(err.message, 'erro');
@@ -2622,32 +2685,62 @@ function modalConvidar() {
   });
 }
 
-function modalAlterarAcesso(uid) {
+function modalPapel(uid) {
   const m = equipeCache.membros.find((x) => x.uid === uid);
-  // Quem deixa de "ver tudo" passa a enxergar só a agenda de UM profissional: precisa estar ligado a ele.
-  const livres = equipeCache.profissionais.filter((p) => p.ativo && !p.vinculado);
-  const blocoProf = m.profissionalId
-    ? `<div class="input-grupo"><label class="input-label">PROFISSIONAL DESSA PESSOA</label><div class="item-card-sub">${escapeHtml(m.profissionalNome || 'Profissional')}</div></div>`
-    : `<div class="input-grupo"><label class="input-label">LIGAR A UM PROFISSIONAL</label>
-        <select id="alt-prof" class="input"><option value="">Nenhum (precisa ver tudo)</option>${livres.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.nome)}</option>`).join('')}</select>
-        <small class="campo-help">Para tirar "Ver tudo", escolha o profissional que essa pessoa é: é a agenda que ela vai enxergar. Se ela ainda não tem cadastro de profissional, crie em Profissionais.</small></div>`;
-  const corpo = `<p style="color:var(--text-dim);font-size:14px;margin-bottom:14px;"><strong>${escapeHtml(m.nome || m.email)}</strong>${m.eu ? ' (você)' : ''}</p>${blocoProf}${htmlPermissoes(m.permissoes)}`;
+  const corpo = `<p style="color:var(--text-dim);font-size:14px;margin-bottom:14px;"><strong>${escapeHtml(m.nome || m.email)}</strong></p>${htmlEscolhaPapel(m.papel)}
+    <small class="campo-help">Ao virar sócio, o sinal por Pix dele começa DESLIGADO (ele decide) e o Pix, o sinal e os preços dele passam a ser só dele.</small>`;
   const rodape = `<button class="btn-acao-secundario" id="modal-cancel">Cancelar</button><button class="btn-acao" id="modal-salvar">Salvar</button>`;
-  abrirModal('Alterar acesso', corpo, rodape);
+  abrirModal('Mudar papel', corpo, rodape);
   $('#modal-cancel').addEventListener('click', fecharModal);
   $('#modal-salvar').addEventListener('click', async () => {
     try {
-      const novas = lerPermissoes();
-      if (m.eu && m.permissoes.verTodos && !novas.verTodos &&
-          !confirm('Você vai deixar de ver a agenda, os clientes e o faturamento dos OUTROS profissionais, e só enxergará o seu. Só um administrador pleno consegue devolver isso. Continuar?')) return;
-      const profSel = $('#alt-prof');
-      await chamarEquipe('alterar', { uid, permissoes: novas, ...(profSel && profSel.value ? { profissionalId: profSel.value } : {}) });
-      toast('Acesso atualizado', 'sucesso');
+      await chamarEquipe('alterar', { uid, papel: lerPapel() });
+      toast('Papel atualizado', 'sucesso');
       fecharModal();
-      if (m.eu) location.reload();               // o próprio acesso mudou: recarrega para refazer as telas e consultas
-      else renderizarEquipe();
+      renderizarEquipe();
     } catch (err) { toast(err.message, 'erro'); }
   });
+}
+
+// Pergunta inicial ao dono (Dashboard) e botão em Configurações para ligar/desligar a aba Equipe
+async function definirEquipe(ativa) {
+  try {
+    await chamarEquipe('equipe-ativar', { ativa });
+    state.equipeAtiva = ativa;
+    aplicarPermissoesNaTela();
+    renderizarPerguntaEquipe();
+    renderizarCartaoEquipeConfig();
+    if (ativa) irPara('equipe');
+  } catch (err) { toast(err.message, 'erro'); }
+}
+
+function renderizarPerguntaEquipe() {
+  const box = $('#equipe-pergunta');
+  if (!box) return;
+  if (!souDono() || state.equipeAtiva !== undefined) { box.hidden = true; box.innerHTML = ''; return; }
+  box.hidden = false;
+  box.innerHTML = `
+    <div class="pendencias-titulo">👥 Você trabalha sozinho ou tem equipe?</div>
+    <div class="pendencias-sub">Se tiver <strong>sócios</strong> ou <strong>funcionários</strong>, cada um entra com o próprio login e vê só o que faz sentido para ele. Você pode mudar isso depois em Configurações.</div>
+    <div class="pendencia-acoes" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+      <button type="button" id="btn-equipe-sim" class="btn-acao">Tenho equipe</button>
+      <button type="button" id="btn-equipe-nao" class="btn-acao-secundario">Trabalho sozinho</button>
+    </div>`;
+  $('#btn-equipe-sim').onclick = () => definirEquipe(true);
+  $('#btn-equipe-nao').onclick = () => definirEquipe(false);
+}
+
+function renderizarCartaoEquipeConfig() {
+  const card = $('#card-equipe-config');
+  if (!card) return;
+  card.style.display = souDono() ? '' : 'none';
+  const ligada = state.equipeAtiva === true;
+  $('#equipe-config-texto').textContent = ligada
+    ? 'A aba Equipe está ligada: você convida sócios e funcionários e cada um entra com o próprio login.'
+    : 'A aba Equipe está desligada. Ligue quando for convidar um sócio ou funcionário.';
+  const btn = $('#btn-equipe-alternar');
+  btn.textContent = ligada ? 'Desligar a aba Equipe' : 'Ligar a aba Equipe';
+  btn.onclick = () => definirEquipe(!ligada);
 }
 
 // ========================================

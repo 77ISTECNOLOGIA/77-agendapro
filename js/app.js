@@ -784,7 +784,7 @@ function renderizarResumoFinal() {
   `;
 
   // Sinal por Pix: avisa ANTES de confirmar quanto é e quanto tempo tem para pagar
-  const sinal = state.barbearia.sinal;
+  const sinal = sinalDoProfissional();
   const aviso = $('#aviso-sinal');
   if (sinal && sinal.ativo) {
     const valor = Math.round(total * sinal.percentual) / 100;
@@ -875,8 +875,15 @@ async function recarregarAgendamentos(profissionalId = '') {
 // ========================================
 // TELA 7: PAGAMENTO DO SINAL (Pix)
 // ========================================
+// O sinal é POR PESSOA: vale o do profissional escolhido (o servidor manda { ativo, percentual, prazoHoras } de cada um).
+function sinalDoProfissional() {
+  const p = state.profissionais && state.profissionais[state.profissionalId];
+  if (p && p.sinal) return p.sinal;
+  return state.barbearia && state.barbearia.sinal;
+}
+
 function rotuloConfirmar() {
-  const s = state.barbearia && state.barbearia.sinal;
+  const s = sinalDoProfissional();
   return s && s.ativo ? 'Reservar e pagar sinal →' : 'Confirmar ✓';
 }
 

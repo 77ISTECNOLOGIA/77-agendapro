@@ -150,6 +150,9 @@
           <button id="btn-atualizar-dash" class="btn-icon-outline" title="Atualizar">↻</button>
         </div>
 
+        <!-- Primeira pergunta ao dono: trabalha sozinho ou tem equipe? (só aparece até ele responder) -->
+        <div id="equipe-pergunta" class="pendencias-card" hidden></div>
+
         <!-- Primeiros passos: sem profissional cadastrado o link do cliente não aceita agendamentos -->
         <div id="primeiros-passos" class="pendencias-card" hidden></div>
 
@@ -520,6 +523,13 @@
               <small class="campo-help">Semana de segunda a domingo, contada por WhatsApp. 0 = sem limite. Não vale para os agendamentos que você mesmo cria no painel.</small>
             </div>
             <button type="button" id="btn-salvar-sinal" class="btn-acao" style="margin-top:14px;">Salvar regras de agendamento</button>
+          </div>
+
+          <!-- Equipe: ligar/desligar a aba Equipe -->
+          <div class="card-grande" id="card-equipe-config" style="margin-top: 20px;">
+            <div class="card-header"><h3 class="card-titulo">Equipe</h3></div>
+            <p id="equipe-config-texto" style="color: var(--text-dim); font-size: 13px; margin-bottom: 14px; line-height: 1.5;"></p>
+            <button type="button" id="btn-equipe-alternar" class="btn-acao-secundario"></button>
           </div>
 
           <!-- Notificações Push -->

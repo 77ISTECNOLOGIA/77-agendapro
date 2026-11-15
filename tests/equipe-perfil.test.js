@@ -26,6 +26,7 @@ const agendar = async (extra = {}) => {
 };
 const prof = (id) => amb.fake.get(`barbearias/${SLUG}/profissionais/${id}`);
 const servico = (id) => amb.fake.get(`barbearias/${SLUG}/servicos/${id}`);
+const priv = (id) => amb.fake.get(`barbearias/${SLUG}/profissionais/${id}/privado/config`) || {};   // Pix e sinal da pessoa (privado)
 
 test.beforeEach(() => {
   limparLimites();
@@ -42,21 +43,26 @@ test.beforeEach(() => {
 test('Pix: cada profissional define o próprio; sócio não mexe no do outro; admin mexe em todos; null remove', async () => {
   const ok = await chamar({ idToken: 'tok-socio1', action: 'pix-profissional', pix: PIX_PROF });
   assert.equal(ok.statusCode, 200);
-  assert.equal(prof('prof1').pix.chavePix, 'pedro@barbearia.com');
-  assert.equal(prof('prof1').pix.banco, 'Banco Inter');
+  assert.equal(priv('prof1').pix.chavePix, 'pedro@barbearia.com');
+  assert.equal(priv('prof1').pix.banco, 'Banco Inter');
+  assert.equal(prof('prof1').pix, undefined, 'o Pix NÃO fica no documento do profissional (o dono lê esse documento)');
   // sócio2 (mesmo gerindo o negócio) NÃO altera o Pix do prof1: é dinheiro do outro
   const negado = await chamar({ idToken: 'tok-socio2', action: 'pix-profissional', profissionalId: 'prof1', pix: { ...PIX_PROF, chavePix: 'ladrao@x.com' } });
   assert.equal(negado.statusCode, 403);
-  assert.equal(prof('prof1').pix.chavePix, 'pedro@barbearia.com');
+  assert.equal(priv('prof1').pix.chavePix, 'pedro@barbearia.com');
   // dados inválidos
   assert.equal((await chamar({ idToken: 'tok-socio1', action: 'pix-profissional', pix: { ...PIX_PROF, tipoChave: 'cpf', chavePix: '123' } })).statusCode, 400);
   assert.equal((await chamar({ idToken: 'tok-socio1', action: 'pix-profissional', pix: { ...PIX_PROF, nomeRecebedor: '' } })).statusCode, 400);
   assert.equal((await chamar({ idToken: 'tok-socio1', action: 'pix-profissional', pix: 'texto' })).statusCode, 400);
-  // administrador pleno altera o de qualquer um
-  assert.equal((await chamar(comoDono({ action: 'pix-profissional', profissionalId: 'prof2', pix: PIX_PROF }))).statusCode, 200);
+  // o dono NÃO altera o Pix de um sócio (é dinheiro dele)…
+  assert.equal((await chamar(comoDono({ action: 'pix-profissional', profissionalId: 'prof2', pix: PIX_PROF }))).statusCode, 403);
+  // …mas altera o de um profissional que não é de sócio
+  amb.fake.seed(`barbearias/${SLUG}/profissionais/prof3`, { nome: 'Funcionário', ativo: true });
+  assert.equal((await chamar(comoDono({ action: 'pix-profissional', profissionalId: 'prof3', pix: PIX_PROF }))).statusCode, 200);
+  assert.equal(priv('prof3').pix.chavePix, 'pedro@barbearia.com');
   // remover: volta a valer o do negócio
   assert.equal((await chamar({ idToken: 'tok-socio1', action: 'pix-profissional', pix: null })).statusCode, 200);
-  assert.equal(prof('prof1').pix, null);
+  assert.equal(priv('prof1').pix, null);
   assert.equal((await chamar(comoDono({ action: 'pix-profissional', profissionalId: 'nao-existe', pix: PIX_PROF }))).statusCode, 404);
 });
 
@@ -112,12 +118,19 @@ test('preço por profissional: validações, permissões e voltar ao padrão', a
   assert.equal(servico('srv1').precosProfissional, undefined, 'nada foi gravado nos pedidos inválidos');
   // sócio2 (só gerencia) não mexe nos preços do prof1; o admin pleno sim
   assert.equal((await chamar({ idToken: 'tok-socio2', action: 'precos-profissional', profissionalId: 'prof1', precos: { srv1: { preco: 1 } } })).statusCode, 403);
-  assert.equal((await chamar(comoDono({ action: 'precos-profissional', profissionalId: 'prof1', precos: { srv1: { preco: 55 } } }))).statusCode, 200);
-  // quem só vê o próprio trabalho também define os próprios preços
-  assert.equal((await chamar({ idToken: 'tok-func', action: 'precos-profissional', precos: { srv1: { preco: 70 } } })).statusCode, 200);
-  assert.deepEqual(servico('srv1').precosProfissional, { prof1: { preco: 55 }, prof2: { preco: 70 } });
+  assert.equal((await chamar(comoDono({ action: 'precos-profissional', profissionalId: 'prof1', precos: { srv1: { preco: 55 } } }))).statusCode, 403, 'o dono não mexe nos preços de um sócio');
+  amb.fake.seed(`barbearias/${SLUG}/profissionais/prof3`, { nome: 'Funcionário', ativo: true });
+  assert.equal((await chamar(comoDono({ action: 'precos-profissional', profissionalId: 'prof3', precos: { srv1: { preco: 55 } } }))).statusCode, 200);
+  // o sócio define os PRÓPRIOS preços; o funcionário não (o dono define os dele)
+  assert.equal((await chamar({ idToken: 'tok-socio2', action: 'precos-profissional', precos: { srv1: { preco: 70 } } })).statusCode, 200);
+  amb.fake.seed(`barbearias/${SLUG}/profissionais/prof4`, { nome: 'Func', ativo: true });
+  amb.fake.seed('usuarios/func4', { barbeariaId: SLUG, role: 'profissional', papel: 'funcionario', profissionalId: 'prof4', email: 'f4@teste.com', permissoes: SOPROPRIO });
+  assert.equal((await chamar({ idToken: 'tok-func4', action: 'precos-profissional', precos: { srv1: { preco: 1 } } })).statusCode, 403, 'funcionário não altera a própria configuração');
+  assert.equal((await chamar({ idToken: 'tok-func4', action: 'sinal-profissional', sinal: { modo: 'desativado' } })).statusCode, 403);
+  assert.equal((await chamar({ idToken: 'tok-func4', action: 'pix-profissional', pix: null })).statusCode, 403);
+  assert.deepEqual(servico('srv1').precosProfissional, { prof3: { preco: 55 }, prof2: { preco: 70 } });
   // voltar ao padrão: null remove só a entrada daquele profissional
-  assert.equal((await chamar(comoDono({ action: 'precos-profissional', profissionalId: 'prof1', precos: { srv1: null } }))).statusCode, 200);
+  assert.equal((await chamar(comoDono({ action: 'precos-profissional', profissionalId: 'prof3', precos: { srv1: null } }))).statusCode, 200);
   assert.deepEqual(servico('srv1').precosProfissional, { prof2: { preco: 70 } });
 });
 

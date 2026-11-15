@@ -14,6 +14,19 @@ const VALIDADE_CONVITE_DIAS = 7;
 const MAX_CONVITES_PENDENTES = 20;
 const SEM_PERMISSAO = Object.freeze({ verTodos: false, gerirNegocio: false });
 
+// PAPÉIS (o que a pessoa vê no painel, em linguagem de dono de barbearia):
+//   dono         → quem cadastrou o negócio: configurações do estabelecimento, equipe, vê tudo
+//   socio        → trabalha por conta própria no mesmo estabelecimento: só a própria agenda, e é DONO das próprias
+//                  configurações (horário, almoço, preços, Pix e se cobra sinal); não mexe no estabelecimento
+//   funcionario  → trabalha para o dono: só a própria agenda/notificações; o dono configura tudo dele (inclusive o sinal)
+// Por baixo continua o modelo verTodos/gerirNegocio (as regras do Firestore usam isso); o papel só acrescenta o que ele não diz.
+const PAPEIS = ['dono', 'socio', 'funcionario'];
+const PAPEIS_CONVIDAVEIS = ['socio', 'funcionario'];
+
+function permissoesDoPapel(papel) {
+  return papel === 'dono' ? { verTodos: true, gerirNegocio: true } : { ...SEM_PERMISSAO };
+}
+
 /** Permissões efetivas de um documento usuarios/{uid}. */
 function permissoesDe(usuario) {
   if (!usuario || typeof usuario !== 'object') return { ...SEM_PERMISSAO };
@@ -22,6 +35,13 @@ function permissoesDe(usuario) {
   }
   const papel = usuario.role === undefined ? 'owner' : usuario.role;     // igual às regras: sem papel e sem permissões = dono antigo
   return papel === 'owner' ? { verTodos: true, gerirNegocio: true } : { ...SEM_PERMISSAO };
+}
+
+/** Papel efetivo: o gravado; sem ele, conta com tudo = dono e qualquer outra conta antiga = sócio (já tinha autonomia). */
+function papelDe(usuario) {
+  if (usuario && PAPEIS.includes(usuario.papel)) return usuario.papel;
+  const p = permissoesDe(usuario);
+  return p.verTodos && p.gerirNegocio ? 'dono' : 'socio';
 }
 
 function permissoesValidas(p) {
@@ -49,8 +69,16 @@ function validarConvite(b, quemConvida) {
   if (nome.length < 2) throw new ErroNegocio(400, 'Digite o nome da pessoa.');
   const email = texto(b.email, 120).toLowerCase();
   if (!EMAIL.test(email)) throw new ErroNegocio(400, 'Digite um e-mail válido.');
-  if (!permissoesValidas(b.permissoes)) throw new ErroNegocio(400, 'Permissões inválidas.');
-  const permissoes = { verTodos: b.permissoes.verTodos, gerirNegocio: b.permissoes.gerirNegocio };
+  let permissoes, papel;
+  if (b.papel !== undefined) {                       // jeito novo: Sócio ou Funcionário
+    if (!PAPEIS_CONVIDAVEIS.includes(b.papel)) throw new ErroNegocio(400, 'Escolha se a pessoa é Sócio ou Funcionário.');
+    papel = b.papel;
+    permissoes = permissoesDoPapel(papel);
+  } else {                                           // jeito antigo (permissões soltas): continua aceito
+    if (!permissoesValidas(b.permissoes)) throw new ErroNegocio(400, 'Permissões inválidas.');
+    permissoes = { verTodos: b.permissoes.verTodos, gerirNegocio: b.permissoes.gerirNegocio };
+    papel = permissoes.verTodos && permissoes.gerirNegocio ? 'dono' : (permissoes.gerirNegocio ? 'socio' : 'funcionario');
+  }
   if (!dentroDe(permissoes, quemConvida)) throw new ErroNegocio(403, 'Você não pode dar a outra pessoa um acesso que você mesmo não tem.');
   const profissionalId = b.profissionalId == null || b.profissionalId === '' ? '' : String(b.profissionalId);
   if (profissionalId && (profissionalId.length > 64 || profissionalId.includes('/'))) throw new ErroNegocio(400, 'Profissional inválido.');
@@ -59,10 +87,11 @@ function validarConvite(b, quemConvida) {
   if (!profissionalId && !novoProfissional && !permissoes.verTodos) {
     throw new ErroNegocio(400, 'Sem vínculo com um profissional e sem permissão de ver tudo, a pessoa não enxergaria nada. Vincule a um profissional.');
   }
-  return { nome, email, permissoes, profissionalId, novoProfissional };
+  return { nome, email, permissoes, papel, profissionalId, novoProfissional };
 }
 
 module.exports = {
   VALIDADE_CONVITE_DIAS, MAX_CONVITES_PENDENTES, SEM_PERMISSAO,
+  PAPEIS, PAPEIS_CONVIDAVEIS, permissoesDoPapel, papelDe,
   permissoesDe, permissoesValidas, dentroDe, podeModificar, gerarToken, validarConvite, texto
 };

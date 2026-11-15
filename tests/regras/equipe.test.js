@@ -211,3 +211,49 @@ test('aparelhos de notificação: cada pessoa gerencia só os PRÓPRIOS; quem v�
   assert.ok((await fs.ler(`${D}/d-s2`, 'chefe')).permitido);
   assert.ok((await fs.apagar(`${D}/d-s2`, 'chefe')).permitido);
 });
+
+test('config privada (Pix e sinal): a própria pessoa lê; o dono lê exceto a de SÓCIO; ninguém grava pelo navegador', async () => {
+  const P = 'barbearias/neg-a/profissionais';
+  await fs.semear(`${P}/prof-2`, { nome: 'José', comissao: 40, horarioTrabalho: HT, socio: true });      // prof-2 é de um sócio
+  await fs.semear(`${P}/prof-1/privado/config`, { pix: { chavePix: 'a@x.com' } });
+  await fs.semear(`${P}/prof-2/privado/config`, { pix: { chavePix: 'socio@x.com' }, sinal: { modo: 'ativo' } });
+  await fs.semear(`${P}/prof-3/privado/config`, { pix: { chavePix: 'func@x.com' } });
+  await fs.semear('usuarios/socio-puro', { barbeariaId: 'neg-a', role: 'profissional', papel: 'socio', profissionalId: 'prof-2', permissoes: PERM(false, false) });
+  await fs.semear('usuarios/func-puro', { barbeariaId: 'neg-a', role: 'profissional', papel: 'funcionario', profissionalId: 'prof-3', permissoes: PERM(false, false) });
+  // o dono (conta antiga / chefe) lê a config dos que NÃO são de sócio e NÃO lê a do sócio
+  for (const u of ['chefe', 'antigo']) {
+    assert.ok((await fs.ler(`${P}/prof-1/privado/config`, u)).permitido, u + ' lê a do profissional comum');
+    assert.ok((await fs.ler(`${P}/prof-3/privado/config`, u)).permitido, u + ' lê a do funcionário');
+    assert.ok((await fs.ler(`${P}/prof-2/privado/config`, u)).negado, u + ' NÃO lê a do sócio');
+  }
+  // o sócio lê a própria e não a dos outros
+  assert.ok((await fs.ler(`${P}/prof-2/privado/config`, 'socio-puro')).permitido);
+  assert.ok((await fs.ler(`${P}/prof-1/privado/config`, 'socio-puro')).negado);
+  assert.ok((await fs.ler(`${P}/prof-3/privado/config`, 'socio-puro')).negado);
+  // o funcionário não lê a dos outros
+  assert.ok((await fs.ler(`${P}/prof-1/privado/config`, 'func-puro')).negado);
+  assert.ok((await fs.ler(`${P}/prof-2/privado/config`, 'func-puro')).negado);
+  // gente de fora, visitante e outro negócio: nada
+  for (const u of [null, 'dono-b']) assert.ok((await fs.ler(`${P}/prof-1/privado/config`, u)).negado, String(u));
+  // ninguém grava pelo navegador (nem o dono, nem o próprio sócio)
+  for (const [u, p] of [['chefe', 'prof-1'], ['socio-puro', 'prof-2'], ['chefe', 'prof-2']]) {
+    assert.ok((await fs.substituir(`${P}/${p}/privado/config`, { pix: { chavePix: 'hack@x.com' } }, u)).negado, `${u} grava em ${p}`);
+  }
+  assert.ok((await fs.apagar(`${P}/prof-2/privado/config`, 'chefe')).negado);
+  // super-admin lê
+  assert.ok((await fs.ler(`${P}/prof-2/privado/config`, 'super1')).permitido);
+});
+
+test('papéis: sócio edita o próprio horário; FUNCIONÁRIO não edita o próprio cadastro', async () => {
+  const P = 'barbearias/neg-a/profissionais';
+  await fs.semear('usuarios/socio-puro', { barbeariaId: 'neg-a', role: 'profissional', papel: 'socio', profissionalId: 'prof-1', permissoes: PERM(false, false) });
+  await fs.semear('usuarios/func-puro', { barbeariaId: 'neg-a', role: 'profissional', papel: 'funcionario', profissionalId: 'prof-3', permissoes: PERM(false, false) });
+  assert.ok((await fs.atualizar(`${P}/prof-1`, { horarioTrabalho: HT }, 'socio-puro')).permitido, 'sócio: o próprio horário');
+  assert.ok((await fs.atualizar(`${P}/prof-3`, { horarioTrabalho: HT }, 'func-puro')).negado, 'funcionário: não edita o próprio horário');
+  assert.ok((await fs.atualizar(`${P}/prof-3`, { nome: 'Outro nome' }, 'func-puro')).negado);
+  assert.ok((await fs.ler(`${P}/prof-3`, 'func-puro')).permitido, 'mas lê o próprio cadastro');
+  // conta antiga SEM papel continua como era (edita o próprio horário): nada quebra para quem já existe
+  assert.ok((await fs.atualizar(`${P}/prof-2`, { horarioTrabalho: HT }, 'socio2')).permitido);
+  // o dono continua editando qualquer um
+  assert.ok((await fs.atualizar(`${P}/prof-3`, { horarioTrabalho: HT }, 'chefe')).permitido);
+});

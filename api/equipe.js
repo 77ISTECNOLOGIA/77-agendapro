@@ -19,8 +19,8 @@ const { db, auth } = require('./_lib/firebase');
 const { slugValido } = require('./_lib/negocio');
 const { dentroDoLimite, dentroDoLimitePorChave, responder, ErroNegocio, tratarErro, corpoDe } = require('./_lib/http');
 const E = require('./_lib/equipe');
-const { validarDadosPix } = require('./_lib/sinal');
-const { precosProfissionalValidos } = require('./_lib/negocio');
+const { validarDadosPix, validarSinalPessoa } = require('./_lib/sinal');
+const { precosProfissionalValidos, fotoServicoValida } = require('./_lib/negocio');
 
 const BASE = () => process.env.APP_URL || 'https://77-agendapro.vercel.app';
 const TOKEN_OK = /^[A-Za-z0-9_-]{20,64}$/;
@@ -67,15 +67,15 @@ async function listar(firestore, ctx) {
   const { profissionais, membros, convites } = await carregarEquipe(firestore, ctx);
   const vinculados = new Set([...membros, ...convites].map((x) => x.profissionalId).filter(Boolean));
   return {
-    eu: { uid: ctx.uid, permissoes: ctx.permissoes, profissionalId: ctx.usuario.profissionalId || '' },
+    eu: { uid: ctx.uid, permissoes: ctx.permissoes, papel: E.papelDe(ctx.usuario), profissionalId: ctx.usuario.profissionalId || '' },
     membros: membros.map((m) => ({
       uid: m.uid, nome: m.nome || '', email: m.email || '', role: m.role || 'owner', profissionalId: m.profissionalId || '',
-      profissionalNome: (profissionais[m.profissionalId] || {}).nome || '', permissoes: E.permissoesDe(m),
+      profissionalNome: (profissionais[m.profissionalId] || {}).nome || '', permissoes: E.permissoesDe(m), papel: E.papelDe(m),
       eu: m.uid === ctx.uid, podeModificar: m.uid !== ctx.uid && E.podeModificar(ctx.permissoes, E.permissoesDe(m))
     })),
     convites: convites.map((c) => ({
       token: c.token, nome: c.nome, email: c.email, profissionalId: c.profissionalId || '', profissionalNome: (profissionais[c.profissionalId] || {}).nome || '',
-      permissoes: c.permissoes, expiraEm: c.expiraEm, link: `${BASE()}/convite?n=${encodeURIComponent(ctx.slug)}&c=${encodeURIComponent(c.token)}`
+      permissoes: c.permissoes, papel: c.papel || (c.permissoes && c.permissoes.gerirNegocio ? 'socio' : 'funcionario'), expiraEm: c.expiraEm, link: `${BASE()}/convite?n=${encodeURIComponent(ctx.slug)}&c=${encodeURIComponent(c.token)}`
     })),
     profissionais: Object.values(profissionais).map((p) => ({ ...p, vinculado: vinculados.has(p.id) }))
   };
@@ -115,7 +115,7 @@ async function convidar(firestore, ctx, b) {
   const token = E.gerarToken();
   const expiraEm = new Date(Date.now() + E.VALIDADE_CONVITE_DIAS * 86400000).toISOString();
   await ctx.negocioRef.collection('convites').doc(token).set({
-    nome: dados.nome, email: dados.email, profissionalId, permissoes: dados.permissoes,
+    nome: dados.nome, email: dados.email, profissionalId, permissoes: dados.permissoes, papel: dados.papel,
     criadoPor: ctx.uid, criadoEm: agora(), expiraEm, usado: false
   });
   return { sucesso: true, token, expiraEm, link: `${BASE()}/convite?n=${encodeURIComponent(ctx.slug)}&c=${encodeURIComponent(token)}`, profissionalId };
@@ -129,7 +129,28 @@ async function carregarAlvo(firestore, ctx, uid) {
   return alvo;
 }
 
+async function alterarPapel(firestore, ctx, b) {
+  const dono = ctx.permissoes.verTodos && ctx.permissoes.gerirNegocio;
+  if (!dono) throw new ErroNegocio(403, 'Só o dono do estabelecimento muda o papel da equipe.');
+  if (!E.PAPEIS_CONVIDAVEIS.includes(b.papel)) throw new ErroNegocio(400, 'Escolha Sócio ou Funcionário.');
+  const alvo = await carregarAlvo(firestore, ctx, b.uid);
+  if (b.uid === ctx.uid || E.papelDe(alvo) === 'dono') throw new ErroNegocio(403, 'O papel do dono não muda por aqui.');
+  if (!alvo.profissionalId) throw new ErroNegocio(400, 'Essa pessoa não está ligada a um profissional.');
+  const profRef = ctx.negocioRef.collection('profissionais').doc(alvo.profissionalId);
+  const cfgRef = profRef.collection('privado').doc('config');
+  await firestore.runTransaction(async (tx) => {
+    const [profSnap, cfgSnap] = await Promise.all([tx.get(profRef), tx.get(cfgRef)]);
+    tx.update(firestore.collection('usuarios').doc(b.uid), { papel: b.papel, permissoes: E.permissoesDoPapel(b.papel), permissoesAlteradasEm: agora(), permissoesAlteradasPor: ctx.uid });
+    if (profSnap.exists) tx.update(profRef, { socio: b.papel === 'socio' });
+    const cfg = cfgSnap.exists ? cfgSnap.data() : {};
+    // Sócio começa SEM cobrar sinal (ele decide); funcionário volta a seguir o estabelecimento
+    tx.set(cfgRef, { ...cfg, sinal: { modo: b.papel === 'socio' ? 'desativado' : 'herdar' } });
+  });
+  return { sucesso: true, papel: b.papel };
+}
+
 async function alterar(firestore, ctx, b) {
+  if (b.papel !== undefined) return alterarPapel(firestore, ctx, b);
   exigirGerir(ctx);
   if (!E.permissoesValidas(b.permissoes)) throw new ErroNegocio(400, 'Permissões inválidas.');
   const novas = { verTodos: b.permissoes.verTodos, gerirNegocio: b.permissoes.gerirNegocio };
@@ -190,30 +211,51 @@ async function cancelarConvite(firestore, ctx, b) {
   return { sucesso: true };
 }
 
-// ---------------------------------------------------------------- perfil do profissional: Pix e preços próprios
+// ---------------------------------------------------------------- perfil do profissional: Pix, sinal e preços próprios
 // Quem pode: o PRÓPRIO profissional (a pessoa ligada a ele) ou o administrador pleno (vê tudo + gerencia). Dois sócios que
 // só gerenciam NÃO mexem na chave Pix nem nos preços um do outro — é dinheiro de cada um.
-function profissionalAlvo(ctx, b) {
+// Quem pode: se o profissional é de um SÓCIO, só o próprio sócio (o dono NÃO mexe no Pix/sinal/preços dele); nos demais
+// (o do próprio dono e os funcionários), só o dono. Funcionário não altera a própria configuração.
+async function profissionalAlvo(firestore, ctx, b) {
   const id = String(b.profissionalId || ctx.usuario.profissionalId || '');
   if (!id || id.length > 64 || id.includes('/')) throw new ErroNegocio(400, 'Profissional inválido.');
-  const admin = ctx.permissoes.verTodos && ctx.permissoes.gerirNegocio;
-  if (!admin && ctx.usuario.profissionalId !== id) throw new ErroNegocio(403, 'Você só pode alterar o seu próprio perfil.');
+  const ligados = await firestore.collection('usuarios').where('barbeariaId', '==', ctx.slug).where('profissionalId', '==', id).get();
+  const ligado = ligados.docs.map((d) => ({ uid: d.id, ...d.data() }))[0];
+  if (ligado && E.papelDe(ligado) === 'socio') {
+    if (ligado.uid !== ctx.uid) throw new ErroNegocio(403, 'A configuração de um sócio é só dele (chave Pix, sinal e preços).');
+    return id;
+  }
+  const dono = ctx.permissoes.verTodos && ctx.permissoes.gerirNegocio;
+  if (!dono) throw new ErroNegocio(403, 'Só o dono do estabelecimento altera esta configuração.');
   return id;
 }
 
+const configRef = (ctx, id) => ctx.negocioRef.collection('profissionais').doc(id).collection('privado').doc('config');
+
 async function pixProfissional(firestore, ctx, b) {
-  const id = profissionalAlvo(ctx, b);
+  const id = await profissionalAlvo(firestore, ctx, b);
   const profRef = ctx.negocioRef.collection('profissionais').doc(id);
   if (!(await profRef.get()).exists) throw new ErroNegocio(404, 'Profissional não encontrado.');
   const vazio = b.pix === null || (b.pix && typeof b.pix === 'object' && !String(b.pix.chavePix || '').trim());
   if (b.pix !== null && (!b.pix || typeof b.pix !== 'object')) throw new ErroNegocio(400, 'Dados do Pix inválidos.');
   const pix = vazio ? null : validarDadosPix(b.pix);
-  await profRef.update({ pix });                                   // null = volta a valer o Pix do negócio
+  const atual = (await configRef(ctx, id).get()).data() || {};
+  await configRef(ctx, id).set({ ...atual, pix });                // privado: só a própria pessoa (e o servidor) lê; null = sem Pix próprio
   return { sucesso: true, pix };
 }
 
+async function sinalProfissional(firestore, ctx, b) {
+  const id = await profissionalAlvo(firestore, ctx, b);
+  if (!(await ctx.negocioRef.collection('profissionais').doc(id).get()).exists) throw new ErroNegocio(404, 'Profissional não encontrado.');
+  const sinal = validarSinalPessoa(b.sinal);
+  const atual = (await configRef(ctx, id).get()).data() || {};
+  if (sinal.modo === 'ativo' && !(atual.pix && atual.pix.chavePix)) throw new ErroNegocio(400, 'Para cobrar sinal cadastre antes a sua chave Pix.');
+  await configRef(ctx, id).set({ ...atual, sinal });
+  return { sucesso: true, sinal };
+}
+
 async function precosProfissional(firestore, ctx, b) {
-  const id = profissionalAlvo(ctx, b);
+  const id = await profissionalAlvo(firestore, ctx, b);
   if (!(await ctx.negocioRef.collection('profissionais').doc(id).get()).exists) throw new ErroNegocio(404, 'Profissional não encontrado.');
   if (!b.precos || typeof b.precos !== 'object' || Array.isArray(b.precos)) throw new ErroNegocio(400, 'Preços inválidos.');
   const pedido = {};
@@ -236,6 +278,51 @@ async function precosProfissional(firestore, ctx, b) {
     });
   });
   return { sucesso: true };
+}
+
+// ---------------------------------------------------------------- aba Equipe: o dono responde "trabalho sozinho" ou "tenho equipe"
+async function equipeAtivar(firestore, ctx, b) {
+  if (!(ctx.permissoes.verTodos && ctx.permissoes.gerirNegocio)) throw new ErroNegocio(403, 'Só o dono do estabelecimento liga a equipe.');
+  if (typeof b.ativa !== 'boolean') throw new ErroNegocio(400, 'Resposta inválida.');
+  await firestore.collection('usuarios').doc(ctx.uid).update({ equipeAtiva: b.ativa });
+  return { sucesso: true, ativa: b.ativa };
+}
+
+// ---------------------------------------------------------------- serviços PRÓPRIOS do sócio
+// O sócio cria, edita e apaga serviços que só ele realiza (profissionaisIds = [ele]); o catálogo do estabelecimento é do dono.
+async function servicoProprio(firestore, ctx, b) {
+  const meu = ctx.usuario.profissionalId;
+  if (E.papelDe(ctx.usuario) !== 'socio' || !meu) throw new ErroNegocio(403, 'Só um sócio cria serviços próprios. O catálogo do estabelecimento é do dono.');
+  const servicos = ctx.negocioRef.collection('servicos');
+  if (b.operacao === 'apagar') {
+    const id = String(b.id || '');
+    if (!id || id.includes('/')) throw new ErroNegocio(400, 'Serviço inválido.');
+    const snap = await servicos.doc(id).get();
+    const ids = snap.exists ? snap.data().profissionaisIds : null;
+    if (!Array.isArray(ids) || ids.length !== 1 || ids[0] !== meu) throw new ErroNegocio(403, 'Você só apaga serviços que são só seus.');
+    await servicos.doc(id).delete();
+    return { sucesso: true };
+  }
+  const nome = E.texto(b.nome, 80);
+  const duracaoMin = Number(b.duracaoMin), preco = Number(b.preco);
+  if (nome.length < 2) throw new ErroNegocio(400, 'Digite o nome do serviço.');
+  if (!Number.isInteger(duracaoMin) || duracaoMin < 5 || duracaoMin > 720) throw new ErroNegocio(400, 'A duração vai de 5 a 720 minutos.');
+  if (!Number.isFinite(preco) || preco < 0 || preco > 100000) throw new ErroNegocio(400, 'O preço vai de 0 a 100.000.');
+  const foto = b.foto ? (fotoServicoValida(b.foto) ? b.foto : (() => { throw new ErroNegocio(400, 'Foto inválida.'); })()) : '';
+  const dados = { nome, duracaoMin, preco: Math.round(preco * 100) / 100, foto, ativo: b.ativo !== false, profissionaisIds: [meu] };
+  if (b.id) {
+    const id = String(b.id);
+    if (id.includes('/')) throw new ErroNegocio(400, 'Serviço inválido.');
+    const snap = await servicos.doc(id).get();
+    const ids = snap.exists ? snap.data().profissionaisIds : null;
+    if (!Array.isArray(ids) || ids.length !== 1 || ids[0] !== meu) throw new ErroNegocio(403, 'Você só altera serviços que são só seus.');
+    await servicos.doc(id).update(dados);
+    return { sucesso: true, id };
+  }
+  const total = (await servicos.get()).size;
+  const ref = servicos.doc();
+  await ref.set({ ...dados, ordem: total + 1 });
+  return { sucesso: true, id: ref.id };
 }
 
 // ---------------------------------------------------------------- ações do convidado
@@ -273,12 +360,20 @@ async function aceitar(firestore, b) {
     if (usuarioSnap.exists) throw new ErroNegocio(409, 'Esta conta já está vinculada a um negócio.');
     const c = conviteSnap.data();
     if (!c || c.usado) throw new ErroNegocio(410, 'Este convite já foi usado.');
+    const papel = E.PAPEIS.includes(convite.papel) ? convite.papel : (convite.permissoes && convite.permissoes.gerirNegocio ? 'socio' : 'funcionario');
+    let profSnap = null, cfgSnap = null;
+    const profRef = convite.profissionalId ? firestore.collection('barbearias').doc(slug).collection('profissionais').doc(convite.profissionalId) : null;
+    if (profRef) { profSnap = await tx.get(profRef); cfgSnap = await tx.get(profRef.collection('privado').doc('config')); }
     tx.set(usuarioRef, {
-      email: convite.email, nome: convite.nome, barbeariaId: slug, role: 'profissional',
+      email: convite.email, nome: convite.nome, barbeariaId: slug, role: 'profissional', papel,
       ...(convite.profissionalId ? { profissionalId: convite.profissionalId } : {}),
       permissoes: convite.permissoes, criadoEm: agora(), convidadoPor: convite.criadoPor
     });
     tx.update(conviteRef, { usado: true, usadoEm: agora(), usadoPor: decoded.uid });
+    if (profRef && profSnap.exists) {
+      tx.update(profRef, { socio: papel === 'socio' });                       // marca de sócio: o dono não lê o Pix/sinal dele
+      if (papel === 'socio') tx.set(profRef.collection('privado').doc('config'), { ...(cfgSnap.exists ? cfgSnap.data() : {}), sinal: { modo: 'desativado' } });   // sócio começa SEM cobrar sinal
+    }
   });
   return { sucesso: true, slug };
 }
@@ -298,6 +393,9 @@ module.exports = async function handler(req, res) {
       case 'convidar': return responder(res, 201, await convidar(firestore, await contexto(b, firestore), b));
       case 'alterar': return responder(res, 200, await alterar(firestore, await contexto(b, firestore), b));
       case 'remover': return responder(res, 200, await remover(firestore, await contexto(b, firestore), b));
+      case 'equipe-ativar': return responder(res, 200, await equipeAtivar(firestore, await contexto(b, firestore), b));
+      case 'sinal-profissional': return responder(res, 200, await sinalProfissional(firestore, await contexto(b, firestore), b));
+      case 'servico-proprio': return responder(res, 200, await servicoProprio(firestore, await contexto(b, firestore), b));
       case 'pix-profissional': return responder(res, 200, await pixProfissional(firestore, await contexto(b, firestore), b));
       case 'precos-profissional': return responder(res, 200, await precosProfissional(firestore, await contexto(b, firestore), b));
       case 'cancelar-convite': return responder(res, 200, await cancelarConvite(firestore, await contexto(b, firestore), b));

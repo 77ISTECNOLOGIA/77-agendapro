@@ -39,6 +39,13 @@ async function permitir(fake, uid, c) {
   }
 
   const sub = seg[2], id = seg[3];
+
+  // configuração PRIVADA da pessoa (Pix e sinal): a própria pessoa lê; o dono lê, exceto a de sócio; ninguém grava pelo navegador
+  if (sub === 'profissionais' && seg[4] === 'privado') {
+    if (c.op !== 'get') return 'privado: só leitura de um documento (gravação é só do servidor)';
+    const alvo = (await fake.doc(`barbearias/${slug}/profissionais/${id}`).get()).data() || {};
+    return (meu === id || (admin && !alvo.socio)) ? null : 'privado: só a própria pessoa (o dono não lê a de sócio)';
+  }
   switch (sub) {
     case 'servicos':
       if (c.op === 'get' || ehLista) return null;
@@ -46,7 +53,7 @@ async function permitir(fake, uid, c) {
     case 'profissionais':
       if (ehLista) return P.verTodos ? null : 'profissionais: lista só de quem vê tudo';
       if (c.op === 'get') return (P.verTodos || meu === id) ? null : 'profissionais: só o próprio';
-      if (c.op === 'update') return (admin || (meu && meu === id && chaves.every((k) => PERFIL_CAMPOS.includes(k)))) ? null : 'profissionais: update só admin ou o próprio e só ' + PERFIL_CAMPOS.join('/') + ' (tentou: ' + chaves.join(', ') + ')';
+      if (c.op === 'update') return (admin || (meu && meu === id && u.papel !== 'funcionario' && chaves.every((k) => PERFIL_CAMPOS.includes(k)))) ? null : 'profissionais: update só admin ou o próprio e só ' + PERFIL_CAMPOS.join('/') + ' (tentou: ' + chaves.join(', ') + ')';
       return admin ? null : 'profissionais: criar/apagar só admin';
     case 'agendamentos': {
       if (ehLista) return (P.verTodos || (meu && (c.filtros || []).some((f) => f.campo === 'profissionalId' && f.op === '==' && f.valor === meu))) ? null : 'agendamentos: consulta sem filtro do próprio profissional';

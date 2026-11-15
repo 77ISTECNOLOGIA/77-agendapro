@@ -21,13 +21,15 @@ fake.seed('barbearias/barbearia-do-joao/servicos/srv3', { nome: 'Corte + Barba',
 fake.seed('barbearias/barbearia-do-joao/servicos/srv1', { ...fake.get('barbearias/barbearia-do-joao/servicos/srv1'), precosProfissional: { prof2: { preco: 55, duracaoMin: 45 } } });   // Carlos cobra mais e demora mais no Corte
 semearNegocio(fake, 'barbearia-solo', { nome: 'Barbearia Solo' });   // um só profissional: o link pula a escolha do profissional
 // ---- Painéis (admin/convite) com SDK de mentira (tests/fake-sdk): logins de teste, senha "senha123"
-//   dono1@teste.com  → dono (acesso total, conta antiga)           socio1@teste.com → só vê o profissional Carlos (prof2)
-//   gerente1@teste.com → gerencia o negócio e vê só o profissional João (prof1)
-const CONTAS = { 'dono1@teste.com': 'dono1', 'socio1@teste.com': 'socio1', 'gerente1@teste.com': 'gerente1', 'adm1@teste.com': 'adm1' };
+//   dono1@teste.com  → DONO (conta antiga, ainda não respondeu "tenho equipe?")
+//   socio1@teste.com → SÓCIO (atende como Carlos, prof2)       func1@teste.com → FUNCIONÁRIO (atende como João, prof1)
+const CONTAS = { 'dono1@teste.com': 'dono1', 'socio1@teste.com': 'socio1', 'func1@teste.com': 'func1', 'adm1@teste.com': 'adm1' };
 fake.seed('admins77/adm1', { role: 'super_admin', nome: 'Admin 77', email: 'adm1@teste.com' });   // adm1@teste.com → painel interno da 77 IS (/painel77)
 fake.seed('usuarios/dono1', { barbeariaId: 'barbearia-do-joao', role: 'owner', nome: 'Dono Teste', email: 'dono1@teste.com' });
-fake.seed('usuarios/socio1', { barbeariaId: 'barbearia-do-joao', role: 'profissional', profissionalId: 'prof2', nome: 'Carlos Lima', email: 'socio1@teste.com', permissoes: { verTodos: false, gerirNegocio: false } });
-fake.seed('usuarios/gerente1', { barbeariaId: 'barbearia-do-joao', role: 'profissional', profissionalId: 'prof1', nome: 'João Silva', email: 'gerente1@teste.com', permissoes: { verTodos: false, gerirNegocio: true } });
+fake.seed('usuarios/socio1', { barbeariaId: 'barbearia-do-joao', role: 'profissional', papel: 'socio', profissionalId: 'prof2', nome: 'Carlos Lima', email: 'socio1@teste.com', permissoes: { verTodos: false, gerirNegocio: false } });
+fake.seed('usuarios/func1', { barbeariaId: 'barbearia-do-joao', role: 'profissional', papel: 'funcionario', profissionalId: 'prof1', nome: 'João Silva', email: 'func1@teste.com', permissoes: { verTodos: false, gerirNegocio: false } });
+fake.seed('barbearias/barbearia-do-joao/profissionais/prof2', { ...fake.get('barbearias/barbearia-do-joao/profissionais/prof2'), socio: true });
+fake.seed('barbearias/barbearia-do-joao/profissionais/prof2/privado/config', { sinal: { modo: 'desativado' } });
 const AG = (prof, nome, whats, dias, hora, servicos, valor, dur, status = 'confirmado') => ({ clienteNome: nome, clienteWhatsapp: whats, profissionalId: prof, profissionalNome: prof === 'prof1' ? 'João Silva' : 'Carlos Lima', servicos, dataChave: dataEmDias(dias), horario: hora, duracaoMin: dur, valorTotal: valor, status, criadoEm: new Date().toISOString(), origem: 'cliente' });
 fake.seed('barbearias/barbearia-do-joao/agendamentos/t1', AG('prof1', 'Maria do João', '5521999990001', 0, '16:00', [{ id: 'srv1', nome: 'Corte', preco: 40, duracaoMin: 30 }], 40, 30));
 fake.seed('barbearias/barbearia-do-joao/agendamentos/t2', AG('prof2', 'Pedro do Carlos', '5521999990002', 0, '17:00', [{ id: 'srv1', nome: 'Corte', preco: 55, duracaoMin: 45 }], 55, 45));

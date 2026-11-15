@@ -48,6 +48,15 @@ service cloud.firestore {
     // administrador pleno: vê tudo E gere o negócio (o dono de sempre)
     function admin(slug)        { return verTodos(slug) && gerirNegocio(slug); }
 
+    // Papel gravado (dono | socio | funcionario). Conta antiga sem papel: tratada como sócio nas regras de edição do próprio perfil.
+    function papelUsuario() { return usuarioDoc().get('papel', ''); }
+
+    // Profissional que é de um SÓCIO (marcado pelo servidor em `socio: true`): o dono não lê o Pix/sinal dele.
+    function profissionalEhSocio(slug, id) {
+      return exists(/databases/$(database)/documents/barbearias/$(slug)/profissionais/$(id))
+        && get(/databases/$(database)/documents/barbearias/$(slug)/profissionais/$(id)).data.get('socio', false) == true;
+    }
+
     function meuProfissional(slug) {
       return membro(slug) ? usuarioDoc().get('profissionalId', '') : '';
     }
@@ -133,10 +142,19 @@ service cloud.firestore {
         allow get: if verTodos(slug) || isSuperAdmin() || souOProfissional(slug, id);
         allow list: if verTodos(slug) || isSuperAdmin();
         allow create, delete: if admin(slug) || isSuperAdmin();
+        // Funcionário NÃO edita o próprio cadastro (o dono configura tudo dele); sócio edita horário/almoço/nome.
         allow update: if admin(slug) || isSuperAdmin()
           || (souOProfissional(slug, id)
+              && papelUsuario() != 'funcionario'
               && request.resource.data.diff(resource.data).affectedKeys()
                    .hasOnly(['horarioTrabalho', 'bloqueios', 'nome', 'especialidade']));
+
+        // Configuração PRIVADA da pessoa (Pix e sinal). Só o servidor grava (api/equipe.js). Lê: a própria pessoa; o dono,
+        // exceto quando o profissional é de um sócio.
+        match /privado/{doc} {
+          allow read: if isSuperAdmin() || souOProfissional(slug, id) || (admin(slug) && !profissionalEhSocio(slug, id));
+          allow write: if false;
+        }
       }
 
       // Tokens de notificação push. Quem vê tudo gerencia todos; cada pessoa da equipe lê, cria, atualiza e apaga só os
