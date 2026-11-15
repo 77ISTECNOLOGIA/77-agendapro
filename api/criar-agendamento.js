@@ -18,6 +18,7 @@ const {
 } = require('./_lib/tempo');
 const { verificarSlot } = require('./_lib/disponibilidade');
 const { slugValido, situacaoNegocio, profissionalRealizaServico, servicoParaProfissional } = require('./_lib/negocio');
+const { minutosLembrete, calcularLembreteAppEm } = require('./_lib/lembrete');
 const { dentroDoLimite, responder, ErroNegocio, tratarErro, corpoDe } = require('./_lib/http');
 const { notificarNovoAgendamento } = require('./_lib/notificar');
 const { invalidar } = require('./_lib/cache');
@@ -128,6 +129,9 @@ module.exports = async function handler(req, res) {
       origem: 'cliente',
       donoVe: donoVePara(prof)                     // false = agendamento de sócio (o dono não lê)
     };
+
+    const lembreteAppEm = calcularLembreteAppEm(dataChave, horario, minutosLembrete(info));   // aviso push ao cliente (se ele instalou o app)
+    if (lembreteAppEm) agendamento.lembreteAppEm = lembreteAppEm;
 
     // Sinal por Pix: o horário fica reservado (aguardando_sinal) até o cliente pagar e avisar, ou o prazo vencer
     const cfgSinal = configSinal(info, prof, privSnap.exists ? privSnap.data() : null);   // sinal e Pix de quem atende

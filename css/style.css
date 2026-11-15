@@ -904,3 +904,13 @@ input { font-family: inherit; }
 .banner-instalar .bi-sub strong { color: #fff; }
 .banner-instalar .bi-botao { margin-top: 10px; padding: 8px 16px; border: 0; border-radius: 9px; background: #0077FF; color: #fff; font-weight: 700; font-size: 13px; cursor: pointer; }
 .banner-instalar .bi-fechar { position: absolute; top: 6px; right: 8px; width: 28px; height: 28px; border: 0; background: transparent; color: #8a8a98; font-size: 20px; line-height: 1; cursor: pointer; }
+
+/* Cartão "Receber lembrete do horário" (link do cliente) - js/avisos-cliente.js */
+.card-avisos { display: flex; gap: 12px; align-items: flex-start; margin: 16px 0 4px; padding: 14px; background: #14141c; border: 1px solid #262636; border-radius: 14px; color: #fff; text-align: left; }
+.card-avisos.hidden { display: none; }
+.card-avisos .ca-sino { flex: 0 0 auto; font-size: 20px; line-height: 1.2; }
+.card-avisos .ca-titulo { font-weight: 700; font-size: 14px; }
+.card-avisos .ca-sub { margin-top: 3px; font-size: 12.5px; line-height: 1.45; color: #b4b4c0; }
+.card-avisos .ca-sub strong { color: #fff; }
+.card-avisos .bi-botao { margin-top: 10px; padding: 8px 16px; border: 0; border-radius: 9px; background: #0077FF; color: #fff; font-weight: 700; font-size: 13px; cursor: pointer; }
+.card-avisos .bi-botao:disabled { opacity: 0.6; }

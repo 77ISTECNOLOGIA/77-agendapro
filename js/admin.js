@@ -5,7 +5,7 @@
 import { db } from './firebase-config.js';
 import { toast } from './toast.js';
 import { ligarBuscaCep, UFS } from './cep.js';
-import { urlMapa, consultaMapa, pausaDoDia, validarPausaDia, permissoesDe, papelDe as papelNomeDe, clientesDosAgendamentos, servicoParaProfissional, precosProfissionalValidos, temPrecoPorProfissional } from './utils.js';
+import { urlMapa, consultaMapa, pausaDoDia, validarPausaDia, permissoesDe, papelDe as papelNomeDe, clientesDosAgendamentos, servicoParaProfissional, precosProfissionalValidos, temPrecoPorProfissional, minutosLembrete, calcularLembreteAppEm } from './utils.js';
 import { escapeHtml, adicionarMostrarSenha, profissionalRealizaServico, calcularVinculosProfissional, atendimentosParaResolver, periodoPronto, resumoPeriodo, fotoServicoValida } from './utils.js';
 import { aplicarTema, resetarTema } from './vocabulario.js';
 import {
@@ -27,6 +27,7 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
+  deleteField,
   addDoc,
   writeBatch,
   onSnapshot,
@@ -1297,11 +1298,13 @@ function modalRemarcarAgendamento(id) {
         dataChave: novaData,
         horario: novoHorario,
         lembreteEnviado: false,
+        lembreteAppEm: calcularLembreteAppEm(novaData, novoHorario, minutosLembrete(state.barbearia)) || deleteField(),
         remarcadoEm: new Date().toISOString(),
         remarcadoPor: 'dono',
         remarcadoDeDataChave: a.dataChave,
         remarcadoDeHorario: a.horario
       });
+      avisarCliente(id, 'remarcado');
       toast('Agendamento remarcado', 'sucesso');
       fecharModal();
     } catch (err) {
@@ -1445,10 +1448,22 @@ function renderizarPendencias() {
 // o tempo passa mesmo sem nenhuma alteração no banco: reavalia a cada minuto
 setInterval(() => { if (state.dadosCarregados) renderizarPendencias(); }, 60000);
 
+// Avisa o cliente (push no app dele) do que o estabelecimento acabou de fazer. Melhor esforço, sem travar a tela:
+// o servidor confere no banco se aquilo realmente aconteceu e monta o texto.
+async function avisarCliente(agendamentoId, tipo) {
+  try {
+    await fetch('/api/recorrencia', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken: await auth.currentUser.getIdToken(), action: 'avisar-cliente', agendamentoId, tipo })
+    });
+  } catch (_) { /* sem rede: o cliente só não recebe o aviso */ }
+}
+
 async function confirmarSinal(id) {
   try {
     await updateDoc(doc(db, 'barbearias', state.barbeariaId, 'agendamentos', id), { status: 'confirmado', sinalConfirmadoEm: new Date().toISOString() });
     fecharModal();
+    avisarCliente(id, 'sinal-confirmado');
     toast('Sinal confirmado! Agendamento confirmado. ✓', 'sucesso');
   } catch (err) {
     toast('Erro ao confirmar o pagamento', 'erro');
@@ -1460,6 +1475,7 @@ async function recusarSinal(id) {
   try {
     await updateDoc(doc(db, 'barbearias', state.barbeariaId, 'agendamentos', id), { status: 'cancelado', canceladoEm: new Date().toISOString(), canceladoPor: 'sinal-recusado' });
     fecharModal();
+    avisarCliente(id, 'sinal-recusado');
     toast('Pagamento recusado. Horário liberado.', 'sucesso');
   } catch (err) {
     toast('Erro ao recusar o pagamento', 'erro');
@@ -1488,6 +1504,7 @@ async function cancelarAgendamento(id, motivo = null) {
       ...(motivo ? { motivoCancelamento: motivo } : {})
     });
     fecharModal();
+    if (!motivo) avisarCliente(id, 'cancelado');          // "cliente faltou" não avisa ninguém
     toast('Agendamento cancelado', 'sucesso');
   } catch (err) {
     toast('Erro ao cancelar', 'erro');
@@ -1811,6 +1828,7 @@ async function salvarNovoAgendamento() {
       status: 'confirmado',
       criadoEm: new Date().toISOString(),
       origem: 'dono',
+      ...(calcularLembreteAppEm(dataStr, horario, minutosLembrete(state.barbearia)) ? { lembreteAppEm: calcularLembreteAppEm(dataStr, horario, minutosLembrete(state.barbearia)) } : {}),
       donoVe: state.profissionais[profId].socio !== true     // agendamento na agenda de sócio = privado dele
     });
 
@@ -2971,6 +2989,7 @@ function preencherRegrasAgendamento() {
   $('#sinal-cidade-recebedor').value = sinal.cidadeRecebedor || '';
   $('#sinal-banco').value = sinal.banco || '';
   $('#limite-semana').value = state.barbearia.limiteAgendamentosSemana || 0;
+  $('#lembrete-cliente-min').value = String(minutosLembrete(state.barbearia));
   // Chave Pix do negócio: só o administrador pleno altera (os demais gerentes usam o Pix próprio, em Meu perfil)
   const soAdmin = !(state.papel.verTodos && state.papel.gerirNegocio);
   ['#sinal-tipo-chave', '#sinal-chave', '#sinal-nome-recebedor', '#sinal-cidade-recebedor', '#sinal-banco'].forEach((s) => { $(s).disabled = soAdmin; });
@@ -2997,6 +3016,7 @@ async function salvarRegrasAgendamento() {
       body: JSON.stringify({
         idToken: await auth.currentUser.getIdToken(),
         limiteAgendamentosSemana: Number($('#limite-semana').value || 0),
+        lembreteClienteMin: Number($('#lembrete-cliente-min').value),
         sinal: {
           ativo: $('#sinal-ativo').checked,
           percentual: Number($('#sinal-percentual').value),

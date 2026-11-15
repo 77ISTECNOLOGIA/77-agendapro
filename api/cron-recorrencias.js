@@ -14,6 +14,7 @@ const { renovarSeries } = require('./_lib/recorrencia');
 const { avisarPendentes, limparSinaisVencidos } = require('./_lib/pendencias');
 const { situacaoNegocio } = require('./_lib/negocio');
 const { responder, tratarErro } = require('./_lib/http');
+const { enviarLembretesVencidos } = require('./_lib/lembrete');
 
 module.exports = async function handler(req, res) {
   const segredo = process.env.CRON_SECRET;
@@ -21,6 +22,11 @@ module.exports = async function handler(req, res) {
   if (!segredo || enviado !== `Bearer ${segredo}`) return responder(res, 401, { erro: 'Não autorizado' });
 
   try {
+    // Chamada leve a cada ~10 min (cron-job.org): só os lembretes ao cliente que já venceram. Não mexe em horários fixos nem pendências.
+    if (String((req.query && req.query.tarefa) || '') === 'lembretes') {
+      return responder(res, 200, { sucesso: true, ...(await enviarLembretesVencidos(agoraBrasil())) });
+    }
+
     const firestore = db();
     const hojeChave = hojeChaveBrasil();
     const agora = agoraBrasil();
@@ -43,6 +49,7 @@ module.exports = async function handler(req, res) {
     };
     const LOTE = 5;
     for (let i = 0; i < negocios.docs.length; i += LOTE) await Promise.all(negocios.docs.slice(i, i + LOTE).map(processar));
+    total.lembretes = await enviarLembretesVencidos(agora).catch((e) => { console.error('Falha nos lembretes ao cliente:', e); return null; });   // reforço do cron diário
     return responder(res, 200, { sucesso: true, ...total });
   } catch (err) {
     return tratarErro(res, err, 'cron-recorrencias');

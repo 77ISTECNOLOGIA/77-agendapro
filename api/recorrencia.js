@@ -80,6 +80,25 @@ module.exports = async function handler(req, res) {
     const agora = agoraBrasil();
     const seriesRef = negocioRef.collection('recorrencias');
 
+    // Avisa o CLIENTE (push no app dele) de algo que o estabelecimento fez: cancelou, remarcou, confirmou/recusou o sinal.
+    // O texto vem do que está no banco (nunca do navegador) e o tipo precisa bater com o estado real do agendamento, feito há pouco.
+    if (b.action === 'avisar-cliente') {
+      const id = String(b.agendamentoId || '');
+      if (!id || id.length > 64 || id.includes('/')) throw new ErroNegocio(400, 'Agendamento inválido');
+      const ag = (await negocioRef.collection('agendamentos').doc(id).get()).data();
+      if (!ag) throw new ErroNegocio(404, 'Agendamento não encontrado');
+      if (!((veTodos && ag.donoVe === true) || (meuProfissional && ag.profissionalId === meuProfissional))) throw new ErroNegocio(403, 'Esse agendamento não é da sua agenda.');
+      const recente = (iso) => !!iso && Date.now() - Date.parse(iso) < 10 * 60 * 1000;
+      const tipo = String(b.tipo || '');
+      const ok = (tipo === 'cancelado' && ag.status === 'cancelado' && ag.canceladoPor !== 'cliente' && ag.canceladoPor !== 'sinal-recusado' && recente(ag.canceladoEm))
+        || (tipo === 'remarcado' && ag.remarcadoPor === 'dono' && recente(ag.remarcadoEm))
+        || (tipo === 'sinal-confirmado' && ag.status === 'confirmado' && recente(ag.sinalConfirmadoEm))
+        || (tipo === 'sinal-recusado' && ag.status === 'cancelado' && ag.canceladoPor === 'sinal-recusado' && recente(ag.canceladoEm));
+      if (!ok) return responder(res, 200, { enviado: false });          // nada a avisar (ou já passou o momento)
+      const r = await require('./_lib/lembrete').avisarClienteAlteracao(negocioRef, id, ag, tipo, info.nome);
+      return responder(res, 200, { enviado: r.enviadas > 0 });
+    }
+
     // encerrar e listar valem mesmo com a conta suspensa; o resto só com o negócio ativo
     if (!['encerrar', 'listar'].includes(b.action)) {
       const s = situacaoNegocio(info);

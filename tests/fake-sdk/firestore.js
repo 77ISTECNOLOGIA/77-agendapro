@@ -70,3 +70,4 @@ export function onSnapshot(alvo, cb, erro) {
   return () => { ativo = false; };
 }
 export async function getCountFromServer(alvo) { const n = (await listar(alvo)).size; return { data: () => ({ count: n }) }; }
+export function deleteField() { return null; }

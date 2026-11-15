@@ -21,6 +21,7 @@
   <link rel="modulepreload" href="js/utils.js">
   <link rel="modulepreload" href="js/toast.js">
   <link rel="modulepreload" href="js/instalar.js">
+  <link rel="modulepreload" href="js/avisos-cliente.js">
   <link rel="modulepreload" href="js/vocabulario.js">
 
   <!-- Fonts -->
@@ -230,6 +231,8 @@
           <!-- Resumo final renderizado dinamicamente -->
         </div>
 
+        <div id="card-avisos-sucesso" class="card-avisos hidden"></div>
+
         <button id="btn-novo" class="btn" type="button">Fazer novo agendamento</button>
         <button id="btn-ver-meus" class="btn btn-outline" type="button" style="margin-top:10px;">Ver meus agendamentos</button>
         <button id="btn-inicio" class="link-secundario" type="button">← Voltar ao início</button>
@@ -277,6 +280,7 @@
           <div id="lista-meus-agendamentos" class="lista-meus-agendamentos">
             <!-- Renderizado dinamicamente -->
           </div>
+          <div id="card-avisos-lista" class="card-avisos hidden"></div>
         </div>
 
         <div id="painel-remarcar" class="hidden">

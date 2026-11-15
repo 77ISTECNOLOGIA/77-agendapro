@@ -19,6 +19,7 @@
 const { agoraBrasil, somarDias, diaSemanaDaChave, DIAS_SEMANA } = require('./tempo');
 const { verificarSlot } = require('./disponibilidade');
 const { situacaoNegocio, profissionalRealizaServico, servicoParaProfissional } = require('./negocio');
+const { minutosLembrete, calcularLembreteAppEm } = require('./lembrete');
 
 const DIA_RENOVACAO = 20;       // a partir deste dia do mês, já gera o mês seguinte
 const MAX_DATAS_POR_GERACAO = 70;
@@ -125,7 +126,8 @@ async function gerarOcorrencias({ firestore, negocioRef, info, serieId, serie, h
       if (serieId && dia.some((a) => a.recorrenciaId === serieId)) return { jaExiste: true };
       const v = verificarSlot({ prof: ctx.prof, info, agendamentos: dia, dataChave, horario: serie.horario, duracaoMin: ctx.duracaoMin, agora });
       if (!v.ok) return { motivo: v.motivo };
-      tx.set(novoRef, { ...base, dataChave, criadoEm: new Date().toISOString() });
+      const lembreteAppEm = calcularLembreteAppEm(dataChave, serie.horario, minutosLembrete(info));
+      tx.set(novoRef, { ...base, dataChave, criadoEm: new Date().toISOString(), ...(lembreteAppEm ? { lembreteAppEm } : {}) });
       return { criada: true };
     });
 

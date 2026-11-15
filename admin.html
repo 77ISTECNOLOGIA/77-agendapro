@@ -522,6 +522,18 @@
               <input type="number" id="limite-semana" class="input" min="0" max="14" step="1" value="0" style="max-width:140px;">
               <small class="campo-help">Semana de segunda a domingo, contada por WhatsApp. 0 = sem limite. Não vale para os agendamentos que você mesmo cria no painel.</small>
             </div>
+            <div class="input-grupo" style="margin-top:6px;">
+              <label class="input-label">LEMBRETE AO CLIENTE (APP INSTALADO NO CELULAR)</label>
+              <select id="lembrete-cliente-min" class="input" style="max-width:260px;">
+                <option value="0">Não avisar</option>
+                <option value="30">30 minutos antes</option>
+                <option value="60">1 hora antes</option>
+                <option value="120">2 horas antes</option>
+                <option value="180">3 horas antes</option>
+                <option value="1440">1 dia antes</option>
+              </select>
+              <small class="campo-help">Só chega para quem instalou o app do seu link na tela inicial e ativou os avisos. Vale para os agendamentos novos e remarcados.</small>
+            </div>
             <button type="button" id="btn-salvar-sinal" class="btn-acao" style="margin-top:14px;">Salvar regras de agendamento</button>
           </div>
 

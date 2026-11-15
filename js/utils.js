@@ -279,3 +279,19 @@ export function papelDe(usuario) {
   const p = permissoesDe(usuario);
   return p.verTodos && p.gerirNegocio ? 'dono' : 'socio';
 }
+
+// ---- Lembrete push ao cliente. Mesma regra de api/_lib/lembrete.js (teste confere): `lembreteAppEm` = "AAAA-MM-DDTHH:MM"
+// (horário de Brasília) de quando o aviso deve sair; vazio = não avisar. A rotina do servidor só consulta os vencidos.
+export const OPCOES_LEMBRETE_MIN = [0, 30, 60, 120, 180, 1440];
+export function minutosLembrete(info) {
+  const v = info && info.lembreteClienteMin;
+  return OPCOES_LEMBRETE_MIN.includes(v) ? v : 60;
+}
+export function calcularLembreteAppEm(dataChave, horario, minutosAntes) {
+  if (!minutosAntes || minutosAntes <= 0) return null;
+  const [a, m, d] = String(dataChave).split('-').map(Number);
+  const [hh, mm] = String(horario).split(':').map(Number);
+  const t = new Date(Date.UTC(a, m - 1, d, hh, mm) - minutosAntes * 60000);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${t.getUTCFullYear()}-${p(t.getUTCMonth() + 1)}-${p(t.getUTCDate())}T${p(t.getUTCHours())}:${p(t.getUTCMinutes())}`;
+}

@@ -32,6 +32,8 @@ const { executarSinal } = require('./_lib/sinal-acoes');
 const { slugValido, situacaoNegocio } = require('./_lib/negocio');
 const { statusEfetivo, contarNaSemana, limiteSemanal, semanaDaChave, ocupaHorario } = require('./_lib/sinal');
 const { dentroDoLimite, responder, ErroNegocio, tratarErro, corpoDe } = require('./_lib/http');
+const { minutosLembrete, calcularLembreteAppEm, idAparelho, MAX_APARELHOS_POR_WHATSAPP } = require('./_lib/lembrete');
+const { FieldValue } = require('./_lib/firebase');
 
 const LIMITE_REMARCACOES_CLIENTE = 1;
 const HISTORICO_DIAS = 60;
@@ -59,7 +61,8 @@ module.exports = async function handler(req, res) {
     return responder(res, 429, { erro: 'Muitas tentativas. Aguarde um minuto e tente de novo.' });
   }
 
-  const { slug: slugRaw, whatsapp, action, agendamentoId, novaDataChave, novoHorario } = corpoDe(req);
+  const corpoReq = corpoDe(req);
+  const { slug: slugRaw, whatsapp, action, agendamentoId, novaDataChave, novoHorario } = corpoReq;
   const slug = String(slugRaw || '').toLowerCase();
 
   if (!slugValido(slug) || !whatsapp || !action) {
@@ -90,6 +93,32 @@ module.exports = async function handler(req, res) {
         .map(publico)
         .sort((a, b) => (a.dataChave + a.horario).localeCompare(b.dataChave + b.horario));
       return responder(res, 200, { agendamentos: meus });
+    }
+
+    // Avisos no celular do cliente (app instalado): registra/remove o aparelho. Só para quem já tem agendamento neste negócio
+    // (nenhum agendamento = ninguém a avisar) e no máximo ${MAX_APARELHOS_POR_WHATSAPP} aparelhos por WhatsApp.
+    if (action === 'aparelho-registrar' || action === 'aparelho-remover') {
+      const token = String(corpoReq.token || '');
+      if (token.length < 20 || token.length > 4096) return responder(res, 400, { erro: 'Aparelho inválido' });
+      const dispRef = negocioRef.collection('dispositivosCliente');
+      if (action === 'aparelho-remover') {
+        const doc = dispRef.doc(idAparelho(token));
+        const atual = await doc.get();
+        if (atual.exists && atual.data().whatsapp === whatsNorm) await doc.delete();
+        return responder(res, 200, { sucesso: true });
+      }
+      const temAg = await agsRef.where('clienteWhatsapp', '==', whatsNorm).limit(1).get();
+      if (temAg.empty) return responder(res, 404, { erro: 'Faça um agendamento primeiro para receber os avisos.' });
+      const meus = await dispRef.where('whatsapp', '==', whatsNorm).get();
+      const jaExiste = meus.docs.some((d) => d.id === idAparelho(token));
+      if (!jaExiste && meus.size >= MAX_APARELHOS_POR_WHATSAPP) {
+        const maisAntigo = meus.docs.slice().sort((a, b) => String(a.data().atualizadoEm || '').localeCompare(String(b.data().atualizadoEm || '')))[0];
+        await maisAntigo.ref.delete();            // abre vaga: o aparelho mais antigo sai
+      }
+      await dispRef.doc(idAparelho(token)).set({
+        whatsapp: whatsNorm, token, aparelho: String(corpoReq.aparelho || '').replace(/[\u0000-\u001f]/g, ' ').slice(0, 60), atualizadoEm: new Date().toISOString()
+      });
+      return responder(res, 200, { sucesso: true });
     }
 
     if (action === 'sinal-dados' || action === 'sinal-informar') {
@@ -186,6 +215,7 @@ module.exports = async function handler(req, res) {
         dataChave: novaDataChave,
         horario: novoHorario,
         lembreteEnviado: false,
+        lembreteAppEm: calcularLembreteAppEm(novaDataChave, novoHorario, minutosLembrete(info)) || FieldValue.delete(),
         remarcadoEm: new Date().toISOString(),
         remarcadoPor: 'cliente',
         remarcadoDeDataChave: ag.dataChave,

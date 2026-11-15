@@ -4,6 +4,8 @@
 
 const path = require('node:path');
 
+const APAGAR = { __apagar: true };
+
 class Snap {
   constructor(ref, dado) { this.ref = ref; this.id = ref.id; this._d = dado; this.exists = dado !== undefined; }
   data() { return this._d === undefined ? undefined : structuredClone(this._d); }
@@ -18,6 +20,7 @@ class FakeDb {
   constructor() { this.docs = new Map(); this.seq = 0; this.stats = { leituras: 0, escritas: 0, apagadas: 0 }; }   // stats: o que o Firestore cobraria (simulação de consumo)
   zerarStats() { this.stats = { leituras: 0, escritas: 0, apagadas: 0 }; }
   collection(p) { return new Col(this, p); }
+  collectionGroup(nome) { const q = new Query(this, '', []); q.grupo = nome; return q; }
   doc(p) { const i = p.lastIndexOf('/'); return new Doc(this, p.slice(0, i), p.slice(i + 1)); }
   async recursiveDelete(ref) {
     for (const k of [...this.docs.keys()]) if (k === ref.path || k.startsWith(ref.path + '/')) this.docs.delete(k);
@@ -39,7 +42,13 @@ class Doc {
   async update(d) {
     this.db.stats.escritas += 1;
     if (!this.db.docs.has(this.path)) throw new Error(`update em doc inexistente: ${this.path}`);
-    this.db.docs.set(this.path, { ...this.db.docs.get(this.path), ...structuredClone(d) });
+    const novo = { ...this.db.docs.get(this.path) };
+    for (const [k, v] of Object.entries(d)) { if (v === APAGAR) delete novo[k]; else novo[k] = structuredClone(v); }
+    this.db.docs.set(this.path, novo);
+  }
+  get parent() {
+    const i = this.colPath.lastIndexOf('/');
+    return { id: this.colPath.slice(i + 1), parent: i < 0 ? null : this.db.doc(this.colPath.slice(0, i)) };
   }
   async delete() { this.db.stats.apagadas += 1; this.db.docs.delete(this.path); }
   collection(nome) { return new Col(this.db, `${this.path}/${nome}`); }
@@ -47,14 +56,22 @@ class Doc {
 
 class Query {
   constructor(db, colPath, filtros = []) { this.db = db; this.colPath = colPath; this.filtros = filtros; }
-  where(campo, op, valor) { return new Query(this.db, this.colPath, [...this.filtros, { campo, op, valor }]); }
+  where(campo, op, valor) { const q = new Query(this.db, this.colPath, [...this.filtros, { campo, op, valor }]); q.grupo = this.grupo; q.limite = this.limite; return q; }
+  limit(n) { const q = new Query(this.db, this.colPath, this.filtros); q.grupo = this.grupo; q.limite = n; return q; }
   count() { const q = this; return { get: async () => { const n = (await q.get()).size; return { data: () => ({ count: n }) }; } }; }
   async get() {
     const docs = [];
     for (const [p, d] of this.db.docs) {
-      if (!p.startsWith(this.colPath + '/')) continue;
-      const resto = p.slice(this.colPath.length + 1);
-      if (resto.includes('/')) continue;
+      let colPath = this.colPath, resto;
+      if (this.grupo) {
+        const seg = p.split('/');
+        if (seg.length < 2 || seg[seg.length - 2] !== this.grupo) continue;
+        resto = seg[seg.length - 1]; colPath = seg.slice(0, -1).join('/');
+      } else {
+        if (!p.startsWith(this.colPath + '/')) continue;
+        resto = p.slice(this.colPath.length + 1);
+        if (resto.includes('/')) continue;
+      }
       const ok = this.filtros.every(({ campo, op, valor }) => {
         const v = d[campo];
         if (op === '==') return v === valor;
@@ -64,7 +81,8 @@ class Query {
         if (op === '<=') return v !== undefined && v <= valor;
         throw new Error(`operador não suportado no fake: ${op}`);
       });
-      if (ok) docs.push(new Snap(new Doc(this.db, this.colPath, resto), d));
+      if (ok) docs.push(new Snap(new Doc(this.db, colPath, resto), d));
+      if (this.limite && docs.length >= this.limite) break;
     }
     this.db.stats.leituras += Math.max(1, docs.length);   // consulta vazia também custa 1 leitura
     return new QuerySnap(docs);
@@ -108,7 +126,7 @@ function montarAmbiente() {
         notificacoes.push(m);
       }
     }),
-    FieldValue: {}
+    FieldValue: { delete: () => APAGAR }
   };
   const caminho = require.resolve(path.join(__dirname, '..', 'api', '_lib', 'firebase.js'));
   require.cache[caminho] = { id: caminho, filename: caminho, loaded: true, exports: fakeFirebase };

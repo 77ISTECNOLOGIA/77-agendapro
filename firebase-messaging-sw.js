@@ -54,7 +54,7 @@ messaging.onBackgroundMessage(async (payload) => {
   const corpo = (payload.notification && payload.notification.body) || '';
   return self.registration.showNotification(titulo, {
     body: corpo, icon: ICONE_77, badge: ICONE_77, tag,
-    data: { reserva: true, agendamentoId: (payload.data && payload.data.agendamentoId) || null }
+    data: { reserva: true, agendamentoId: (payload.data && payload.data.agendamentoId) || null, link: (payload.data && payload.data.link) || null }
   });
 });
 
@@ -64,6 +64,15 @@ self.addEventListener('notificationclick', (event) => {
   const dados = event.notification.data;
   if (!dados || !dados.reserva) return;
   event.notification.close();
+  // aviso para o CLIENTE: abre (ou foca) o link do estabelecimento
+  if (dados.link) {
+    event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (janelas) => {
+      const alvo = janelas.find((j) => j.url && j.url.split('?')[0] === dados.link.split('?')[0]);
+      if (alvo && 'focus' in alvo) return alvo.focus();
+      return self.clients.openWindow(dados.link);
+    }));
+    return;
+  }
   const id = dados.agendamentoId;
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (janelas) => {

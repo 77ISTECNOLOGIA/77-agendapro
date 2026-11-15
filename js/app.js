@@ -8,6 +8,7 @@
 import { aplicarTema } from './vocabulario.js';
 import { toast } from './toast.js';
 import { iniciarInstalacao, mostrarConvite } from './instalar.js';
+import { mostrarCartaoAvisos } from './avisos-cliente.js';
 import { escapeHtml, profissionalRealizaServico, fotoServicoValida, urlMapa, urlAppleMaps, ehAppleMobile, pausaDoDia, servicoParaProfissional } from './utils.js';
 
 // ========================================
@@ -1072,7 +1073,8 @@ function renderizarTelaSucesso(agendamentoId) {
   `;
 
   renderizarBotaoAgenda(data, fimMin, prof, servicos);
-  mostrarConvite('sucesso');                              // hora em que o cliente mais quer o lembrete
+  mostrarConvite('sucesso');
+  mostrarCartaoAvisos($('#card-avisos-sucesso'), { slug: state.slug, whatsapp: state.cliente.whatsapp }, toast);                              // hora em que o cliente mais quer o lembrete
 }
 
 function renderizarBotaoAgenda(data, fimMin, prof, servicos) {
@@ -1162,6 +1164,7 @@ async function carregarMeusAgendamentos() {
     const dados = await resp.json();
     state.meusAgendamentos = dados.agendamentos || [];
     renderizarMeusAgendamentos();
+    if (state.meusAgendamentos.length) mostrarCartaoAvisos($('#card-avisos-lista'), { slug: state.slug, whatsapp: state.cliente.whatsapp }, toast);
   } catch (err) {
     console.error('Erro ao carregar agendamentos:', err);
     $('#lista-meus-agendamentos').innerHTML = '<div class="horario-placeholder">Erro ao carregar. Tente novamente.</div>';

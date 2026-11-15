@@ -147,7 +147,7 @@ test('service worker: se o Firebase NÃO mostrou, mostra UMA própria (o iPhone 
   assert.equal(sw.mostradas.length, 1);
   assert.equal(sw.mostradas[0].body, 'Maria — hoje');
   assert.equal(sw.mostradas[0].tag, 'agendamento-A1');
-  assert.deepEqual(JSON.parse(JSON.stringify(sw.mostradas[0].data)), { reserva: true, agendamentoId: 'A1' });
+  assert.deepEqual(JSON.parse(JSON.stringify(sw.mostradas[0].data)), { reserva: true, agendamentoId: 'A1', link: null });
 });
 
 test('service worker: notificação ANTIGA de outro agendamento não impede de mostrar a nova', async () => {

@@ -63,6 +63,12 @@ module.exports = async function handler(req, res) {
       mudancas.limiteAgendamentosSemana = limite;
       resposta.limiteAgendamentosSemana = limite;
     }
+    if (b.lembreteClienteMin !== undefined) {
+      const min = Number(b.lembreteClienteMin);
+      if (!require('./_lib/lembrete').OPCOES_MINUTOS.includes(min)) throw new ErroNegocio(400, 'Antecedência do lembrete inválida.');
+      mudancas.lembreteClienteMin = min;
+      resposta.lembreteClienteMin = min;
+    }
     if (b.sinal !== undefined) {
       // A chave Pix do NEGÓCIO (e quem recebe) só o administrador pleno (vê tudo + gerencia) altera: ela vale para todo
       // profissional sem Pix próprio, e sócios de mesmo nível não podem desviar o sinal um do outro. Os demais gerentes
