@@ -104,6 +104,7 @@ async function gerarOcorrencias({ firestore, negocioRef, info, serieId, serie, h
     valorTotal: ctx.valorTotal,
     status: 'confirmado',
     origem: 'dono-recorrente',
+    donoVe: !(ctx.prof && ctx.prof.socio === true),     // agendamento de sócio: o dono não lê (api/_lib/privacidade.js)
     recorrenciaId: serieId || null
   };
 

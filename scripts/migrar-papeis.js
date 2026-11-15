@@ -8,7 +8,9 @@
 //  - o profissional de cada sócio ganha `socio: true`, e a config privada dele (profissionais/{id}/privado/config) recebe
 //    sinal {modo:'desativado'} (sócio começa sem cobrar) — se ainda não tiver sinal definido;
 //  - Pix que estava no documento do profissional (`pix`) vai para a config privada e sai do documento (o dono lê esse documento);
-//  - dono de negócio que já tem mais de um login ganha `equipeAtiva: true` (a aba Equipe já aparece para ele).
+//  - dono de negócio que já tem mais de um login ganha `equipeAtiva: true` (a aba Equipe já aparece para ele);
+//  - PRIVACIDADE DO SÓCIO: todo agendamento e ficha de cliente ganha `donoVe` (false = de sócio: o dono não lê); as fichas de
+//    cliente de sócio vão para clientes/{profissionalId}__{whatsapp}; aparelhos de push antigos (sem uid) passam a ser do dono.
 // Não apaga nenhum agendamento, serviço ou cliente.
 
 const path = require('path');
@@ -17,6 +19,7 @@ const aplicar = process.argv.includes('--aplicar');
 const app = admin.initializeApp({ credential: admin.credential.cert(require(path.join(__dirname, 'serviceAccountKey.json'))) });
 const db = admin.firestore(app);
 const { FieldValue } = admin.firestore;
+const { reaplicarSocio } = require('../api/_lib/privacidade');
 
 const TOTAL = { verTodos: true, gerirNegocio: true };
 const NADA = { verTodos: false, gerirNegocio: false };
@@ -73,6 +76,30 @@ const permissoesDe = (u) => (u.permissoes && typeof u.permissoes === 'object')
       });
     }
   }
+  // ---- privacidade do sócio: donoVe em tudo + fichas separadas + aparelhos antigos
+  for (const [slug, membros] of Object.entries(porNegocio)) {
+    const negocioRef = db.collection('barbearias').doc(slug);
+    const profs = await negocioRef.collection('profissionais').get();
+    const socios = new Set(profs.docs.filter((p) => p.data().socio === true || membros.some((m) => m.profissionalId === p.id && (m.papel === 'socio' || (!m.papel && !(permissoesDe(m).verTodos && permissoesDe(m).gerirNegocio))))).map((p) => p.id));
+    // sócios: reaplica (marca donoVe=false nos agendamentos e separa as fichas) — usa o profissional como está no banco
+    for (const profId of socios) {
+      const ags = await negocioRef.collection('agendamentos').where('profissionalId', '==', profId).get();
+      const faltam = ags.docs.filter((d) => d.data().donoVe !== false).length;
+      if (faltam || ags.size) await fazer(`${slug}: privacidade do sócio (${profs.docs.find((p) => p.id === profId).data().nome}): ${faltam} agendamento(s) a marcar, fichas de cliente a separar`, () => reaplicarSocio(db, negocioRef, profId, true));
+    }
+    // demais agendamentos e fichas: donoVe = true quando ainda não têm a marca
+    const todosAgs = await negocioRef.collection('agendamentos').get();
+    const semMarca = todosAgs.docs.filter((d) => d.data().donoVe === undefined);
+    if (semMarca.length) await fazer(`${slug}: ${semMarca.length} agendamento(s) sem marca donoVe → true`, async () => { for (let i = 0; i < semMarca.length; i += 400) { const lote = db.batch(); semMarca.slice(i, i + 400).forEach((d) => lote.update(d.ref, { donoVe: !socios.has(d.data().profissionalId) })); await lote.commit(); } });
+    const fichas = await negocioRef.collection('clientes').get();
+    const fichasSem = fichas.docs.filter((d) => d.data().donoVe === undefined);
+    if (fichasSem.length) await fazer(`${slug}: ${fichasSem.length} ficha(s) de cliente sem marca donoVe → true`, async () => { for (const d of fichasSem) await d.ref.update({ donoVe: true }); });
+    const dono = membros.find((m) => (m.papel === 'dono') || (!m.papel && permissoesDe(m).verTodos && permissoesDe(m).gerirNegocio));
+    const aparelhos = await negocioRef.collection('dispositivos').get();
+    const semUid = aparelhos.docs.filter((d) => !d.data().uid);
+    if (dono && semUid.length) await fazer(`${slug}: ${semUid.length} aparelho(s) de push antigo(s) passam a ser do dono`, async () => { for (const d of semUid) await d.ref.update({ uid: dono.uid }); });
+  }
+
   console.log(`\n${mudancas} alteração(ões) ${aplicar ? 'gravada(s)' : 'a fazer'}.`);
   process.exit(0);
 })().catch((e) => { console.error('falhou:', e.message); process.exit(1); });

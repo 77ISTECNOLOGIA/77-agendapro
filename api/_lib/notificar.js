@@ -39,6 +39,12 @@ function montarCorpo(ag) {
  * Aparelho de quem saiu do negócio não recebe nada.
  */
 async function escolherAparelhos(negocioRef, docs, { profissionalId, uid, uidVeTodos }) {
+  // Aviso de um profissional que é de SÓCIO: só o sócio recebe (o dono não vê a agenda dele, nem os avisos)
+  let deSocio = false;
+  if (profissionalId && !uid) {
+    const prof = (await negocioRef.collection('profissionais').doc(profissionalId).get()).data();
+    deSocio = !!prof && prof.socio === true;
+  }
   const usuarios = new Map();
   const usuarioDe = async (u) => {
     if (!usuarios.has(u)) usuarios.set(u, (await db().collection('usuarios').doc(u).get()).data() || null);
@@ -48,10 +54,10 @@ async function escolherAparelhos(negocioRef, docs, { profissionalId, uid, uidVeT
   for (const d of docs) {
     const dono = d.data().uid;
     if (uid) { if (dono === uid || (!dono && uidVeTodos)) escolhidos.push(d); continue; }
-    if (!dono) { escolhidos.push(d); continue; }
+    if (!dono) { if (!deSocio) escolhidos.push(d); continue; }       // aparelho antigo sem uid = do dono
     const u = await usuarioDe(dono);
     if (!u || u.barbeariaId !== negocioRef.id) continue;
-    if (permissoesDe(u).verTodos || (profissionalId && u.profissionalId === profissionalId)) escolhidos.push(d);
+    if ((!deSocio && permissoesDe(u).verTodos) || (profissionalId && u.profissionalId === profissionalId)) escolhidos.push(d);
   }
   return escolhidos;
 }

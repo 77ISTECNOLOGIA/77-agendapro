@@ -47,8 +47,10 @@ async function avisarPendentes(negocioRef, agora) {
       negocioRef.collection('agendamentos').where('status', '==', 'confirmado').get(),
       negocioRef.collection('agendamentos').where('status', '==', 'sinal_informado').get()
     ]);
-    const n = contarPendentes(confSnap.docs.map((d) => d.data()), agora);
-    const p = pagSnap.size;
+    // o resumo vai para o DONO: agendamento de sócio (donoVe === false) não entra
+    const doDono = (d) => d.data().donoVe !== false;
+    const n = contarPendentes(confSnap.docs.filter(doDono).map((d) => d.data()), agora);
+    const p = pagSnap.docs.filter(doDono).length;
     if (!n && !p) return 0;
     const partes = [];
     if (n) partes.push(n === 1 ? '1 atendimento para concluir ou cancelar' : `${n} atendimentos para concluir ou cancelar`);

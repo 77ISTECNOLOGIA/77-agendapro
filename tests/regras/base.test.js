@@ -5,7 +5,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { fs, emulatorNoAr } = require('./_emulador');
 
-const VALIDO = { clienteWhatsapp: '5521999990000', clienteNome: 'Maria', profissionalId: 'prof-a1', dataChave: '2026-12-01', horario: '10:00', duracaoMin: 30, valorTotal: 40, status: 'confirmado', servicos: [{ nome: 'Corte', preco: 40 }] };
+const VALIDO = { donoVe: true, clienteWhatsapp: '5521999990000', clienteNome: 'Maria', profissionalId: 'prof-a1', dataChave: '2026-12-01', horario: '10:00', duracaoMin: 30, valorTotal: 40, status: 'confirmado', servicos: [{ nome: 'Corte', preco: 40 }] };
 
 async function preparar() {
   await fs.limpar();
@@ -17,7 +17,7 @@ async function preparar() {
     await fs.semear(`barbearias/neg-${n}/servicos/s1`, { nome: 'Corte', preco: 40, duracaoMin: 30 });
     await fs.semear(`barbearias/neg-${n}/profissionais/prof-${n}1`, { nome: 'Barbeiro ' + n, comissao: 40 });
     await fs.semear(`barbearias/neg-${n}/agendamentos/ag-${n}1`, { ...VALIDO, profissionalId: `prof-${n}1` });
-    await fs.semear(`barbearias/neg-${n}/clientes/5521999990000`, { nome: 'Maria', whatsapp: '5521999990000' });
+    await fs.semear(`barbearias/neg-${n}/clientes/5521999990000`, { nome: 'Maria', whatsapp: '5521999990000', donoVe: true });
     await fs.semear(`barbearias/neg-${n}/dispositivos/d1`, { token: 'tok-' + n });
   }
   await fs.semear('cadastrosAguardando/neg-a', { barbeariaId: 'neg-a' });
@@ -47,7 +47,11 @@ test('visitante sem login: nada de ler nem gravar (negócio, subcoleções, vín
 
 test('dono lê e usa o PRÓPRIO negócio', async () => {
   assert.ok((await fs.ler('barbearias/neg-a', 'dono-a')).permitido);
-  for (const c of COLECOES) assert.ok((await fs.listar(`barbearias/neg-a/${c}`, 'dono-a')).permitido, 'listar ' + c);
+  for (const c of COLECOES) {
+    // agendamentos e clientes: o dono filtra por donoVe == true (privacidade do sócio); aparelhos: só os próprios (uid)
+    const filtros = c === 'agendamentos' || c === 'clientes' ? [['donoVe', true]] : (c === 'dispositivos' ? [['uid', 'dono-a']] : []);
+    assert.ok((await fs.consultar('barbearias/neg-a', c, filtros, 'dono-a')).permitido, 'listar ' + c);
+  }
   assert.ok((await fs.ler('barbearias/neg-a/agendamentos/ag-a1', 'dono-a')).permitido);
   assert.ok((await fs.ler('usuarios/dono-a', 'dono-a')).permitido, 'o dono lê o próprio vínculo');
 });
@@ -92,7 +96,7 @@ test('usuário logado SEM vínculo não acessa nada e não consegue se vincular 
 });
 
 test('dono: serviços, profissionais, clientes e aparelhos do próprio negócio (criar, mudar, apagar)', async () => {
-  for (const [colecao, id, dados] of [['servicos', 's2', { nome: 'Barba', preco: 30 }], ['profissionais', 'prof-a2', { nome: 'Outro', comissao: 50 }], ['clientes', '5521977776666', { nome: 'João' }], ['dispositivos', 'd2', { token: 'x' }]]) {
+  for (const [colecao, id, dados] of [['servicos', 's2', { nome: 'Barba', preco: 30 }], ['profissionais', 'prof-a2', { nome: 'Outro', comissao: 50 }], ['clientes', '5521977776666', { nome: 'João', donoVe: true }], ['dispositivos', 'd2', { token: 'x', uid: 'dono-a' }]]) {
     assert.ok((await fs.criar(`barbearias/neg-a/${colecao}`, id, dados, 'dono-a')).permitido, 'criar ' + colecao);
     assert.ok((await fs.atualizar(`barbearias/neg-a/${colecao}/${id}`, { nome: 'Mudou', token: 'y' }, 'dono-a')).permitido, 'mudar ' + colecao);
     assert.ok((await fs.apagar(`barbearias/neg-a/${colecao}/${id}`, 'dono-a')).permitido, 'apagar ' + colecao);

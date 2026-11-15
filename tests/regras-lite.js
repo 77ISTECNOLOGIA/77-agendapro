@@ -56,19 +56,35 @@ async function permitir(fake, uid, c) {
       if (c.op === 'update') return (admin || (meu && meu === id && u.papel !== 'funcionario' && chaves.every((k) => PERFIL_CAMPOS.includes(k)))) ? null : 'profissionais: update só admin ou o próprio e só ' + PERFIL_CAMPOS.join('/') + ' (tentou: ' + chaves.join(', ') + ')';
       return admin ? null : 'profissionais: criar/apagar só admin';
     case 'agendamentos': {
-      if (ehLista) return (P.verTodos || (meu && (c.filtros || []).some((f) => f.campo === 'profissionalId' && f.op === '==' && f.valor === meu))) ? null : 'agendamentos: consulta sem filtro do próprio profissional';
-      if (P.verTodos) return null;
+      const alvoSocio = async (profId) => ((await fake.doc(`barbearias/${slug}/profissionais/${profId}`).get()).data() || {}).socio === true;
+      if (ehLista) {
+        if (P.verTodos) return (c.filtros || []).some((f) => f.campo === 'donoVe' && f.op === '==' && f.valor === true) ? null : 'agendamentos: o dono precisa filtrar donoVe == true (privacidade do sócio)';
+        return (meu && (c.filtros || []).some((f) => f.campo === 'profissionalId' && f.op === '==' && f.valor === meu)) ? null : 'agendamentos: consulta sem filtro do próprio profissional';
+      }
+      if (P.verTodos) {
+        const a = await doc();
+        if (c.op === 'get' || c.op === 'delete') return a && a.donoVe === true ? null : 'agendamentos: o dono não lê/apaga agendamento de sócio';
+        if (c.op === 'set') return (!(await alvoSocio(c.data.profissionalId)) && c.data.donoVe === true) ? null : 'agendamentos: o dono não cria na agenda de sócio (e donoVe tem de ser true)';
+        if (c.op === 'update') return (a && a.donoVe === true && (c.data.donoVe === undefined || c.data.donoVe === true) && (c.data.profissionalId === undefined || c.data.profissionalId === a.profissionalId)) ? null : 'agendamentos: update do dono só no que é dele, sem trocar a marca';
+        return 'agendamentos: ' + c.op;
+      }
       if (!meu) return 'agendamentos: sem profissional';
       const atual = await doc();
       if (c.op === 'get' || c.op === 'delete') return (atual && atual.profissionalId === meu) ? null : 'agendamentos: não é do seu profissional';
-      if (c.op === 'set') return (c.data && c.data.profissionalId === meu) ? null : 'agendamentos: só no seu profissional';
+      if (c.op === 'set') return (c.data && c.data.profissionalId === meu && c.data.donoVe === !(await alvoSocio(meu))) ? null : 'agendamentos: só no seu profissional e com a marca donoVe coerente';
       if (c.op === 'update') return (atual && atual.profissionalId === meu && (c.data.profissionalId === undefined || c.data.profissionalId === meu)) ? null : 'agendamentos: update só no seu e sem trocar de profissional';
       return 'agendamentos: ' + c.op;
     }
-    case 'clientes':
-      return P.verTodos ? null : 'clientes: só quem vê tudo';
+    case 'clientes': {
+      if (!P.verTodos) return 'clientes: só o dono (as fichas de sócio ele não lê)';
+      if (ehLista) return (c.filtros || []).some((f) => f.campo === 'donoVe' && f.op === '==' && f.valor === true) ? null : 'clientes: o dono precisa filtrar donoVe == true';
+      const atualC = await doc();
+      if (c.op === 'get' || c.op === 'delete') return atualC && atualC.donoVe === true ? null : 'clientes: ficha de sócio não é do dono';
+      if (c.op === 'set') return c.data && c.data.donoVe === true ? null : 'clientes: o dono grava só ficha donoVe true';
+      if (c.op === 'update') return atualC && atualC.donoVe === true && (c.data.donoVe === undefined || c.data.donoVe === true) ? null : 'clientes: update só em ficha do dono';
+      return 'clientes: ' + c.op;
+    }
     case 'dispositivos': {
-      if (P.verTodos) return null;
       if (ehLista) return (c.filtros || []).some((f) => f.campo === 'uid' && f.op === '==' && f.valor === uid) ? null : 'aparelhos: consulta sem filtro do próprio uid';
       const atual = await doc();
       if (c.op === 'get' || c.op === 'delete') return (atual && atual.uid === uid) ? null : 'aparelhos: não é seu';

@@ -4,8 +4,28 @@
       "collectionGroup": "agendamentos",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "profissionalId", "order": "ASCENDING" },
-        { "fieldPath": "dataChave", "order": "ASCENDING" }
+        {
+          "fieldPath": "profissionalId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataChave",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "agendamentos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "donoVe",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataChave",
+          "order": "ASCENDING"
+        }
       ]
     }
   ],

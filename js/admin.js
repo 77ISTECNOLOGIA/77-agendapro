@@ -387,8 +387,8 @@ function descreverAparelho() {
 async function carregarStatusNotificacoes() {
   try {
     const todos = collection(db, 'barbearias', state.barbeariaId, 'dispositivos');
-    // quem não vê tudo só consegue ler (e só mostra) os PRÓPRIOS aparelhos
-    const snap = await getDocs(state.papel.verTodos ? todos : query(todos, where('uid', '==', state.user.uid)));
+    // cada pessoa só lê (e só mostra) os PRÓPRIOS aparelhos — nem o dono lê os do sócio
+    const snap = await getDocs(query(todos, where('uid', '==', state.user.uid)));
     atualizarStatusNotificacoes(snap.size > 0, snap.size, snap.docs.map((d) => d.data().aparelho || 'Aparelho'));
   } catch (err) {
     console.error('Erro ao ler aparelhos de notificação:', err);
@@ -686,7 +686,7 @@ function ativarListenersTempoReal() {
     profissionais: () => (restrito ? doc(negocioRef, 'profissionais', meuProf) : collection(negocioRef, 'profissionais')),
     agendamentos: () => (restrito
       ? query(collection(negocioRef, 'agendamentos'), where('profissionalId', '==', meuProf), where('dataChave', '>=', state.janelaDesde))
-      : query(collection(negocioRef, 'agendamentos'), where('dataChave', '>=', state.janelaDesde)))
+      : query(collection(negocioRef, 'agendamentos'), where('donoVe', '==', true), where('dataChave', '>=', state.janelaDesde)))   // PRIVACIDADE DO SÓCIO: o dono só lê donoVe == true
   };
   marcar('clientes');                                     // clientes: sob demanda (carregarClientes), não na abertura
   if (restrito) {
@@ -730,7 +730,7 @@ function juntarAgendamentos() {
 }
 function consultaAgendamentos(...filtros) {
   const base = [collection(db, 'barbearias', state.barbeariaId, 'agendamentos')];
-  const meu = !state.papel.verTodos ? [where('profissionalId', '==', state.papel.profissionalId)] : [];
+  const meu = !state.papel.verTodos ? [where('profissionalId', '==', state.papel.profissionalId)] : [where('donoVe', '==', true)];   // dono: sem a agenda de sócio
   return query(base[0], ...meu, ...filtros);
 }
 
@@ -772,7 +772,7 @@ function carregarClientes() {
       return;
     }
     if (state.clientesCarregados) return;
-    const snap = await getDocs(collection(db, 'barbearias', state.barbeariaId, 'clientes'));
+    const snap = await getDocs(query(collection(db, 'barbearias', state.barbeariaId, 'clientes'), where('donoVe', '==', true)));   // fichas do lado do dono (as de sócio são dele)
     const todos = {};
     snap.forEach((d) => { todos[d.id] = d.data(); });
     state.clientes = { ...todos, ...state.clientes };
@@ -809,6 +809,10 @@ function viewPermitida(view) {
 }
 
 let cartaoPushOrigem = null;   // onde o cartão de notificações mora em Configurações (para devolvê-lo ao trocar de conta)
+// Profissionais que o usuário pode escolher/ver como "lado dele": o dono não vê os de sócio (agenda e clientes deles são dos sócios)
+function profissionaisDoMeuLado() {
+  return Object.entries(state.profissionais).filter(([, p]) => !(souDono() && p.socio === true));
+}
 const ocultarSeNao = (sel, mostrar) => { const el = document.querySelector(sel); if (el) el.style.display = mostrar ? '' : 'none'; };
 function aplicarPermissoesNaTela() {
   const p = state.papel;
@@ -1120,7 +1124,7 @@ function renderizarAgenda() {
   const filtroProf = $('#filtro-profissional');
   const valorAtual = filtroProf.value;
   filtroProf.innerHTML = '<option value="todos">Todos profissionais</option>' +
-    Object.entries(state.profissionais)
+    profissionaisDoMeuLado()
       .filter(([id, p]) => p.ativo !== false)
       .map(([id, p]) => `<option value="${id}">${escapeHtml(p.nome)}</option>`).join('');
   filtroProf.value = state.filtroProfissional || 'todos';
@@ -1536,7 +1540,7 @@ function calcularHorariosDisponiveisAdmin(profissionalId, data, duracaoTotal, ig
 
 function modalNovoAgendamento() {
   carregarClientes().catch((err) => console.error('Erro ao carregar clientes:', err));   // para o autocompletar (sem travar a janela)
-  const profsAtivos = Object.entries(state.profissionais).filter(([id, p]) => p.ativo !== false);
+  const profsAtivos = profissionaisDoMeuLado().filter(([id, p]) => p.ativo !== false);
   const servicosAtivos = Object.entries(state.servicos)
     .filter(([id, s]) => s.ativo !== false)
     .sort((a, b) => (a[1].ordem || 0) - (b[1].ordem || 0));
@@ -1670,7 +1674,7 @@ function modalNovoAgendamento() {
 // Profissionais ativos que realizam todos os serviços marcados no modal.
 function profissionaisElegiveisNovoAgendamento() {
   const servicoIds = $$('#modal-body .nag-servico-check:checked').map(c => c.value);
-  return Object.entries(state.profissionais)
+  return profissionaisDoMeuLado()
     .filter(([, p]) => p.ativo !== false)
     .filter(([pid]) => servicoIds.every(sid => profissionalRealizaServico(state.servicos[sid], pid)));
 }
@@ -1778,6 +1782,7 @@ async function salvarNovoAgendamento() {
       const atual = clienteSnap.data();
       await setDoc(clienteRef, {
         ...atual,
+        donoVe: true,
         nome,
         totalAgendamentos: (atual.totalAgendamentos || 0) + 1,
         ultimoAgendamento: new Date().toISOString()
@@ -1786,6 +1791,7 @@ async function salvarNovoAgendamento() {
       await setDoc(clienteRef, {
         nome,
         whatsapp: whatsNorm,
+        donoVe: true,
         primeiraVisita: new Date().toISOString(),
         ultimoAgendamento: new Date().toISOString(),
         totalAgendamentos: 1
@@ -1804,7 +1810,8 @@ async function salvarNovoAgendamento() {
       valorTotal,
       status: 'confirmado',
       criadoEm: new Date().toISOString(),
-      origem: 'dono'
+      origem: 'dono',
+      donoVe: state.profissionais[profId].socio !== true     // agendamento na agenda de sócio = privado dele
     });
 
     toast('Agendamento criado', 'sucesso');
@@ -2093,7 +2100,7 @@ async function prepararFotoServico(arquivo) {
 
 function modalServico(id = null) {
   const s = id ? state.servicos[id] : { nome: '', duracaoMin: 30, preco: 0, ativo: true, ordem: Object.keys(state.servicos).length + 1 };
-  const profsAtivos = Object.entries(state.profissionais).filter(([, p]) => p.ativo !== false);
+  const profsAtivos = profissionaisDoMeuLado().filter(([, p]) => p.ativo !== false);
   const restritos = Array.isArray(s.profissionaisIds) ? s.profissionaisIds : [];
   const marcado = (pid) => restritos.length === 0 || restritos.includes(pid);
   const doSocio = state.papel.papel === 'socio';      // sócio: o serviço é só dele (a API grava; o catálogo do dono não muda)
@@ -2243,7 +2250,7 @@ function renderizarProfissionais() {
           </div>
           ${p.socio ? '<span class="tag-inativo" style="background:var(--accent);color:#fff;">Sócio</span>' : ''}${p.ativo === false ? '<span class="tag-inativo">Inativo</span>' : ''}
         </div>
-        <div class="item-card-stats">
+        ${p.socio && souDono() ? '<div class="item-card-sub" style="margin:8px 0;">Agenda, clientes e faturamento do sócio são só dele.</div>' : `<div class="item-card-stats">
           <div>
             <div class="item-stat-num">${p.comissao || 0}%</div>
             <div class="item-stat-label">Comissão</div>
@@ -2252,10 +2259,10 @@ function renderizarProfissionais() {
             <div class="item-stat-num">${agsConcluidos}</div>
             <div class="item-stat-label">Atend. recentes</div>
           </div>
-        </div>
+        </div>`}
         <div class="item-card-actions">
           ${podeEditarProfissional(p.id) ? '<button class="btn-mini" data-acao="editar">Editar</button>' : ''}
-          ${state.papel.verTodos && state.papel.gerirNegocio ? '<button class="btn-mini perigo" data-acao="deletar">Excluir</button>' : ''}
+          ${state.papel.verTodos && state.papel.gerirNegocio && !p.socio ? '<button class="btn-mini perigo" data-acao="deletar">Excluir</button>' : ''}
         </div>
       </div>
     `;
@@ -2271,7 +2278,9 @@ function renderizarProfissionais() {
 // Administrador pleno edita qualquer profissional por inteiro; os demais só o PRÓPRIO, e só nome, especialidade e horário.
 function podeEditarProfissional(id) {
   const p = state.papel;
-  return (p.verTodos && p.gerirNegocio) || (!!id && p.profissionalId === id && p.papel === 'socio');   // funcionário só vê o próprio cadastro
+  // dono edita todos MENOS os de sócio (o sócio cuida do dele); funcionário só vê o próprio cadastro
+  if (p.verTodos && p.gerirNegocio) return !id || !(state.profissionais[id] || {}).socio;
+  return !!id && p.profissionalId === id && p.papel === 'socio';
 }
 
 // Pix, sinal e preços de UMA pessoa: o sócio mexe nos DELE; o dono mexe nos dos demais (os de sócio são privados do sócio)

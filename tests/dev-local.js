@@ -30,14 +30,14 @@ fake.seed('usuarios/socio1', { barbeariaId: 'barbearia-do-joao', role: 'profissi
 fake.seed('usuarios/func1', { barbeariaId: 'barbearia-do-joao', role: 'profissional', papel: 'funcionario', profissionalId: 'prof1', nome: 'João Silva', email: 'func1@teste.com', permissoes: { verTodos: false, gerirNegocio: false } });
 fake.seed('barbearias/barbearia-do-joao/profissionais/prof2', { ...fake.get('barbearias/barbearia-do-joao/profissionais/prof2'), socio: true });
 fake.seed('barbearias/barbearia-do-joao/profissionais/prof2/privado/config', { sinal: { modo: 'desativado' } });
-const AG = (prof, nome, whats, dias, hora, servicos, valor, dur, status = 'confirmado') => ({ clienteNome: nome, clienteWhatsapp: whats, profissionalId: prof, profissionalNome: prof === 'prof1' ? 'João Silva' : 'Carlos Lima', servicos, dataChave: dataEmDias(dias), horario: hora, duracaoMin: dur, valorTotal: valor, status, criadoEm: new Date().toISOString(), origem: 'cliente' });
+const AG = (prof, nome, whats, dias, hora, servicos, valor, dur, status = 'confirmado') => ({ donoVe: prof !== 'prof2', clienteNome: nome, clienteWhatsapp: whats, profissionalId: prof, profissionalNome: prof === 'prof1' ? 'João Silva' : 'Carlos Lima', servicos, dataChave: dataEmDias(dias), horario: hora, duracaoMin: dur, valorTotal: valor, status, criadoEm: new Date().toISOString(), origem: 'cliente' });
 fake.seed('barbearias/barbearia-do-joao/agendamentos/t1', AG('prof1', 'Maria do João', '5521999990001', 0, '16:00', [{ id: 'srv1', nome: 'Corte', preco: 40, duracaoMin: 30 }], 40, 30));
 fake.seed('barbearias/barbearia-do-joao/agendamentos/t2', AG('prof2', 'Pedro do Carlos', '5521999990002', 0, '17:00', [{ id: 'srv1', nome: 'Corte', preco: 55, duracaoMin: 45 }], 55, 45));
 fake.seed('barbearias/barbearia-do-joao/agendamentos/t3', AG('prof2', 'Ana do Carlos', '5521999990003', -1, '10:00', [{ id: 'srv2', nome: 'Barba', preco: 35, duracaoMin: 30 }], 35, 30, 'concluido'));
 fake.seed('barbearias/barbearia-do-joao/agendamentos/t4', AG('prof1', 'Antigo do João', '5521999990009', -20, '11:00', [{ id: 'srv1', nome: 'Corte', preco: 40, duracaoMin: 30 }], 40, 30, 'concluido'));   // fora da janela de 7 dias
 fake.seed('barbearias/barbearia-do-joao/agendamentos/t5', AG('prof2', 'Antigo do Carlos', '5521999990010', -40, '15:00', [{ id: 'srv2', nome: 'Barba', preco: 35, duracaoMin: 30 }], 35, 30, 'concluido'));
-fake.seed('barbearias/barbearia-do-joao/clientes/5521999990001', { nome: 'Maria do João', whatsapp: '5521999990001', totalAgendamentos: 3 });
-fake.seed('barbearias/barbearia-do-joao/clientes/5521999990002', { nome: 'Pedro do Carlos', whatsapp: '5521999990002', totalAgendamentos: 1 });
+fake.seed('barbearias/barbearia-do-joao/clientes/5521999990001', { nome: 'Maria do João', whatsapp: '5521999990001', totalAgendamentos: 3, donoVe: true });
+fake.seed('barbearias/barbearia-do-joao/clientes/prof2__5521999990002', { nome: 'Pedro do Carlos', whatsapp: '5521999990002', totalAgendamentos: 1, donoVe: false });   // cliente do SÓCIO (Carlos): ficha do lado dele
 semearNegocio(fake, 'trial-vencido', { nome: 'Salão Trial Vencido', status: 'trial', trialFim: '2020-01-01T00:00:00.000Z' });
 semearNegocio(fake, 'estudio-suspenso', { nome: 'Estúdio Suspenso', status: 'suspensa' });
 

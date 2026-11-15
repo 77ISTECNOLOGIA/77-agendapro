@@ -157,11 +157,11 @@ service cloud.firestore {
         }
       }
 
-      // Tokens de notificação push. Quem vê tudo gerencia todos; cada pessoa da equipe lê, cria, atualiza e apaga só os
+      // Tokens de notificação push: cada pessoa da equipe (inclusive o dono) lê, cria, atualiza e apaga só os
       // PRÓPRIOS aparelhos (o campo uid de cada aparelho é o de quem o ativou; api/_lib/notificar.js usa isso para
       // mandar a cada profissional só o que é dele).
       match /dispositivos/{deviceId} {
-        allow read, write: if verTodos(slug) || isSuperAdmin();
+        allow read, write: if isSuperAdmin();
         allow get, list, delete: if membro(slug) && resource.data.get('uid', '') == request.auth.uid;
         allow create: if membro(slug) && request.resource.data.get('uid', '') == request.auth.uid;
         allow update: if membro(slug) && resource.data.get('uid', '') == request.auth.uid
@@ -170,24 +170,40 @@ service cloud.firestore {
 
       // Agendamentos: quem vê tudo acessa todos; os demais só os do PRÓPRIO profissional (a consulta precisa
       // filtrar por profissionalId, senão o Firestore recusa). Ninguém passa um agendamento para outro profissional.
+      // PRIVACIDADE DO SÓCIO: agendamento de sócio tem donoVe == false (gravado pelo servidor/painel conforme `socio` do
+      // profissional). O dono (verTodos) só lê e mexe no que tem donoVe == true — a consulta dele precisa filtrar
+      // where('donoVe', '==', true). O sócio lê os próprios por profissionalId.
       match /agendamentos/{id} {
-        allow get, list: if verTodos(slug) || isSuperAdmin() || souOProfissional(slug, resource.data.profissionalId);
-        allow create: if (verTodos(slug) || isSuperAdmin() || souOProfissional(slug, request.resource.data.profissionalId))
-          && agendamentoNovoOk(request.resource.data);
-        // Em update o documento resultante precisa continuar com data/horário/status válidos
-        allow update: if (verTodos(slug) || isSuperAdmin()
-              || (souOProfissional(slug, resource.data.profissionalId)
-                  && request.resource.data.profissionalId == resource.data.profissionalId))
-          && dataChaveOk(request.resource.data.dataChave)
-          && horarioOk(request.resource.data.horario)
-          && statusAgOk(request.resource.data.status);
-        allow delete: if verTodos(slug) || isSuperAdmin() || souOProfissional(slug, resource.data.profissionalId);
+        allow get, list: if isSuperAdmin()
+          || (verTodos(slug) && resource.data.donoVe == true)
+          || souOProfissional(slug, resource.data.profissionalId);
+        allow create: if isSuperAdmin()
+          || (((verTodos(slug) && !profissionalEhSocio(slug, request.resource.data.profissionalId))
+                || souOProfissional(slug, request.resource.data.profissionalId))
+              && agendamentoNovoOk(request.resource.data)
+              && request.resource.data.donoVe == !profissionalEhSocio(slug, request.resource.data.profissionalId));
+        // Em update o documento resultante precisa continuar com data/horário/status válidos; profissional e donoVe não mudam
+        allow update: if isSuperAdmin()
+          || (((verTodos(slug) && resource.data.donoVe == true) || souOProfissional(slug, resource.data.profissionalId))
+              && request.resource.data.profissionalId == resource.data.profissionalId
+              && request.resource.data.donoVe == resource.data.donoVe
+              && dataChaveOk(request.resource.data.dataChave)
+              && horarioOk(request.resource.data.horario)
+              && statusAgOk(request.resource.data.status));
+        allow delete: if isSuperAdmin()
+          || (verTodos(slug) && resource.data.donoVe == true)
+          || souOProfissional(slug, resource.data.profissionalId);
       }
 
       // Nome + WhatsApp dos clientes: só quem vê tudo (antes era leitura/escrita pública).
       // Quem só vê o próprio profissional monta a lista de clientes a partir dos PRÓPRIOS agendamentos.
+      // As fichas de cliente de um SÓCIO (id profissional__WhatsApp, donoVe == false) o dono não lê nem mexe; o sócio monta a
+      // lista dele pelos próprios agendamentos.
       match /clientes/{whatsapp} {
-        allow read, write: if verTodos(slug) || isSuperAdmin();
+        allow get, list: if isSuperAdmin() || (verTodos(slug) && resource.data.donoVe == true);
+        allow create: if isSuperAdmin() || (verTodos(slug) && request.resource.data.donoVe == true);
+        allow update: if isSuperAdmin() || (verTodos(slug) && resource.data.donoVe == true && request.resource.data.donoVe == true);
+        allow delete: if isSuperAdmin() || (verTodos(slug) && resource.data.donoVe == true);
       }
     }
   }

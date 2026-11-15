@@ -21,6 +21,7 @@ const { slugValido, situacaoNegocio, profissionalRealizaServico, servicoParaProf
 const { dentroDoLimite, responder, ErroNegocio, tratarErro, corpoDe } = require('./_lib/http');
 const { notificarNovoAgendamento } = require('./_lib/notificar');
 const { invalidar } = require('./_lib/cache');
+const { donoVePara, idCliente } = require('./_lib/privacidade');
 const { montarPixCopiaECola } = require('./_lib/pix');
 const {
   STATUS_SINAL, configSinal, calcularSinal, calcularExpiracao, contarNaSemana, limiteSemanal, semanaDaChave, ocupaHorario
@@ -107,7 +108,8 @@ module.exports = async function handler(req, res) {
       throw new ErroNegocio(429, 'Você já tem vários agendamentos futuros neste estabelecimento. Cancele algum ou fale direto com eles.');
     }
 
-    const clienteRef = negocioRef.collection('clientes').doc(whatsapp);
+    // Ficha do cliente do lado de quem atende (a de sócio é separada e o dono não a vê): ver api/_lib/privacidade.js
+    const clienteRef = negocioRef.collection('clientes').doc(idCliente(prof, profissionalId, whatsapp));
     const novoRef = agsRef.doc();
     const agora = new Date().toISOString();
 
@@ -123,7 +125,8 @@ module.exports = async function handler(req, res) {
       valorTotal,
       status: 'confirmado',
       criadoEm: agora,
-      origem: 'cliente'
+      origem: 'cliente',
+      donoVe: donoVePara(prof)                     // false = agendamento de sócio (o dono não lê)
     };
 
     // Sinal por Pix: o horário fica reservado (aguardando_sinal) até o cliente pagar e avisar, ou o prazo vencer
@@ -186,6 +189,7 @@ module.exports = async function handler(req, res) {
         tx.set(clienteRef, {
           nome,
           whatsapp,
+          donoVe: donoVePara(prof),
           primeiraVisita: agora,
           ultimoAgendamento: agora,
           totalAgendamentos: 1

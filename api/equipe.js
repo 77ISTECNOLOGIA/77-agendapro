@@ -21,6 +21,7 @@ const { dentroDoLimite, dentroDoLimitePorChave, responder, ErroNegocio, tratarEr
 const E = require('./_lib/equipe');
 const { validarDadosPix, validarSinalPessoa } = require('./_lib/sinal');
 const { precosProfissionalValidos, fotoServicoValida } = require('./_lib/negocio');
+const { reaplicarSocio } = require('./_lib/privacidade');
 
 const BASE = () => process.env.APP_URL || 'https://77-agendapro.vercel.app';
 const TOKEN_OK = /^[A-Za-z0-9_-]{20,64}$/;
@@ -146,6 +147,8 @@ async function alterarPapel(firestore, ctx, b) {
     // Sócio começa SEM cobrar sinal (ele decide); funcionário volta a seguir o estabelecimento
     tx.set(cfgRef, { ...cfg, sinal: { modo: b.papel === 'socio' ? 'desativado' : 'herdar' } });
   });
+  // a agenda e as fichas de cliente desse profissional passam para o lado certo (o dono deixa de ver / volta a ver)
+  await reaplicarSocio(firestore, ctx.negocioRef, alvo.profissionalId, b.papel === 'socio');
   return { sucesso: true, papel: b.papel };
 }
 
@@ -375,6 +378,9 @@ async function aceitar(firestore, b) {
       if (papel === 'socio') tx.set(profRef.collection('privado').doc('config'), { ...(cfgSnap.exists ? cfgSnap.data() : {}), sinal: { modo: 'desativado' } });   // sócio começa SEM cobrar sinal
     }
   });
+  if (convite.profissionalId && E.PAPEIS.includes(convite.papel) && convite.papel === 'socio') {
+    await reaplicarSocio(firestore, firestore.collection('barbearias').doc(slug), convite.profissionalId, true);   // histórico anterior do profissional vira privado
+  }
   return { sucesso: true, slug };
 }
 

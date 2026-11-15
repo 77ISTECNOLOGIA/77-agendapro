@@ -14,8 +14,12 @@ function banco() {
   f.seed('usuarios/solo', { barbeariaId: 'neg', role: 'profissional', profissionalId: 'p2', permissoes: { verTodos: false, gerirNegocio: false } });
   f.seed('usuarios/forasteiro', { barbeariaId: 'outro', role: 'owner' });
   f.seed('admins77/adm', { role: 'super_admin' });
-  f.seed(`${S}/agendamentos/a1`, { profissionalId: 'p1' });
-  f.seed(`${S}/agendamentos/a2`, { profissionalId: 'p2' });
+  f.seed(`${S}/agendamentos/a1`, { profissionalId: 'p1', donoVe: true });
+  f.seed(`${S}/agendamentos/a2`, { profissionalId: 'p2', donoVe: true });
+  f.seed(`${S}/profissionais/p9`, { nome: 'Sócio', socio: true });
+  f.seed(`${S}/agendamentos/a9`, { profissionalId: 'p9', donoVe: false });
+  f.seed(`${S}/clientes/c1`, { nome: 'Do dono', donoVe: true });
+  f.seed(`${S}/clientes/p9__c2`, { nome: 'Do sócio', donoVe: false });
   f.seed(`${S}/dispositivos/d1`, { uid: 'solo' });
   return f;
 }
@@ -31,8 +35,18 @@ test('visitante e forasteiro: nada', async () => {
 
 test('dono (conta antiga): lê tudo e grava os dados do negócio, mas não status/plano', async () => {
   const f = banco();
-  await ok(f, 'dono', { op: 'list', path: `${S}/agendamentos`, filtros: [] });
-  await ok(f, 'dono', { op: 'list', path: `${S}/clientes` });
+  const so = [{ campo: 'donoVe', op: '==', valor: true }];
+  await ok(f, 'dono', { op: 'list', path: `${S}/agendamentos`, filtros: so });
+  await ok(f, 'dono', { op: 'list', path: `${S}/clientes`, filtros: so });
+  // PRIVACIDADE DO SÓCIO: sem o filtro donoVe ou olhando o do sócio, o dono não passa
+  await nega(f, 'dono', { op: 'list', path: `${S}/agendamentos`, filtros: [] });
+  await nega(f, 'dono', { op: 'list', path: `${S}/clientes` });
+  await nega(f, 'dono', { op: 'get', path: `${S}/agendamentos/a9` });
+  await nega(f, 'dono', { op: 'get', path: `${S}/clientes/p9__c2` });
+  await nega(f, 'dono', { op: 'update', path: `${S}/agendamentos/a9`, data: { status: 'cancelado' } });
+  await nega(f, 'dono', { op: 'set', path: `${S}/agendamentos/novo9`, data: { profissionalId: 'p9', donoVe: false } });
+  await ok(f, 'dono', { op: 'set', path: `${S}/agendamentos/novo1`, data: { profissionalId: 'p1', donoVe: true } });
+  await nega(f, 'dono', { op: 'update', path: `${S}/agendamentos/a1`, data: { donoVe: false } });
   await ok(f, 'dono', { op: 'update', path: S, data: { telefone: '1', nome: 'x' } });
   await nega(f, 'dono', { op: 'update', path: S, data: { status: 'ativa' } });
   await nega(f, 'dono', { op: 'set', path: `${S}/convites/x`, data: {} });
@@ -53,8 +67,8 @@ test('quem só vê o próprio profissional: consulta filtrada sim, sem filtro/do
   await ok(f, 'solo', { op: 'update', path: `${S}/agendamentos/a2`, data: { status: 'concluido' } });
   await nega(f, 'solo', { op: 'update', path: `${S}/agendamentos/a1`, data: { status: 'concluido' } });
   await nega(f, 'solo', { op: 'update', path: `${S}/agendamentos/a2`, data: { profissionalId: 'p1' } });
-  await ok(f, 'solo', { op: 'set', path: `${S}/agendamentos/novo`, data: { profissionalId: 'p2' } });
-  await nega(f, 'solo', { op: 'set', path: `${S}/agendamentos/novo`, data: { profissionalId: 'p1' } });
+  await ok(f, 'solo', { op: 'set', path: `${S}/agendamentos/novo`, data: { profissionalId: 'p2', donoVe: true } });
+  await nega(f, 'solo', { op: 'set', path: `${S}/agendamentos/novo`, data: { profissionalId: 'p1', donoVe: true } });
   await nega(f, 'solo', { op: 'update', path: S, data: { telefone: '1' } });
   await nega(f, 'solo', { op: 'set', path: `${S}/servicos/x`, data: {} });
 });

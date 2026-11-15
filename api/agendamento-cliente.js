@@ -74,9 +74,10 @@ module.exports = async function handler(req, res) {
     const agsRef = negocioRef.collection('agendamentos');
 
     if (action === 'identificar') {
-      const snap = await negocioRef.collection('clientes').doc(whatsNorm).get();
-      if (!snap.exists) return responder(res, 200, { encontrado: false });
-      const primeiroNome = String(snap.data().nome || '').split(' ')[0];
+      // a ficha pode estar do lado do dono (id = WhatsApp) ou do lado de um sócio (id = profissional__WhatsApp): acha por WhatsApp
+      const snap = await negocioRef.collection('clientes').where('whatsapp', '==', whatsNorm).get();
+      if (snap.empty) return responder(res, 200, { encontrado: false });
+      const primeiroNome = String(snap.docs[0].data().nome || '').split(' ')[0];
       return responder(res, 200, { encontrado: true, nome: primeiroNome });
     }
 

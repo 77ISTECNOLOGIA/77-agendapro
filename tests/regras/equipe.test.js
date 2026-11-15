@@ -13,7 +13,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { fs, emulatorNoAr } = require('./_emulador');
 
-const ag = (prof, extra = {}) => ({ clienteWhatsapp: '5521999990000', clienteNome: 'Maria', profissionalId: prof, dataChave: '2026-12-01', horario: '10:00', duracaoMin: 30, valorTotal: 40, status: 'confirmado', servicos: [{ nome: 'Corte', preco: 40 }], ...extra });
+const ag = (prof, extra = {}) => ({ donoVe: true, clienteWhatsapp: '5521999990000', clienteNome: 'Maria', profissionalId: prof, dataChave: '2026-12-01', horario: '10:00', duracaoMin: 30, valorTotal: 40, status: 'confirmado', servicos: [{ nome: 'Corte', preco: 40 }], ...extra });
 const PERM = (verTodos, gerirNegocio) => ({ verTodos, gerirNegocio });
 const HT = { segunda: { ativo: true, inicio: '09:00', fim: '18:00', pausaInicio: '12:00', pausaFim: '13:00' } };
 
@@ -32,7 +32,7 @@ async function preparar() {
   for (const n of ['a', 'b']) {
     await fs.semear(`barbearias/neg-${n}`, { nome: 'Barbearia ' + n, endereco: 'Rua ' + n, telefone: '5521999990000', status: 'trial', plano: 'trial', horarioFuncionamento: { segunda: { ativo: true, inicio: '09:00', fim: '19:00' } } });
     await fs.semear(`barbearias/neg-${n}/servicos/s1`, { nome: 'Corte', preco: 40, duracaoMin: 30 });
-    await fs.semear(`barbearias/neg-${n}/clientes/5521999990000`, { nome: 'Maria', whatsapp: '5521999990000', totalAgendamentos: 9 });
+    await fs.semear(`barbearias/neg-${n}/clientes/5521999990000`, { nome: 'Maria', whatsapp: '5521999990000', totalAgendamentos: 9, donoVe: true });
     await fs.semear(`barbearias/neg-${n}/dispositivos/d1`, { token: 'tok-' + n });
   }
   for (const [id, nome] of [['prof-1', 'Lipão'], ['prof-2', 'José'], ['prof-3', 'Carlos']]) {
@@ -55,10 +55,11 @@ const A = 'barbearias/neg-a';
 
 test('dono antigo (sem "permissoes") e chefe do formato novo continuam com acesso total', async () => {
   for (const u of ['antigo', 'chefe']) {
-    for (const p of [A, `${A}/servicos/s1`, `${A}/profissionais/prof-2`, `${A}/agendamentos/ag-prof-2`, `${A}/clientes/5521999990000`, `${A}/dispositivos/d1`]) assert.ok((await fs.ler(p, u)).permitido, `${u} lê ${p}`);
+    for (const p of [A, `${A}/servicos/s1`, `${A}/profissionais/prof-2`, `${A}/agendamentos/ag-prof-2`, `${A}/clientes/5521999990000`]) assert.ok((await fs.ler(p, u)).permitido, `${u} lê ${p}`);
     assert.ok((await fs.listar(`${A}/profissionais`, u)).permitido, u + ' lista profissionais');
-    assert.ok((await fs.listar(`${A}/agendamentos`, u)).permitido, u + ' lista agendamentos');
-    assert.ok((await fs.consultar(A, 'agendamentos', [['profissionalId', 'prof-2']], u)).permitido);
+    assert.ok((await fs.consultar(A, 'agendamentos', [['donoVe', true]], u)).permitido, u + ' lista agendamentos (filtrando donoVe)');
+    assert.ok((await fs.listar(`${A}/agendamentos`, u)).negado, u + ' NÃO lista sem filtrar donoVe (traria os do sócio)');
+    assert.ok((await fs.consultar(A, 'agendamentos', [['donoVe', true], ['profissionalId', 'prof-2']], u)).permitido);
     assert.ok((await fs.atualizar(A, { nome: 'Novo' }, u)).permitido, u + ' edita o negócio');
     assert.ok((await fs.criar(`${A}/profissionais`, 'prof-9-' + u, { nome: 'Novo', comissao: 30 }, u)).permitido, u + ' cria profissional');
     assert.ok((await fs.atualizar(`${A}/agendamentos/ag-prof-3`, { status: 'concluido' }, u)).permitido, u + ' mexe na agenda de qualquer um');
@@ -186,7 +187,7 @@ test('super-admin da 77 IS segue vendo tudo', async () => {
   assert.ok((await fs.atualizar(A, { status: 'suspensa' }, 'super1')).permitido);
 });
 
-test('aparelhos de notificação: cada pessoa gerencia só os PRÓPRIOS; quem vê tudo gerencia todos', async () => {
+test('aparelhos de notificação: cada pessoa gerencia só os PRÓPRIOS (nem o dono lê os dos outros)', async () => {
   const D = 'barbearias/neg-a/dispositivos';
   // sócio cria, lê, lista, atualiza e apaga o próprio aparelho
   assert.ok((await fs.criar(D, 'd-s1', { token: 't', uid: 'socio1' }, 'socio1')).permitido);
@@ -207,9 +208,12 @@ test('aparelhos de notificação: cada pessoa gerencia só os PRÓPRIOS; quem v�
   assert.ok((await fs.apagar(`${D}/d-s1`, 'socio1')).permitido);
   // de outro negócio: nada
   assert.ok((await fs.criar(D, 'd-b', { token: 't', uid: 'dono-b' }, 'dono-b')).negado);
-  // quem vê tudo continua gerenciando todos
-  assert.ok((await fs.ler(`${D}/d-s2`, 'chefe')).permitido);
-  assert.ok((await fs.apagar(`${D}/d-s2`, 'chefe')).permitido);
+  // o dono também só mexe nos PRÓPRIOS aparelhos (não lê os do sócio)
+  assert.ok((await fs.ler(`${D}/d-s2`, 'chefe')).negado);
+  assert.ok((await fs.apagar(`${D}/d-s2`, 'chefe')).negado);
+  assert.ok((await fs.criar(D, 'd-chefe', { token: 't', uid: 'chefe' }, 'chefe')).permitido);
+  assert.ok((await fs.consultar('barbearias/neg-a', 'dispositivos', [['uid', 'chefe']], 'chefe')).permitido);
+  assert.ok((await fs.listar(D, 'chefe')).negado, 'dono lista sem filtro: negado');
 });
 
 test('config privada (Pix e sinal): a própria pessoa lê; o dono lê exceto a de SÓCIO; ninguém grava pelo navegador', async () => {
@@ -256,4 +260,53 @@ test('papéis: sócio edita o próprio horário; FUNCIONÁRIO não edita o próp
   assert.ok((await fs.atualizar(`${P}/prof-2`, { horarioTrabalho: HT }, 'socio2')).permitido);
   // o dono continua editando qualquer um
   assert.ok((await fs.atualizar(`${P}/prof-3`, { horarioTrabalho: HT }, 'chefe')).permitido);
+});
+
+test('PRIVACIDADE DO SÓCIO: o dono não lê, lista, cria, muda nem apaga agenda e clientes de sócio; o sócio vê e cuida dos dele', async () => {
+  const P = 'barbearias/neg-a/profissionais';
+  await fs.semear(`${P}/prof-2`, { nome: 'José', comissao: 0, horarioTrabalho: HT, socio: true });          // prof-2 é de um sócio (socio2 atende como prof-2)
+  await fs.semear('barbearias/neg-a/agendamentos/ag-socio', ag('prof-2', { donoVe: false, clienteNome: 'Cliente do Sócio' }));
+  await fs.semear('barbearias/neg-a/clientes/prof-2__5521955550000', { nome: 'Cliente do Sócio', whatsapp: '5521955550000', donoVe: false, totalAgendamentos: 3 });
+  for (const u of ['chefe', 'antigo']) {
+    // lê o que é do lado dele…
+    assert.ok((await fs.ler(`${A}/agendamentos/ag-prof-1`, u)).permitido, u + ' lê agendamento do lado do dono');
+    assert.ok((await fs.consultar(A, 'agendamentos', [['donoVe', true]], u)).permitido);
+    assert.ok((await fs.consultar(A, 'clientes', [['donoVe', true]], u)).permitido);
+    // …e NADA do sócio
+    assert.ok((await fs.ler(`${A}/agendamentos/ag-socio`, u)).negado, u + ' não lê o agendamento do sócio');
+    assert.ok((await fs.consultar(A, 'agendamentos', [['donoVe', false]], u)).negado, u + ' não consulta o lado do sócio');
+    assert.ok((await fs.consultar(A, 'agendamentos', [['profissionalId', 'prof-2']], u)).negado, u + ' não consulta pelo profissional do sócio sem o filtro');
+    assert.ok((await fs.consultar(A, 'clientes', [['donoVe', false]], u)).negado);
+    assert.ok((await fs.listar(`${A}/clientes`, u)).negado, u + ' não lista clientes sem filtro (traria os do sócio)');
+    assert.ok((await fs.ler(`${A}/clientes/prof-2__5521955550000`, u)).negado, u + ' não lê a ficha de cliente do sócio');
+    assert.ok((await fs.atualizar(`${A}/agendamentos/ag-socio`, { status: 'cancelado' }, u)).negado, u + ' não mexe no agendamento do sócio');
+    assert.ok((await fs.apagar(`${A}/agendamentos/ag-socio`, u)).negado);
+    assert.ok((await fs.atualizar(`${A}/clientes/prof-2__5521955550000`, { nome: 'X' }, u)).negado);
+    assert.ok((await fs.apagar(`${A}/clientes/prof-2__5521955550000`, u)).negado);
+    // não cria agendamento na agenda do sócio, nem com a marca falsa
+    assert.ok((await fs.criar(`${A}/agendamentos`, 'invasao1-' + u, ag('prof-2', { donoVe: false }), u)).negado, u + ' não cria na agenda do sócio');
+    assert.ok((await fs.criar(`${A}/agendamentos`, 'invasao2-' + u, ag('prof-2', { donoVe: true }), u)).negado);
+    // no lado dele a marca precisa estar certa e não pode ser trocada para se esconder/expor
+    assert.ok((await fs.criar(`${A}/agendamentos`, 'ok-' + u, ag('prof-1'), u)).permitido);
+    assert.ok((await fs.criar(`${A}/agendamentos`, 'marca-errada-' + u, ag('prof-1', { donoVe: false }), u)).negado, 'marca incoerente com o profissional');
+    assert.ok((await fs.atualizar(`${A}/agendamentos/ag-prof-1`, { donoVe: false }, u)).negado, 'não esconde o próprio agendamento trocando a marca');
+    assert.ok((await fs.atualizar(`${A}/agendamentos/ag-prof-1`, { status: 'concluido' }, u)).permitido);
+    // ficha de cliente do dono precisa nascer com donoVe true
+    assert.ok((await fs.criar(`${A}/clientes`, '5521944440000-' + u, { nome: 'Novo', donoVe: true }, u)).permitido);
+    assert.ok((await fs.criar(`${A}/clientes`, '5521944441111-' + u, { nome: 'Novo', donoVe: false }, u)).negado, 'não cria ficha do "lado do sócio"');
+    assert.ok((await fs.criar(`${A}/clientes`, '5521944442222-' + u, { nome: 'Novo' }, u)).negado, 'ficha sem a marca não vale');
+  }
+  // o sócio (socio2 atende como prof-2) vê e cuida dos dele
+  assert.ok((await fs.ler(`${A}/agendamentos/ag-socio`, 'socio2')).permitido);
+  assert.ok((await fs.consultar(A, 'agendamentos', [['profissionalId', 'prof-2']], 'socio2')).permitido);
+  assert.ok((await fs.atualizar(`${A}/agendamentos/ag-socio`, { status: 'concluido' }, 'socio2')).permitido);
+  assert.ok((await fs.atualizar(`${A}/agendamentos/ag-socio`, { donoVe: true }, 'socio2')).negado, 'o sócio não expõe o próprio agendamento ao dono trocando a marca');
+  assert.ok((await fs.criar(`${A}/agendamentos`, 'novo-socio', ag('prof-2', { donoVe: false }), 'socio2')).permitido);
+  assert.ok((await fs.criar(`${A}/agendamentos`, 'novo-socio-errado', ag('prof-2', { donoVe: true }), 'socio2')).negado, 'marca incoerente');
+  // o outro lado (funcionário/sócio de outro profissional) continua sem ver o do sócio
+  assert.ok((await fs.ler(`${A}/agendamentos/ag-socio`, 'func')).negado);
+  assert.ok((await fs.ler(`${A}/agendamentos/ag-socio`, 'socio1')).negado);
+  // super-admin vê tudo
+  assert.ok((await fs.ler(`${A}/agendamentos/ag-socio`, 'super1')).permitido);
+  assert.ok((await fs.ler(`${A}/clientes/prof-2__5521955550000`, 'super1')).permitido);
 });

@@ -72,6 +72,7 @@ module.exports = async function handler(req, res) {
     if (!veTodos && !meuProfissional) throw new ErroNegocio(403, 'Você não tem permissão para gerenciar horários fixos.');
 
     const negocioRef = firestore.collection('barbearias').doc(vinculo.barbeariaId);
+    const { donoVePara, idCliente } = require('./_lib/privacidade');
     const negocioSnap = await negocioRef.get();
     if (!negocioSnap.exists) throw new ErroNegocio(404, 'Negócio não encontrado');
     const info = negocioSnap.data();
@@ -91,6 +92,7 @@ module.exports = async function handler(req, res) {
       if (!veTodos && serie.profissionalId !== meuProfissional) throw new ErroNegocio(403, 'Você só pode criar horários fixos na sua própria agenda.');
       const ctx = await carregarContexto(negocioRef, serie);
       if (ctx.erro) throw new ErroNegocio(409, ctx.erro);
+      if (veTodos && !donoVePara(ctx.prof)) throw new ErroNegocio(403, 'A agenda de um sócio é só dele: o dono não cria horários fixos nela.');
 
       if (b.action === 'previa') {
         const r = await gerarOcorrencias({ firestore, negocioRef, info, serieId: null, serie, hojeChave, agora, previa: true });
@@ -111,11 +113,11 @@ module.exports = async function handler(req, res) {
       await serieRef.update({ geradoAte: r.limite, ultimaGeracaoEm: new Date().toISOString(), puladas: r.puladas.slice(-30) });
 
       // garante o cadastro do cliente (sem inflar a contagem de visitas: elas ainda não aconteceram)
-      const clienteRef = negocioRef.collection('clientes').doc(serie.clienteWhatsapp);
+      const clienteRef = negocioRef.collection('clientes').doc(idCliente(ctx.prof, ctx.prof.id, serie.clienteWhatsapp));
       const cli = await clienteRef.get();
       if (!cli.exists) {
         const agoraIso = new Date().toISOString();
-        await clienteRef.set({ nome: serie.clienteNome, whatsapp: serie.clienteWhatsapp, primeiraVisita: agoraIso, ultimoAgendamento: agoraIso, totalAgendamentos: 0 });
+        await clienteRef.set({ nome: serie.clienteNome, whatsapp: serie.clienteWhatsapp, donoVe: donoVePara(ctx.prof), primeiraVisita: agoraIso, ultimoAgendamento: agoraIso, totalAgendamentos: 0 });
       }
       return responder(res, 201, { sucesso: true, serieId: serieRef.id, criadas: r.criadas, puladas: r.puladas, limite: r.limite });
     }
@@ -123,10 +125,12 @@ module.exports = async function handler(req, res) {
     // ------------------------------------------------------------ listar
     if (b.action === 'listar') {
       const snap = await seriesRef.where('ativa', '==', true).get();
+      const sociosIds = veTodos ? new Set((await negocioRef.collection('profissionais').get()).docs.filter((p) => p.data().socio === true).map((p) => p.id)) : new Set();
       const series = [];
       for (const d of snap.docs) {
         const s = d.data();
         if (!veTodos && s.profissionalId !== meuProfissional) continue;
+        if (veTodos && sociosIds.has(s.profissionalId)) continue;          // o dono não vê horários fixos de sócio
         const ags = (await negocioRef.collection('agendamentos').where('recorrenciaId', '==', d.id).get()).docs.map((x) => x.data());
         const proximas = ags.filter((a) => a.status === 'confirmado' && a.dataChave >= hojeChave).length;
         const nomes = ags.length ? (ags[0].servicos || []).map((x) => x.nome) : [];
@@ -147,6 +151,10 @@ module.exports = async function handler(req, res) {
       const serieRef = seriesRef.doc(serieId);
       const serieSnap = await serieRef.get();
       if (!serieSnap.exists || (!veTodos && serieSnap.data().profissionalId !== meuProfissional)) throw new ErroNegocio(404, 'Horário fixo não encontrado');
+      if (veTodos) {                                                          // o dono não mexe na série de um sócio
+        const dono = await negocioRef.collection('profissionais').doc(serieSnap.data().profissionalId).get();
+        if (dono.exists && dono.data().socio === true) throw new ErroNegocio(404, 'Horário fixo não encontrado');
+      }
 
       const aPartirDe = dataChaveValida(b.aPartirDe) ? b.aPartirDe : hojeChave;
       const ags = await negocioRef.collection('agendamentos').where('recorrenciaId', '==', serieId).get();
