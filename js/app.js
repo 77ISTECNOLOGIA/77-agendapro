@@ -211,9 +211,10 @@ async function carregarBarbearia(slug) {
   return true;
 }
 
-async function carregarOcupacao(slug) {
+async function carregarOcupacao(slug, profissionalId = '') {
   try {
-    const resp = await fetch(`/api/agendamentos-ocupados?slug=${encodeURIComponent(slug)}`);
+    // com o profissional escolhido o servidor lê só os agendamentos DELE (menos leituras no banco)
+    const resp = await fetch(`/api/agendamentos-ocupados?slug=${encodeURIComponent(slug)}${profissionalId ? '&profissionalId=' + encodeURIComponent(profissionalId) : ''}`);
     if (!resp.ok) return {};
     const { ocupados } = await resp.json();
     // calcularHorariosDisponiveis() só usa Object.values(...), a chave não importa
@@ -291,7 +292,7 @@ function inicializarEventos() {
     if (state.servicosSelecionados.length === 0 || !state.profissionalId) return;
     // Ocupação sempre FRESCA ao escolher o horário: sem isso a página guardava a foto de quando
     // abriu, e um horário cancelado continuava aparecendo como ocupado até recarregar.
-    await recarregarAgendamentos();
+    await recarregarAgendamentos(state.profissionalId);
     renderizarTela3();
     mostrarTela(3);
   });
@@ -805,9 +806,8 @@ async function handleConfirmarAgendamento() {
   btn.textContent = 'Confirmando...';
 
   try {
-    // Pré-checagem só pra dar feedback rápido; quem decide de verdade é o
-    // servidor, dentro de uma transação (api/criar-agendamento.js).
-    await recarregarAgendamentos();
+    // Pré-checagem só pra dar feedback rápido, com a ocupação que a tela de horários acabou de baixar (sem baixar de
+    // novo: cada download custa leituras do Firestore); quem decide de verdade é o servidor, dentro de uma transação.
     const horarios = calcularHorariosDisponiveis(state.profissionalId, state.dataSelecionada);
     const slotAlvo = horarios.find(s => s.hora === state.horarioSelecionado);
     if (!slotAlvo || slotAlvo.indisponivel) {
@@ -838,7 +838,7 @@ async function handleConfirmarAgendamento() {
       toast(corpo.erro || 'Este horário acabou de ser reservado. Escolha outro.', 'erro');
       btn.disabled = false;
       btn.textContent = rotuloConfirmar();
-      await recarregarAgendamentos();
+      await recarregarAgendamentos(state.profissionalId);
       mostrarTela(3);
       renderizarHorarios();
       return;
@@ -868,8 +868,8 @@ async function handleConfirmarAgendamento() {
   }
 }
 
-async function recarregarAgendamentos() {
-  state.agendamentos = await carregarOcupacao(state.slug);
+async function recarregarAgendamentos(profissionalId = '') {
+  state.agendamentos = await carregarOcupacao(state.slug, profissionalId);
 }
 
 // ========================================
@@ -1270,7 +1270,7 @@ async function iniciarRemarcacao(agendamentoId) {
   $('#remarcar-grid-horarios').innerHTML = '<div class="horario-placeholder">Selecione uma data</div>';
   $('#btn-confirmar-remarcacao').disabled = true;
 
-  await recarregarAgendamentos();
+  await recarregarAgendamentos(state.remarcacao.profissionalId);
   renderizarRemarcarSeletorDeData();
 }
 

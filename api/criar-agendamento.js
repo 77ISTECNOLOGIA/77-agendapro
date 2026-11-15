@@ -20,6 +20,7 @@ const { verificarSlot } = require('./_lib/disponibilidade');
 const { slugValido, situacaoNegocio, profissionalRealizaServico, servicoParaProfissional } = require('./_lib/negocio');
 const { dentroDoLimite, responder, ErroNegocio, tratarErro, corpoDe } = require('./_lib/http');
 const { notificarNovoAgendamento } = require('./_lib/notificar');
+const { invalidar } = require('./_lib/cache');
 const { montarPixCopiaECola } = require('./_lib/pix');
 const {
   STATUS_SINAL, configSinal, calcularSinal, calcularExpiracao, contarNaSemana, limiteSemanal, semanaDaChave, ocupaHorario
@@ -194,6 +195,7 @@ module.exports = async function handler(req, res) {
     // com sinal, o dono só é avisado quando o cliente informar o pagamento (api/_lib/sinal-acoes.js)
     if (!sinal) await notificarNovoAgendamento(negocioRef, novoRef, agendamento);
 
+    invalidar('ocupados:' + slug);   // a ocupação guardada em memória deixou de valer
     return responder(res, 201, {
       sucesso: true,
       id: novoRef.id,

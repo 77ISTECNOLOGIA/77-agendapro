@@ -638,6 +638,16 @@ function ativarListenersTempoReal() {
   // a consulta tem de filtrar, e a lista de clientes sai desses agendamentos.
   const restrito = !state.papel.verTodos;
   const meuProf = state.papel.profissionalId;
+  // CONSUMO DO FIRESTORE (plano gratuito: 50 mil leituras/dia): cada documento de uma escuta custa 1 leitura A CADA
+  // abertura do painel. Por isso o painel só escuta os agendamentos dos últimos JANELA_DIAS_PASSADOS dias + todos os
+  // futuros; a lista de clientes e o histórico antigo só são baixados quando a pessoa pede (Clientes, Relatórios, outro dia).
+  state.janelaDesde = chaveDiasAtras(JANELA_DIAS_PASSADOS);
+  state.historico = {};                 // agendamentos antigos já baixados sob demanda
+  state.historicoDesde = state.janelaDesde;
+  state.diasCarregados = new Set();
+  state.agendamentosJanela = {};
+  state.clientes = {};
+  state.clientesCarregados = false;
   const fontes = new Set(['negocio', 'servicos', 'profissionais', 'agendamentos', 'clientes']);
   const chegaram = new Set();
   let cumprir, falhar;
@@ -672,19 +682,19 @@ function ativarListenersTempoReal() {
   const origem = {
     servicos: () => collection(negocioRef, 'servicos'),
     profissionais: () => (restrito ? doc(negocioRef, 'profissionais', meuProf) : collection(negocioRef, 'profissionais')),
-    agendamentos: () => (restrito ? query(collection(negocioRef, 'agendamentos'), where('profissionalId', '==', meuProf)) : collection(negocioRef, 'agendamentos')),
-    clientes: () => collection(negocioRef, 'clientes')
+    agendamentos: () => (restrito
+      ? query(collection(negocioRef, 'agendamentos'), where('profissionalId', '==', meuProf), where('dataChave', '>=', state.janelaDesde))
+      : query(collection(negocioRef, 'agendamentos'), where('dataChave', '>=', state.janelaDesde)))
   };
+  marcar('clientes');                                     // clientes: sob demanda (carregarClientes), não na abertura
   if (restrito) {
-    state.clientes = {};
-    marcar('clientes');                                   // derivados dos agendamentos, não há o que baixar
     if (!meuProf) {                                       // sem profissional vinculado não há nada deles para ver
       state.profissionais = {}; state.agendamentos = {};
       marcar('profissionais'); marcar('agendamentos');
     }
   }
   ['servicos', 'profissionais', 'agendamentos', 'clientes'].forEach((chave) => {
-    if (restrito && (chave === 'clientes' || (!meuProf && (chave === 'profissionais' || chave === 'agendamentos')))) return;
+    if (chave === 'clientes' || (restrito && !meuProf && (chave === 'profissionais' || chave === 'agendamentos'))) return;
     state.listeners.push(onSnapshot(origem[chave](), (snap) => {
       const dados = {};
       if (chave === 'profissionais' && restrito) { if (snap.exists()) dados[snap.id] = snap.data(); }
@@ -694,13 +704,78 @@ function ativarListenersTempoReal() {
           if (a.status === 'aguardando_sinal' && a.sinalExpiraEm && Date.parse(a.sinalExpiraEm) <= Date.now()) { a.status = 'cancelado'; a._sinalExpirado = true; }
         });
       }
-      state[chave] = dados;
-      if (chave === 'agendamentos' && restrito) state.clientes = clientesDosAgendamentos(dados);
+      if (chave === 'agendamentos') {
+        state.agendamentosJanela = dados;
+        state.agendamentos = { ...state.historico, ...dados };       // + o que já foi baixado sob demanda
+        if (restrito) state.clientes = clientesDosAgendamentos(state.agendamentos);
+      } else state[chave] = dados;
       redesenhar();
       marcar(chave);
     }, comErro(chave)));
   });
   return prontos;
+}
+
+// ---- Dados sob demanda (poupam leituras do Firestore; ver comentário em ativarListenersTempoReal) ----
+const JANELA_DIAS_PASSADOS = 7;
+function chaveDiasAtras(n) { const d = new Date(); d.setDate(d.getDate() - n); return dataParaChave(d); }
+
+let filaHistorico = Promise.resolve();
+const emSerie = (fn) => { filaHistorico = filaHistorico.then(fn, fn); return filaHistorico; };
+function juntarAgendamentos() {
+  state.agendamentos = { ...state.historico, ...state.agendamentosJanela };
+  if (!state.papel.verTodos) state.clientes = clientesDosAgendamentos(state.agendamentos);
+}
+function consultaAgendamentos(...filtros) {
+  const base = [collection(db, 'barbearias', state.barbeariaId, 'agendamentos')];
+  const meu = !state.papel.verTodos ? [where('profissionalId', '==', state.papel.profissionalId)] : [];
+  return query(base[0], ...meu, ...filtros);
+}
+
+/** Baixa (uma vez) os agendamentos de [deChave, janela). Usado por Relatórios e Clientes. */
+function garantirHistorico(deChave) {
+  return emSerie(async () => {
+    if (!deChave || deChave >= state.historicoDesde) return;
+    if (!state.papel.verTodos && !state.papel.profissionalId) return;
+    const snap = await getDocs(consultaAgendamentos(where('dataChave', '>=', deChave), where('dataChave', '<', state.historicoDesde)));
+    snap.forEach((d) => { state.historico[d.id] = d.data(); });
+    state.historicoDesde = deChave;
+    juntarAgendamentos();
+  });
+}
+
+/** Baixa só UM dia antigo (agenda navegando para trás). */
+function garantirDia(chave) {
+  return emSerie(async () => {
+    if (!chave || chave >= state.historicoDesde || state.diasCarregados.has(chave)) return;
+    if (!state.papel.verTodos && !state.papel.profissionalId) return;
+    const snap = await getDocs(consultaAgendamentos(where('dataChave', '==', chave)));
+    snap.forEach((d) => { state.historico[d.id] = d.data(); });
+    state.diasCarregados.add(chave);
+    juntarAgendamentos();
+  });
+}
+
+/** Lista de clientes: quem vê tudo baixa a coleção uma vez; os demais a derivam dos próprios agendamentos (histórico inteiro). */
+function carregarClientes() {
+  return emSerie(async () => {
+    if (!state.papel.verTodos) {
+      if (state.papel.profissionalId && state.historicoDesde > '2000-01-01') {
+        const snap = await getDocs(consultaAgendamentos(where('dataChave', '<', state.historicoDesde)));
+        snap.forEach((d) => { state.historico[d.id] = d.data(); });
+        state.historicoDesde = '2000-01-01';
+      }
+      juntarAgendamentos();
+      state.clientesCarregados = true;
+      return;
+    }
+    if (state.clientesCarregados) return;
+    const snap = await getDocs(collection(db, 'barbearias', state.barbeariaId, 'clientes'));
+    const todos = {};
+    snap.forEach((d) => { todos[d.id] = d.data(); });
+    state.clientes = { ...todos, ...state.clientes };
+    state.clientesCarregados = true;
+  });
 }
 
 function desativarListeners() {
@@ -1019,6 +1094,15 @@ function renderizarAgenda() {
   // Sincroniza input de data
   $('#agenda-data-input').value = dataParaChave(state.agendaDataAtual);
 
+  // Dia mais antigo que a janela escutada: baixa só esse dia e redesenha
+  const diaPedido = dataParaChave(state.agendaDataAtual);
+  if (diaPedido < state.historicoDesde && !state.diasCarregados.has(diaPedido)) {
+    $('#agenda-timeline').innerHTML = '<div class="vazio-msg">Carregando...</div>';
+    garantirDia(diaPedido).then(() => { if (dataParaChave(state.agendaDataAtual) === diaPedido) renderizarAgenda(); })
+      .catch((err) => { console.error('Erro ao carregar o dia:', err); $('#agenda-timeline').innerHTML = '<div class="vazio-msg">Não foi possível carregar este dia. Tente de novo.</div>'; });
+    return;
+  }
+
   // Atualiza filtro de profissionais
   const filtroProf = $('#filtro-profissional');
   const valorAtual = filtroProf.value;
@@ -1228,6 +1312,13 @@ function renderizarRelatorios() {
     [de, ate].forEach(i => i.addEventListener('change', () => { pre.value = 'custom'; renderizarRelatorios(); }));
   }
   if (!de.value || !ate.value || de.value > ate.value) return;
+  if (de.value < state.historicoDesde) {            // período começa antes do que está carregado: baixa o que falta e redesenha
+    $('#rel-sub').textContent = 'Carregando o período...';
+    const pedido = de.value;
+    garantirHistorico(pedido).then(() => { if (de.value === pedido) renderizarRelatorios(); })
+      .catch((err) => { console.error('Erro ao carregar o período:', err); $('#rel-sub').textContent = 'Não foi possível carregar o período. Tente de novo.'; });
+    return;
+  }
   const r = resumoPeriodo(state.agendamentos, de.value, ate.value);
   const plural = (n, s, p) => `${n} ${n === 1 ? s : p}`;
   $('#rel-sub').textContent = `${formatarDataCurta(de.value)}/${de.value.slice(0, 4)} a ${formatarDataCurta(ate.value)}/${ate.value.slice(0, 4)}`;
@@ -1430,6 +1521,7 @@ function calcularHorariosDisponiveisAdmin(profissionalId, data, duracaoTotal, ig
 }
 
 function modalNovoAgendamento() {
+  carregarClientes().catch((err) => console.error('Erro ao carregar clientes:', err));   // para o autocompletar (sem travar a janela)
   const profsAtivos = Object.entries(state.profissionais).filter(([id, p]) => p.ativo !== false);
   const servicosAtivos = Object.entries(state.servicos)
     .filter(([id, s]) => s.ativo !== false)
@@ -2132,7 +2224,7 @@ function renderizarProfissionais() {
           </div>
           <div>
             <div class="item-stat-num">${agsConcluidos}</div>
-            <div class="item-stat-label">Atendimentos</div>
+            <div class="item-stat-label">Atend. recentes</div>
           </div>
         </div>
         <div class="item-card-actions">
@@ -2562,6 +2654,17 @@ function modalAlterarAcesso(uid) {
 // VIEW: CLIENTES
 // ========================================
 function renderizarClientes() {
+  // A lista de clientes e o histórico (para o "Faturado" de cada um) são baixados só quando esta aba é aberta
+  if (!state.clientesCarregados || state.historicoDesde > '2000-01-01') {
+    $('#clientes-total').textContent = 'Carregando clientes...';
+    if (!state.carregandoClientes) {
+      state.carregandoClientes = true;
+      Promise.all([carregarClientes(), garantirHistorico('2000-01-01')])
+        .then(() => { state.carregandoClientes = false; if (state.viewAtual === 'clientes') renderizarClientes(); })
+        .catch((err) => { state.carregandoClientes = false; console.error('Erro ao carregar clientes:', err); $('#clientes-total').textContent = 'Não foi possível carregar os clientes. Tente de novo.'; });
+    }
+    return;
+  }
   const lista = Object.entries(state.clientes).map(([whats, c]) => ({ ...c, whatsapp: whats }));
   $('#clientes-total').textContent = `${lista.length} cliente${lista.length !== 1 ? 's' : ''} cadastrado${lista.length !== 1 ? 's' : ''}`;
 

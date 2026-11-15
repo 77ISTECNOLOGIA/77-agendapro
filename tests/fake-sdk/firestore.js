@@ -36,7 +36,7 @@ async function fs(corpo) {
 }
 const snapDoc = (caminho, dado) => ({ id: caminho.split('/').pop(), ref: { path: caminho }, exists: () => dado !== null && dado !== undefined, data: () => (dado === null || dado === undefined ? undefined : JSON.parse(JSON.stringify(dado))) });
 const snapLista = (docs) => ({ docs, size: docs.length, empty: docs.length === 0, forEach: (f) => docs.forEach(f) });
-const listar = async (alvo) => snapLista((await fs({ op: 'list', path: alvo.path, filtros: alvo.filtros || [], ord: alvo.ord, lim: alvo.lim })).docs.map((d) => snapDoc(d.path, d.data)));
+const listar = async (alvo, poll = false) => snapLista((await fs({ op: 'list', path: alvo.path, filtros: alvo.filtros || [], ord: alvo.ord, lim: alvo.lim, poll })).docs.map((d) => snapDoc(d.path, d.data)));
 
 export async function getDoc(ref) { return snapDoc(ref.path, (await fs({ op: 'get', path: ref.path })).data); }
 export async function getDocs(alvo) { return listar(alvo); }
@@ -59,7 +59,8 @@ export function onSnapshot(alvo, cb, erro) {
   const rodar = async () => {
     if (!ativo) return;
     try {
-      const novo = ehDoc ? snapDoc(alvo.path, (await fs({ op: 'get', path: alvo.path })).data) : await listar(alvo);
+      const poll = ultima !== null;   // as repetições são só o jeito de simular o tempo real: o servidor de teste não as cobra como leitura
+      const novo = ehDoc ? snapDoc(alvo.path, (await fs({ op: 'get', path: alvo.path, poll })).data) : await listar(alvo, poll);
       const chave = JSON.stringify(ehDoc ? novo.data() ?? null : novo.docs.map((d) => [d.id, d.data()]));
       if (ativo && chave !== ultima) { ultima = chave; cb(novo); }
     } catch (e) { if (ativo && erro) erro(e); }

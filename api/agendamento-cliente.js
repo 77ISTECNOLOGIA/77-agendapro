@@ -27,6 +27,7 @@ const {
 } = require('./_lib/tempo');
 const { verificarSlot } = require('./_lib/disponibilidade');
 const { notificarAlteracaoCliente } = require('./_lib/notificar');
+const { invalidar } = require('./_lib/cache');
 const { executarSinal } = require('./_lib/sinal-acoes');
 const { slugValido, situacaoNegocio } = require('./_lib/negocio');
 const { statusEfetivo, contarNaSemana, limiteSemanal, semanaDaChave, ocupaHorario } = require('./_lib/sinal');
@@ -122,6 +123,7 @@ module.exports = async function handler(req, res) {
       });
       // avisa o dono (push); falha aqui nunca desfaz o cancelamento. Reserva ainda sem sinal: o dono nem sabia dela.
       if (cancelado.status === 'confirmado') await notificarAlteracaoCliente(negocioRef, agendamentoId, { tipo: 'cancelou', ag: cancelado });
+      invalidar('ocupados:' + slug);
       return responder(res, 200, { sucesso: true });
     }
 
@@ -192,6 +194,7 @@ module.exports = async function handler(req, res) {
       remarcado = { antes: { dataChave: ag.dataChave, horario: ag.horario }, depois: { ...ag, dataChave: novaDataChave, horario: novoHorario, remarcacoesCliente: (ag.remarcacoesCliente || 0) + 1 } };
     });
     await notificarAlteracaoCliente(negocioRef, agendamentoId, { tipo: 'remarcou', ag: remarcado.depois, antes: remarcado.antes });
+    invalidar('ocupados:' + slug);
     return responder(res, 200, { sucesso: true });
   } catch (err) {
     return tratarErro(res, err, 'agendamento-cliente');

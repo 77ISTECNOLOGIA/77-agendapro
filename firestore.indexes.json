@@ -1,0 +1,13 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "agendamentos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "profissionalId", "order": "ASCENDING" },
+        { "fieldPath": "dataChave", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

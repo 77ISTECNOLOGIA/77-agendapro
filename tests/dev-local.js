@@ -32,6 +32,8 @@ const AG = (prof, nome, whats, dias, hora, servicos, valor, dur, status = 'confi
 fake.seed('barbearias/barbearia-do-joao/agendamentos/t1', AG('prof1', 'Maria do João', '5521999990001', 0, '16:00', [{ id: 'srv1', nome: 'Corte', preco: 40, duracaoMin: 30 }], 40, 30));
 fake.seed('barbearias/barbearia-do-joao/agendamentos/t2', AG('prof2', 'Pedro do Carlos', '5521999990002', 0, '17:00', [{ id: 'srv1', nome: 'Corte', preco: 55, duracaoMin: 45 }], 55, 45));
 fake.seed('barbearias/barbearia-do-joao/agendamentos/t3', AG('prof2', 'Ana do Carlos', '5521999990003', -1, '10:00', [{ id: 'srv2', nome: 'Barba', preco: 35, duracaoMin: 30 }], 35, 30, 'concluido'));
+fake.seed('barbearias/barbearia-do-joao/agendamentos/t4', AG('prof1', 'Antigo do João', '5521999990009', -20, '11:00', [{ id: 'srv1', nome: 'Corte', preco: 40, duracaoMin: 30 }], 40, 30, 'concluido'));   // fora da janela de 7 dias
+fake.seed('barbearias/barbearia-do-joao/agendamentos/t5', AG('prof2', 'Antigo do Carlos', '5521999990010', -40, '15:00', [{ id: 'srv2', nome: 'Barba', preco: 35, duracaoMin: 30 }], 35, 30, 'concluido'));
 fake.seed('barbearias/barbearia-do-joao/clientes/5521999990001', { nome: 'Maria do João', whatsapp: '5521999990001', totalAgendamentos: 3 });
 fake.seed('barbearias/barbearia-do-joao/clientes/5521999990002', { nome: 'Pedro do Carlos', whatsapp: '5521999990002', totalAgendamentos: 1 });
 semearNegocio(fake, 'trial-vencido', { nome: 'Salão Trial Vencido', status: 'trial', trialFim: '2020-01-01T00:00:00.000Z' });
@@ -43,6 +45,8 @@ const json = (res, status, corpo) => { res.statusCode = status; res.setHeader('C
 
 const { permitir } = require('./regras-lite');
 const NEGACOES = [];
+const LEITURAS = { total: 0, porCaminho: {} };   // quanto o Firestore cobraria pelas leituras das telas (GET /__leituras, ?zerar=1)
+const contar = (caminho, n) => { LEITURAS.total += n; LEITURAS.porCaminho[caminho] = (LEITURAS.porCaminho[caminho] || 0) + n; };
 async function bancoFalso(req, res, corpo) {
   try {
     const { op, path: p, data, filtros, ord, lim, uid } = corpo;
@@ -52,7 +56,7 @@ async function bancoFalso(req, res, corpo) {
       console.log('REGRA NEGOU (' + (uid || 'sem login') + '): ' + op + ' ' + p + ' — ' + motivo);
       return json(res, 403, { erro: 'Missing or insufficient permissions.', code: 'permission-denied' });
     }
-    if (op === 'get') return json(res, 200, { data: (await fake.doc(p).get()).data() ?? null });
+    if (op === 'get') { if (!corpo.poll) contar(p.split('/').slice(0, 3).join('/'), 1); return json(res, 200, { data: (await fake.doc(p).get()).data() ?? null }); }
     if (op === 'list') {
       let q = fake.collection(p);
       (filtros || []).forEach((f) => { q = q.where(f.campo, f.op, f.valor); });
@@ -60,6 +64,7 @@ async function bancoFalso(req, res, corpo) {
       let docs = snap.docs.map((d) => ({ path: d.ref.path, data: d.data() }));
       if (ord) docs.sort((a, b) => ((a.data[ord[0]] > b.data[ord[0]]) - (a.data[ord[0]] < b.data[ord[0]])) * (ord[1] === 'desc' ? -1 : 1));
       if (lim) docs = docs.slice(0, lim);
+      if (!corpo.poll) contar(p, Math.max(1, docs.length));
       return json(res, 200, { docs });
     }
     if (op === 'set') { await fake.doc(p).set(data); return json(res, 200, {}); }
@@ -101,6 +106,7 @@ http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
 
   if (url.pathname === '/__negacoes') return json(res, 200, NEGACOES);
+  if (url.pathname === '/__leituras') { const r = JSON.parse(JSON.stringify(LEITURAS)); if (url.searchParams.get('zerar')) { LEITURAS.total = 0; LEITURAS.porCaminho = {}; } return json(res, 200, r); }
   if (url.pathname === '/__fs' && req.method === 'POST') return bancoFalso(req, res, await lerCorpo(req));
   if (url.pathname.startsWith('/__auth/') && req.method === 'POST') return authFalso(url.pathname.slice(8), await lerCorpo(req), res);
   if (url.pathname.startsWith('/__fake/')) {

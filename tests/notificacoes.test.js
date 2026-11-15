@@ -189,7 +189,7 @@ test('painel: abre o agendamento da notificação (parâmetro na URL e mensagem 
 
 test('link do cliente: horário cancelado volta a ficar livre (ocupação atualizada ao escolher horário e ao cancelar)', () => {
   const app = fs.readFileSync(path.join(__dirname, '..', 'js', 'app.js'), 'utf8');
-  assert.match(app, /btn-continuar-2'\)\.addEventListener\('click', async \(\) => \{[\s\S]{0,500}await recarregarAgendamentos\(\);\s*\n\s*renderizarTela3\(\)/);
+  assert.match(app, /btn-continuar-2'\)\.addEventListener\('click', async \(\) => \{[\s\S]{0,500}await recarregarAgendamentos\(state\.profissionalId\);\s*\n\s*renderizarTela3\(\)/);
   assert.match(app, /toast\('Agendamento cancelado', 'sucesso'\);\s*\n\s*await recarregarAgendamentos\(\)/);
 });
 

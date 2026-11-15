@@ -183,7 +183,7 @@ test('erro inesperado no banco vira mensagem genérica, sem vazar detalhes inter
 test('negocio: devolve só dados públicos (sem comissão, sem status interno) + ocupação futura', async () => {
   amb.fake.seed(`barbearias/${SLUG}`, { ...amb.fake.get(`barbearias/${SLUG}`), criadoPor: 'uid-secreto', trialFim: null });
   await chamar(criarAgendamento, req('POST', { body: corpoAgendamento() }));
-  const r = await chamar(negocio, req('GET', { query: { slug: SLUG } }));
+  const r = await chamar(negocio, req('GET', { query: { slug: SLUG, ocupados: '1' } }));
   assert.equal(r.statusCode, 200);
   const texto = JSON.stringify(r.body);
   assert.equal(texto.includes('comissao'), false);
@@ -195,6 +195,13 @@ test('negocio: devolve só dados públicos (sem comissão, sem status interno) +
   assert.deepEqual(Object.keys(r.body.ocupados[0]).sort(), ['dataChave', 'duracaoMin', 'horario', 'id', 'profissionalId', 'status']);
   assert.equal(r.body.profissionais.prof1.nome, 'João Silva');
   assert.equal(r.body.servicos.srv1.preco, 40);
+});
+
+test('negocio: a abertura do link NÃO traz a ocupação (poupa leituras); ela vem só com ocupados=1 ou pela rota própria', async () => {
+  await chamar(criarAgendamento, req('POST', { body: corpoAgendamento() }));
+  const r = await chamar(negocio, req('GET', { query: { slug: SLUG } }));
+  assert.deepEqual(r.body.ocupados, []);
+  assert.ok(r.body.servicos.srv1 && r.body.profissionais.prof1);
 });
 
 test('negocio: 404 pra inexistente, 400 pra slug inválido, aviso quando suspenso', async () => {
@@ -479,6 +486,58 @@ test('api/negocio: devolve a foto do serviço (e só se for um JPEG válido)', a
   const f = await chamar(negocio, req('GET', { query: { slug: SLUG, fotos: '1' } }));
   assert.equal(f.statusCode, 200);
   assert.deepEqual(f.body, { fotos: { srv1: JPEG } }, 'valor suspeito é descartado antes de chegar ao navegador do cliente');
-  assert.equal(f.headers['Cache-Control'], 'public, max-age=300');
+  assert.equal(f.headers['Cache-Control'], 'public, max-age=300, s-maxage=300');
   assert.deepEqual((await chamar(negocio, req('GET', { query: { slug: 'link-que-nao-existe', fotos: '1' } }))).body, { fotos: {} });
+});
+
+test('agendamentos-ocupados: com ?profissionalId= devolve só os desse profissional (menos leituras no banco)', async () => {
+  amb.fake.seed(`barbearias/${SLUG}/profissionais/prof2`, { nome: 'Pedro', ativo: true });
+  await chamar(criarAgendamento, req('POST', { body: corpoAgendamento({ profissionalId: 'prof1' }) }));
+  await chamar(criarAgendamento, req('POST', { body: corpoAgendamento({ profissionalId: 'prof2', whatsapp: '(21) 98888-7777', nome: 'Outro' }) }));
+  const todos = await chamar(ocupados, req('GET', { query: { slug: SLUG } }));
+  assert.equal(todos.body.ocupados.length, 2);
+  amb.fake.zerarStats();
+  const so2 = await chamar(ocupados, req('GET', { query: { slug: SLUG, profissionalId: 'prof2' } }));
+  assert.deepEqual(so2.body.ocupados.map((o) => o.profissionalId), ['prof2']);
+  assert.equal(amb.fake.stats.leituras, 1, 'leu só o agendamento desse profissional');
+  const invalido = await chamar(ocupados, req('GET', { query: { slug: SLUG, profissionalId: 'a/b' } }));
+  assert.equal(invalido.body.ocupados.length, 2, 'valor suspeito é ignorado (consulta geral)');
+});
+
+test('proteção da cota do Firestore: repetir a consulta pública (até com parâmetros inventados) não relê o banco; agendar invalida a ocupação', async () => {
+  const antes = process.env.CACHE_API;
+  process.env.CACHE_API = '1';
+  const { invalidar } = require('../api/_lib/cache');
+  invalidar('');
+  try {
+    amb.fake.zerarStats();
+    const a = await chamar(negocio, req('GET', { query: { slug: SLUG } }));
+    const leituras1 = amb.fake.stats.leituras;
+    assert.equal(a.statusCode, 200);
+    assert.ok(leituras1 > 0);
+    for (const extra of [{}, { x: '1' }, { t: String(Date.now()) }, { ocupados: '0' }]) {
+      const b = await chamar(negocio, req('GET', { query: { slug: SLUG, ...extra } }));
+      assert.equal(b.statusCode, 200);
+    }
+    assert.equal(amb.fake.stats.leituras, leituras1, 'as repetições não leram o banco');
+    // link inexistente também fica guardado (tentar links inventados repetidos não custa leituras a cada vez)
+    amb.fake.zerarStats();
+    await chamar(negocio, req('GET', { query: { slug: 'nao-existe-mesmo' } }));
+    const l404 = amb.fake.stats.leituras;
+    await chamar(negocio, req('GET', { query: { slug: 'nao-existe-mesmo', lixo: 'a' } }));
+    assert.equal(amb.fake.stats.leituras, l404);
+    // ocupação: guardada, e um agendamento novo a invalida na hora
+    const o1 = await chamar(ocupados, req('GET', { query: { slug: SLUG } }));
+    assert.equal(o1.body.ocupados.length, 0);
+    amb.fake.zerarStats();
+    await chamar(ocupados, req('GET', { query: { slug: SLUG } }));
+    assert.equal(amb.fake.stats.leituras, 0, 'segunda consulta de ocupação veio da memória');
+    const ag = await chamar(criarAgendamento, req('POST', { body: corpoAgendamento() }));
+    assert.equal(ag.statusCode, 201);
+    const o2 = await chamar(ocupados, req('GET', { query: { slug: SLUG } }));
+    assert.equal(o2.body.ocupados.length, 1, 'o agendamento recém-feito aparece (cache invalidado)');
+  } finally {
+    if (antes === undefined) delete process.env.CACHE_API; else process.env.CACHE_API = antes;
+    invalidar('');
+  }
 });

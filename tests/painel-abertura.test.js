@@ -16,11 +16,11 @@ function extrair(src, nome) {
   for (; i < src.length; i++) { if (src[i] === '{') n++; else if (src[i] === '}' && --n === 0) break; }
   return src.slice(m.index, i + 1);
 }
-const CODIGO = ['lerVinculoGuardado', 'guardarVinculo', 'inicializarAuth', 'ativarListenersTempoReal', 'desativarListeners', 'mostrarApp', 'lerPapelGuardado', 'guardarPapel', 'papelDe', 'mesmoPapel', 'anotarAbertura']
+const CODIGO = ['lerVinculoGuardado', 'guardarVinculo', 'inicializarAuth', 'ativarListenersTempoReal', 'desativarListeners', 'mostrarApp', 'lerPapelGuardado', 'guardarPapel', 'papelDe', 'mesmoPapel', 'anotarAbertura', 'chaveDiasAtras', 'dataParaChave']
   .map((f) => extrair(admin, f)).join('\n');
 
 const flush = () => new Promise((r) => setImmediate(r));
-const SUBS = ['servicos', 'profissionais', 'agendamentos', 'clientes'];
+const SUBS = ['servicos', 'profissionais', 'agendamentos'];   // clientes NÃO é mais escutado na abertura (sob demanda)
 
 const PAPEL_TOTAL = { verTodos: true, gerirNegocio: true, profissionalId: '' };
 const utilsFonte = fs.readFileSync(path.join(__dirname, '..', 'js', 'utils.js'), 'utf8');
@@ -46,10 +46,11 @@ function montar({ palpite = null, papelPalpite = PAPEL_TOTAL } = {}) {
     collection: (ref, nome) => ({ path: ref.path + '/' + nome }),
     getDoc: (ref) => { log.push('getDoc:' + ref.path); return usuarios; },
     getDocs: () => { throw new Error('não pode baixar tudo de uma vez: os acompanhamentos em tempo real já fazem isso'); },
-    query: (ref, filtro) => ({ path: ref.path, filtro }),
+    JANELA_DIAS_PASSADOS: 7,
+    query: (ref, ...filtros) => ({ path: ref.path, filtros }),
     where: (campo, op, valor) => ({ campo, op, valor }),
     aplicarPermissoesNaTela: () => log.push('permissoes'),
-    onSnapshot: (ref, cb, erro) => { log.push('escuta:' + ref.path); const e = { path: ref.path, filtro: ref.filtro, cb, erro, cancelada: false }; escutas.push(e); return () => { e.cancelada = true; }; },
+    onSnapshot: (ref, cb, erro) => { log.push('escuta:' + ref.path); const e = { path: ref.path, filtros: ref.filtros, cb, erro, cancelada: false }; escutas.push(e); return () => { e.cancelada = true; }; },
     onAuthStateChanged: (_a, cb) => { aoMudarAuth = cb; },
     signOut: async () => { log.push('signOut'); },
     adicionarMostrarSenha() {}, handleLogin() {}, handleEsqueciSenha() {}, handleLogout() {},
@@ -105,7 +106,7 @@ test('com palpite da última visita: os dados começam a chegar ANTES de o vínc
   const t = montar({ palpite: 'lipao' });
   const fim = t.entrar();
   await flush();
-  assert.equal(t.escutas.length, 5, 'já está ouvindo os dados enquanto espera a confirmação do vínculo');
+  assert.equal(t.escutas.length, 4, 'já está ouvindo os dados enquanto espera a confirmação do vínculo');
   assert.ok(t.log.indexOf('escuta:barbearias/lipao') >= 0 && t.log.indexOf('escuta:barbearias/lipao') < t.log.indexOf('getDoc:usuarios/u1'),
     'a escuta dos dados é registrada ANTES de esperar o vínculo (a ordem na fila é o que garante o paralelismo)');
   t.entregarTudo(t.escutas);                    // os dados chegam antes de o vínculo ser confirmado
@@ -113,7 +114,7 @@ test('com palpite da última visita: os dados começam a chegar ANTES de o vínc
   assert.ok(!t.log.includes('renderizarTudo'), 'ainda espera o vínculo confirmar antes de mostrar o painel');
   t.usuarioEncontrado('lipao');
   await fim;
-  assert.equal(t.escutas.length, 5, 'palpite certo: não reinicia nada');
+  assert.equal(t.escutas.length, 4, 'palpite certo: não reinicia nada');
   assert.ok(t.escutas.every((e) => !e.cancelada));
   assert.equal(t.ctx.state.dadosCarregados, true);
 });
@@ -122,10 +123,10 @@ test('palpite errado (vínculo mudou): cancela as escutas do negócio errado e r
   const t = montar({ palpite: 'outro-negocio' });
   const fim = t.entrar();
   await flush();
-  assert.equal(t.escutas.length, 5);
+  assert.equal(t.escutas.length, 4);
   t.usuarioEncontrado('lipao');
   await flush();
-  const velhas = t.escutas.slice(0, 5), novas = t.escutas.slice(5);
+  const velhas = t.escutas.slice(0, 4), novas = t.escutas.slice(4);
   assert.ok(velhas.every((e) => e.cancelada), 'as escutas do negócio errado são canceladas');
   assert.deepEqual(novas.map((e) => e.path).sort(), caminhosDe('lipao').sort());
   velhas.forEach((e) => e.erro(new Error('permission-denied')));   // o banco nega o negócio alheio: não pode derrubar nada
@@ -209,13 +210,13 @@ test('banco mudo (nenhuma resposta): em 20 s volta ao login dizendo QUAL leitura
   await flush();
   t.usuarioEncontrado('lipao');
   await flush();
-  // negócio, serviços e profissionais respondem; agendamentos e clientes ficam mudos
+  // negócio, serviços e profissionais respondem; agendamentos fica mudo
   t.escutas.filter((e) => !/agendamentos|clientes/.test(e.path)).forEach((e) => (e.path.split('/').length === 2 ? e.cb(t.snap(true, { nome: 'B' })) : e.cb(t.snap(true, {}))));
   assert.ok(t.ctx.__limites.length >= 1, 'o tempo limite precisa estar armado');
   t.ctx.__limites.forEach((f) => f());
   await fim;
   const msg = t.log.find((l) => l.startsWith('login:'));
-  assert.ok(msg && msg.includes('agendamentos') && msg.includes('clientes'), 'a mensagem deve dizer o que faltou: ' + msg);
+  assert.ok(msg && msg.includes('agendamentos') && !msg.includes('clientes'), 'a mensagem deve dizer o que faltou: ' + msg);
   assert.ok(!msg.includes('servicos'));
   assert.ok(t.escutas.every((e) => e.cancelada));
 });
@@ -232,7 +233,8 @@ test('quem não vê tudo (1ª visita): lê só o próprio profissional e só os 
   const caminhos = t.escutas.map((e) => e.path).sort();
   assert.deepEqual(caminhos, ['barbearias/lipao', 'barbearias/lipao/agendamentos', 'barbearias/lipao/profissionais/prof1', 'barbearias/lipao/servicos']);
   const ag = t.escutas.find((e) => e.path.endsWith('/agendamentos'));
-  assert.deepEqual(ag.filtro, { campo: 'profissionalId', op: '==', valor: 'prof1' }, 'a consulta TEM de filtrar, senão as regras do banco recusam');
+  assert.deepEqual(ag.filtros.find((f) => f.campo === 'profissionalId'), { campo: 'profissionalId', op: '==', valor: 'prof1' }, 'a consulta TEM de filtrar, senão as regras do banco recusam');
+  assert.ok(ag.filtros.some((f) => f.campo === 'dataChave' && f.op === '>='), 'só a janela de dias recentes + futuros (poupa leituras)');
   assert.ok(!t.escutas.some((e) => e.path.endsWith('/clientes') || e.path.endsWith('/profissionais')), 'nem a lista de clientes nem a de profissionais');
   for (const e of t.escutas) {
     if (e.path.endsWith('/agendamentos')) e.cb(t.snap(true, { a1: { clienteWhatsapp: '5521999990001', clienteNome: 'Ana', dataChave: '2026-12-01', status: 'confirmado' }, a2: { clienteWhatsapp: '5521999990001', clienteNome: 'Ana', dataChave: '2026-12-08', status: 'concluido' }, a3: { clienteWhatsapp: '5521999990002', clienteNome: 'Bia', dataChave: '2026-12-02', status: 'cancelado' } }));
@@ -254,14 +256,14 @@ test('palpite de papel: sócio que antes via tudo e agora não vê recomeça as 
   const t = montar({ palpite: 'lipao' });         // palpite = acesso total
   const fim = t.entrar();
   await flush();
-  assert.equal(t.escutas.length, 5);
+  assert.equal(t.escutas.length, 4);
   t.usuarioEncontrado('lipao', SOCIO);
   await flush();
-  assert.ok(t.escutas.slice(0, 5).every((e) => e.cancelada), 'as escutas sem filtro (que o banco recusaria) são canceladas');
-  const novas = t.escutas.slice(5);
+  assert.ok(t.escutas.slice(0, 4).every((e) => e.cancelada), 'as escutas sem filtro (que o banco recusaria) são canceladas');
+  const novas = t.escutas.slice(4);
   assert.equal(novas.length, 4);
-  assert.ok(novas.some((e) => e.filtro && e.filtro.valor === 'prof1'));
-  t.escutas.slice(0, 5).forEach((e) => e.erro && e.erro(new Error('permission-denied')));
+  assert.ok(novas.some((e) => e.filtros && e.filtros.some((f) => f.campo === 'profissionalId' && f.valor === 'prof1')));
+  t.escutas.slice(0, 4).forEach((e) => e.erro && e.erro(new Error('permission-denied')));
   for (const e of novas) {
     if (e.path.endsWith('/prof1')) e.cb({ exists: () => true, id: 'prof1', data: () => ({ nome: 'J' }) });
     else if (e.path.split('/').length === 2) e.cb(t.snap(true, { nome: 'B', tipoNegocio: 'barbearia' }));
@@ -318,4 +320,21 @@ test('painel 77: as contagens por negócio são pedidas DEPOIS de a lista de neg
   assert.match(p77, /if \(key === 'negocios'\) \{\s*const faltam = Object\.keys\(obj\)\.filter\(\(id\) => !state\.contagens\[id\]\);\s*if \(faltam\.length\) carregarContagens\(faltam\);/);
   assert.doesNotMatch(p77, /\}\);\s*carregarContagens\(\);\s*\}\s*function desativarListeners/);
   assert.match(p77, /'#btn-atualizar'\)\.addEventListener\('click', \(\) => \{ state\.contagens = \{\}; carregarContagens\(\); \}\)/);
+});
+
+test('painel poupa leituras do Firestore: janela de dias, clientes e histórico só sob demanda', () => {
+  assert.match(admin, /const JANELA_DIAS_PASSADOS = 7;/);
+  assert.match(admin, /where\('dataChave', '>=', state\.janelaDesde\)/);
+  assert.doesNotMatch(admin, /clientes: \(\) => collection\(negocioRef, 'clientes'\)/, 'a coleção de clientes NÃO é mais escutada na abertura');
+  assert.match(admin, /function garantirHistorico\(deChave\)/);
+  assert.match(admin, /function garantirDia\(chave\)/);
+  assert.match(admin, /function carregarClientes\(\)/);
+  assert.match(admin, /if \(de\.value < state\.historicoDesde\) \{[\s\S]*?garantirHistorico\(pedido\)/, 'relatórios de período antigo baixam o que falta');
+  assert.match(admin, /diaPedido < state\.historicoDesde[\s\S]*?garantirDia\(diaPedido\)/, 'agenda de dia antigo baixa só aquele dia');
+  assert.match(admin, /Promise\.all\(\[carregarClientes\(\), garantirHistorico\('2000-01-01'\)\]\)/, 'aba Clientes baixa clientes + histórico');
+  assert.match(admin, /function modalNovoAgendamento\(\) \{\s*carregarClientes\(\)/);
+  const fb = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'firebase.json'), 'utf8'));
+  assert.equal(fb.firestore.indexes, 'firestore.indexes.json');
+  const idx = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'firestore.indexes.json'), 'utf8'));
+  assert.ok(idx.indexes.some((i) => i.collectionGroup === 'agendamentos' && i.fields.map((f) => f.fieldPath).join() === 'profissionalId,dataChave'), 'índice da janela por profissional');
 });

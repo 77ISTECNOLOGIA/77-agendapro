@@ -15,7 +15,8 @@ class QuerySnap {
 }
 
 class FakeDb {
-  constructor() { this.docs = new Map(); this.seq = 0; }
+  constructor() { this.docs = new Map(); this.seq = 0; this.stats = { leituras: 0, escritas: 0, apagadas: 0 }; }   // stats: o que o Firestore cobraria (simulação de consumo)
+  zerarStats() { this.stats = { leituras: 0, escritas: 0, apagadas: 0 }; }
   collection(p) { return new Col(this, p); }
   doc(p) { const i = p.lastIndexOf('/'); return new Doc(this, p.slice(0, i), p.slice(i + 1)); }
   async recursiveDelete(ref) {
@@ -33,13 +34,14 @@ class FakeDb {
 
 class Doc {
   constructor(db, colPath, id) { this.db = db; this.colPath = colPath; this.id = id; this.path = `${colPath}/${id}`; }
-  async get() { return new Snap(this, this.db.docs.get(this.path)); }
-  async set(d) { this.db.docs.set(this.path, structuredClone(d)); }
+  async get() { this.db.stats.leituras += 1; return new Snap(this, this.db.docs.get(this.path)); }
+  async set(d) { this.db.stats.escritas += 1; this.db.docs.set(this.path, structuredClone(d)); }
   async update(d) {
+    this.db.stats.escritas += 1;
     if (!this.db.docs.has(this.path)) throw new Error(`update em doc inexistente: ${this.path}`);
     this.db.docs.set(this.path, { ...this.db.docs.get(this.path), ...structuredClone(d) });
   }
-  async delete() { this.db.docs.delete(this.path); }
+  async delete() { this.db.stats.apagadas += 1; this.db.docs.delete(this.path); }
   collection(nome) { return new Col(this.db, `${this.path}/${nome}`); }
 }
 
@@ -57,10 +59,14 @@ class Query {
         const v = d[campo];
         if (op === '==') return v === valor;
         if (op === '>=') return v !== undefined && v >= valor;
+        if (op === '>') return v !== undefined && v > valor;
+        if (op === '<') return v !== undefined && v < valor;
+        if (op === '<=') return v !== undefined && v <= valor;
         throw new Error(`operador não suportado no fake: ${op}`);
       });
       if (ok) docs.push(new Snap(new Doc(this.db, this.colPath, resto), d));
     }
+    this.db.stats.leituras += Math.max(1, docs.length);   // consulta vazia também custa 1 leitura
     return new QuerySnap(docs);
   }
 }
