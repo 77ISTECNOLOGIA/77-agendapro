@@ -35,6 +35,7 @@ async function executarSinal({ firestore, negocioRef, agendamentoId, whatsNorm, 
 
   // sinal-dados
   const [agSnap, infoSnap] = await Promise.all([agRef.get(), negocioRef.get()]);
+  const profSnap = agSnap.exists && agSnap.data().profissionalId ? await negocioRef.collection('profissionais').doc(agSnap.data().profissionalId).get() : null;
   const ag = agSnap.exists ? agSnap.data() : null;
   if (!ag || ag.clienteWhatsapp !== whatsNorm || !infoSnap.exists) throw new ErroNegocio(404, 'Agendamento não encontrado');
   const efetivo = statusEfetivo(ag);
@@ -42,7 +43,7 @@ async function executarSinal({ firestore, negocioRef, agendamentoId, whatsNorm, 
     throw new ErroNegocio(400, 'Este agendamento não está aguardando o pagamento do sinal.');
   }
   const info = infoSnap.data();
-  const cfg = configSinal(info);
+  const cfg = configSinal(info, profSnap && profSnap.exists ? profSnap.data() : null);
   if (!cfg.chavePix) throw new ErroNegocio(409, 'O estabelecimento está sem chave Pix configurada. Fale direto com eles.');
   const valor = ag.sinalValor || calcularSinal(ag.valorTotal, ag.sinalPercentual || cfg.percentual);
   return {

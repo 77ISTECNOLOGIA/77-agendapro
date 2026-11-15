@@ -17,7 +17,7 @@ const {
   agoraBrasil, hojeChaveBrasil, dataChaveValida, horaValida, normalizarWhatsapp, whatsappValido
 } = require('./_lib/tempo');
 const { verificarSlot } = require('./_lib/disponibilidade');
-const { slugValido, situacaoNegocio, profissionalRealizaServico } = require('./_lib/negocio');
+const { slugValido, situacaoNegocio, profissionalRealizaServico, servicoParaProfissional } = require('./_lib/negocio');
 const { dentroDoLimite, responder, ErroNegocio, tratarErro, corpoDe } = require('./_lib/http');
 const { notificarNovoAgendamento } = require('./_lib/notificar');
 const { montarPixCopiaECola } = require('./_lib/pix');
@@ -87,7 +87,9 @@ module.exports = async function handler(req, res) {
       if (!profissionalRealizaServico(d, profissionalId)) {
         throw new ErroNegocio(409, `${d.nome} não é realizado por ${prof.nome || 'este profissional'}. Escolha outro profissional.`);
       }
-      return { id: s.id, nome: d.nome, preco: d.preco, duracaoMin: d.duracaoMin };
+      // preço e duração podem ser diferentes para cada profissional (decididos aqui, nunca pelo navegador)
+      const efetivo = servicoParaProfissional(d, profissionalId);
+      return { id: s.id, nome: d.nome, preco: efetivo.preco, duracaoMin: efetivo.duracaoMin };
     });
     const valorTotal = servicos.reduce((soma, s) => soma + s.preco, 0);
     const duracaoMin = servicos.reduce((soma, s) => soma + s.duracaoMin, 0);
@@ -123,7 +125,7 @@ module.exports = async function handler(req, res) {
     };
 
     // Sinal por Pix: o horário fica reservado (aguardando_sinal) até o cliente pagar e avisar, ou o prazo vencer
-    const cfgSinal = configSinal(info);
+    const cfgSinal = configSinal(info, prof);   // quem recebe o Pix é quem atende (se tiver o próprio)
     const agoraMs = Date.now();
     let sinal = null;
     if (cfgSinal.ativo) {

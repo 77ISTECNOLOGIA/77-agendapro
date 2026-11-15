@@ -18,7 +18,7 @@
 
 const { agoraBrasil, somarDias, diaSemanaDaChave, DIAS_SEMANA } = require('./tempo');
 const { verificarSlot } = require('./disponibilidade');
-const { situacaoNegocio, profissionalRealizaServico } = require('./negocio');
+const { situacaoNegocio, profissionalRealizaServico, servicoParaProfissional } = require('./negocio');
 
 const DIA_RENOVACAO = 20;       // a partir deste dia do mês, já gera o mês seguinte
 const MAX_DATAS_POR_GERACAO = 70;
@@ -63,7 +63,8 @@ async function carregarContexto(negocioRef, serie) {
     if (!profissionalRealizaServico(d, serie.profissionalId)) {
       return { erro: `${d.nome} não é mais realizado por este profissional` };
     }
-    servicos.push({ id: s.id, nome: d.nome, preco: d.preco, duracaoMin: d.duracaoMin });
+    const efetivo = servicoParaProfissional(d, serie.profissionalId);
+    servicos.push({ id: s.id, nome: d.nome, preco: efetivo.preco, duracaoMin: efetivo.duracaoMin });
   }
   return {
     prof: { id: profSnap.id, ...profSnap.data() },
