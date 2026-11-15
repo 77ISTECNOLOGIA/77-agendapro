@@ -27,19 +27,22 @@ module.exports = async function handler(req, res) {
     const total = { negocios: 0, series: 0, criadas: 0, puladas: 0, erros: 0, encerradas: 0, avisos: 0 };
 
     const negocios = await firestore.collection('barbearias').get();
-    for (const n of negocios.docs) {
+    // Em lotes de 5 negócios por vez: a Vercel (plano Hobby) corta a função em ~10 s, e um negócio de cada vez não escalaria.
+    const processar = async (n) => {
       try {
         await limparSinaisVencidos(n.ref).catch((e) => console.error('Falha ao limpar sinais vencidos de ' + n.id, e));
         if (situacaoNegocio(n.data()).aceita && await avisarPendentes(n.ref, agora)) total.avisos++;   // push: atendimentos esquecidos e sinais para confirmar
         const r = await renovarSeries({ firestore, negocioRef: n.ref, info: n.data(), hojeChave, agora });
-        if (r.ignorado) continue;
+        if (r.ignorado) return;
         total.negocios++;
         for (const k of ['series', 'criadas', 'puladas', 'erros', 'encerradas']) total[k] += r[k];
       } catch (err) {
         total.erros++;
         console.error(`Falha ao renovar horários fixos de ${n.id}:`, err);   // um negócio com problema não derruba os outros
       }
-    }
+    };
+    const LOTE = 5;
+    for (let i = 0; i < negocios.docs.length; i += LOTE) await Promise.all(negocios.docs.slice(i, i + LOTE).map(processar));
     return responder(res, 200, { sucesso: true, ...total });
   } catch (err) {
     return tratarErro(res, err, 'cron-recorrencias');
