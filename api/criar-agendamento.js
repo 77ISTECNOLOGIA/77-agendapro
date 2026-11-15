@@ -97,6 +97,12 @@ module.exports = async function handler(req, res) {
     });
     const valorTotal = servicos.reduce((soma, s) => soma + s.preco, 0);
     const duracaoMin = servicos.reduce((soma, s) => soma + s.duracaoMin, 0);
+    // O cliente confirma olhando um total na tela. Se o dono mudou preço/serviço nesse meio tempo, NÃO agenda pelo valor novo
+    // sem o cliente ver: devolve 409 e a tela mostra o total atualizado para ele confirmar de novo.
+    const esperado = Number(b.valorEsperado);
+    if (b.valorEsperado !== undefined && Number.isFinite(esperado) && Math.abs(esperado - valorTotal) > 0.009) {
+      throw new ErroNegocio(409, `O valor mudou para R$ ${valorTotal.toFixed(2).replace('.', ',')}. Confira e confirme de novo.`);
+    }
 
     // Evita um mesmo número lotar a agenda com reservas
     const hoje = hojeChaveBrasil();

@@ -159,7 +159,9 @@ function servicoPublico(id, s) {
 // abertura do link baixar todas as fotos). `temFoto` avisa que ela existe; as fotos vêm depois, em /api/negocio?fotos=1.
 function servicoPublicoLeve(id, s) {
   const { foto, ...resto } = servicoPublico(id, s);
-  return { ...resto, temFoto: !!foto };
+  // fotoV = "versão" da foto: muda quando o dono troca a imagem. O link usa isso para baixar de novo só quando mudou e para
+  // furar o cache do navegador/CDN (a URL das fotos leva ?v=...).
+  return { ...resto, temFoto: !!foto, ...(foto ? { fotoV: require('node:crypto').createHash('sha1').update(foto).digest('hex').slice(0, 10) } : {}) };
 }
 
 module.exports = {

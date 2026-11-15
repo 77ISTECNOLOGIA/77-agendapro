@@ -107,6 +107,7 @@ function mostrarTela(numero) {
     7: 'Pagamento do sinal'
   };
   $('#header-passo').textContent = labels[numero] || '';
+  if (numero === 2 && Date.now() - ultimaAtualizacaoNegocio > 5000) atualizarDadosNegocio();   // lista de profissionais/serviços sempre fresca ao escolher
 
   window.scrollTo(0, 0);
 }
@@ -151,6 +152,17 @@ async function inicializar() {
     mostrarApp();
     carregarFotosServicos();                             // sem esperar: a tela já está de pé
     iniciarInstalacao({ slug: state.slug, nome: state.barbearia.nome, nomeIcone: state.barbearia.nomeIcone });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && Date.now() - ultimaAtualizacaoNegocio > 30000) atualizarDadosNegocio();
+    });
+    setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      const confirmando = $('#btn-confirmar') && $('#btn-confirmar').disabled;
+      const ativa = (n) => { const el = $('#tela-' + n); return !!el && el.classList.contains('ativa'); };
+      if (!confirmando && (ativa(1) || ativa(2) || ativa(3) || ativa(4))) atualizarDadosNegocio();
+      const lista = $('#painel-lista-agendamentos');
+      if (ativa(6) && lista && !lista.classList.contains('hidden') && state.cliente.whatsapp) carregarMeusAgendamentos(true);   // o dono pode ter cancelado/remarcado
+    }, 30000);
   } catch (err) {
     console.error('Erro ao inicializar:', err);
     mostrarErroBarbearia();
@@ -160,10 +172,11 @@ async function inicializar() {
 // As fotos dos serviços vêm numa chamada separada (o pacote principal não leva mais as fotos, que pesam muito).
 // Enquanto não chegam, o cartão mostra uma caixa cinza do mesmo tamanho (sem a tela "pular" quando a foto aparece).
 async function carregarFotosServicos() {
-  const temAlguma = Object.values(state.servicos).some((s) => s.temFoto);
-  if (!temAlguma) return;
+  const faltam = Object.values(state.servicos).filter((s) => s.temFoto && !fotoServicoValida(s.foto));
+  if (!faltam.length) return;
+  const versao = Object.values(state.servicos).map((s) => s.fotoV || '').join('');
   try {
-    const resp = await fetch(`/api/negocio?slug=${encodeURIComponent(state.slug)}&fotos=1`);
+    const resp = await fetch(`/api/negocio?slug=${encodeURIComponent(state.slug)}&fotos=1${versao ? '&v=' + encodeURIComponent(versao) : ''}`);
     if (!resp.ok) throw new Error('fotos indisponíveis');
     const { fotos } = await resp.json();
     Object.entries(fotos || {}).forEach(([id, foto]) => {
@@ -211,7 +224,71 @@ async function carregarBarbearia(slug) {
   state.servicos = dados.servicos || {};
   state.profissionais = dados.profissionais || {};
   state.agendamentos = dados.ocupados || [];
+  assinaturaServidor = assinaturaDe(dados);
   return true;
+}
+
+// ---- ATUALIZAÇÃO "AO VIVO" DO LINK ----
+// O link fica aberto por muito tempo no celular, e o dono pode, nesse meio tempo, mudar preço, foto, serviço, profissional,
+// horário de funcionamento, sinal ou endereço. A cada 30 s (aba visível), ao voltar para a aba e ao entrar na escolha, a página
+// rebusca /api/negocio (o servidor guarda a resposta só 20 s, então isso não pesa no banco) e, SÓ SE algo mudou, atualiza a tela
+// em que a pessoa está. Escolhas que deixaram de valer (profissional removido, serviço que ele não faz mais) são desfeitas.
+// Na hora de confirmar, o servidor ainda confere preço e profissional (ver valorEsperado em api/criar-agendamento.js).
+let ultimaAtualizacaoNegocio = Date.now();
+let atualizandoNegocio = false;
+let assinaturaServidor = '';
+const assinaturaDe = (dados) => JSON.stringify([dados.barbearia || {}, dados.servicos || {}, dados.profissionais || {}]);
+
+async function atualizarDadosNegocio() {
+  if (atualizandoNegocio) return false;
+  atualizandoNegocio = true;
+  try {
+    const resp = await fetch(`/api/negocio?slug=${encodeURIComponent(state.slug)}`);
+    if (!resp.ok) return false;
+    const dados = await resp.json();
+    ultimaAtualizacaoNegocio = Date.now();
+    const assinatura = assinaturaDe(dados);
+    if (assinatura === assinaturaServidor) return false;           // nada mudou: não mexe na tela
+    assinaturaServidor = assinatura;
+
+    // mantém as fotos já baixadas quando a versão da foto é a mesma (só baixa de novo a que mudou)
+    const novos = dados.servicos || {};
+    Object.entries(novos).forEach(([id, s]) => { const a = state.servicos[id]; if (a && a.foto && a.fotoV === s.fotoV) s.foto = a.foto; });
+    state.servicos = novos;
+    state.profissionais = dados.profissionais || {};
+    state.barbearia = { ...state.barbearia, ...(dados.barbearia || {}) };
+
+    if (state.barbearia.aceitaAgendamentos === false) {            // suspenso / trial vencido enquanto a página estava aberta
+      $('#app').classList.add('hidden');
+      mostrarErroBarbearia(state.barbearia.nome || 'Agendamento indisponível', state.barbearia.motivoIndisponivel, '🕒');
+      return true;
+    }
+
+    // escolhas que deixaram de valer
+    let escolhaDesfeita = false;
+    if (state.profissionalId && !profissionaisAtivos().some(([id]) => id === state.profissionalId)) {
+      state.profissionalId = null; state.servicosSelecionados = []; state.dataSelecionada = null; state.horarioSelecionado = null; state.horariosCache = {};
+      escolhaDesfeita = true;
+    }
+    const antes = state.servicosSelecionados.length;
+    state.servicosSelecionados = state.servicosSelecionados.filter((sid) => state.servicos[sid] && (!state.profissionalId || profissionalRealizaServico(state.servicos[sid], state.profissionalId)));
+    if (state.servicosSelecionados.length !== antes) { state.dataSelecionada = null; state.horarioSelecionado = null; state.horariosCache = {}; escolhaDesfeita = true; }
+
+    renderizarHeader();
+    carregarFotosServicos();                                        // baixa só o que ainda não temos (foto nova/trocada)
+
+    const ativa = (n) => { const el = $('#tela-' + n); return !!el && el.classList.contains('ativa'); };
+    if (ativa(2)) { renderizarTela2(); atualizarResumoTela2(); toast('O estabelecimento atualizou as informações.', ''); }
+    else if (ativa(3)) {
+      if (escolhaDesfeita) { mostrarTela(2); renderizarTela2(); } else renderizarTela3();      // horários dependem de expediente e duração
+      toast('O estabelecimento atualizou as informações. Confira os horários.', '');
+    } else if (ativa(4)) {
+      if (escolhaDesfeita || !state.horarioSelecionado) { mostrarTela(2); renderizarTela2(); } else renderizarResumoFinal();
+      toast('Valores atualizados. Confira o resumo antes de confirmar.', '');
+    }
+    return escolhaDesfeita;
+  } catch (_) { return false; }
+  finally { atualizandoNegocio = false; }
 }
 
 async function carregarOcupacao(slug, profissionalId = '') {
@@ -832,11 +909,30 @@ async function handleConfirmarAgendamento() {
         profissionalId: state.profissionalId,
         servicosIds: state.servicosSelecionados,
         dataChave: dataParaChave(state.dataSelecionada),
-        horario: state.horarioSelecionado
+        horario: state.horarioSelecionado,
+        valorEsperado: servicosEscolhidos().reduce((soma, s) => soma + s.preco, 0)      // o total que o cliente está vendo
       })
     });
     const corpo = await resp.json().catch(() => ({}));
 
+    if (resp.status === 409 && /O valor mudou/i.test(corpo.erro || '')) {
+      btn.disabled = false;
+      btn.textContent = rotuloConfirmar();
+      assinaturaServidor = '';                   // força a atualização completa (preço novo)
+      await atualizarDadosNegocio();
+      toast(corpo.erro, 'erro');
+      if (state.horarioSelecionado) { mostrarTela(4); renderizarResumoFinal(); }
+      return;
+    }
+    if (resp.status === 409 && /Profissional indispon/i.test(corpo.erro || '')) {
+      btn.disabled = false;
+      btn.textContent = rotuloConfirmar();
+      await atualizarDadosNegocio();            // o profissional saiu do ar: volta para a escolha com a lista atual
+      toast('Esse profissional não está mais disponível. Escolha outro.', 'erro');
+      mostrarTela(2);
+      renderizarTela2();
+      return;
+    }
     if (resp.status === 409) {
       toast(corpo.erro || 'Este horário acabou de ser reservado. Escolha outro.', 'erro');
       btn.disabled = false;
@@ -1153,8 +1249,8 @@ async function abrirMeusAgendamentos() {
   await carregarMeusAgendamentos();
 }
 
-async function carregarMeusAgendamentos() {
-  $('#lista-meus-agendamentos').innerHTML = '<div class="horario-placeholder">Carregando...</div>';
+async function carregarMeusAgendamentos(silencioso = false) {
+  if (!silencioso) $('#lista-meus-agendamentos').innerHTML = '<div class="horario-placeholder">Carregando...</div>';
   try {
     const resp = await fetch('/api/agendamento-cliente', {
       method: 'POST',
@@ -1164,7 +1260,7 @@ async function carregarMeusAgendamentos() {
     const dados = await resp.json();
     state.meusAgendamentos = dados.agendamentos || [];
     renderizarMeusAgendamentos();
-    if (state.meusAgendamentos.length) mostrarCartaoAvisos($('#card-avisos-lista'), { slug: state.slug, whatsapp: state.cliente.whatsapp }, toast);
+    if (state.meusAgendamentos.length && !silencioso) mostrarCartaoAvisos($('#card-avisos-lista'), { slug: state.slug, whatsapp: state.cliente.whatsapp }, toast);
   } catch (err) {
     console.error('Erro ao carregar agendamentos:', err);
     $('#lista-meus-agendamentos').innerHTML = '<div class="horario-placeholder">Erro ao carregar. Tente novamente.</div>';

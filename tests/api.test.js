@@ -555,3 +555,25 @@ test('negocio: ?manifest=1 devolve o app instalável DO NEGÓCIO (link e nome pr
   const inexistente = await chamar(negocio, req('GET', { query: { slug: 'nao-existe-aqui', manifest: '1' } }));
   assert.equal(inexistente.statusCode, 404);
 });
+
+test('criar-agendamento: se o preço mudou depois que o cliente viu o total, recusa (409) em vez de agendar pelo valor novo', async () => {
+  const velho = await chamar(criarAgendamento, req('POST', { body: corpoAgendamento({ valorEsperado: 70 }) }));
+  assert.equal(velho.statusCode, 409);
+  assert.match(velho.body.erro, /O valor mudou para R\$ 75,00/);
+  assert.equal([...amb.fake.docs.keys()].filter((k) => k.includes('/agendamentos/')).length, 0);
+  const certo = await chamar(criarAgendamento, req('POST', { body: corpoAgendamento({ valorEsperado: 75 }) }));
+  assert.equal(certo.statusCode, 201);
+});
+
+test('negocio: cada serviço com foto traz a versão (fotoV) e o pacote principal continua sem a foto', async () => {
+  const JPEG = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsL';
+  amb.fake.seed(`barbearias/${SLUG}/servicos/srv1`, { ...amb.fake.get(`barbearias/${SLUG}/servicos/srv1`), foto: JPEG });
+  const a = await chamar(negocio, req('GET', { query: { slug: SLUG } }));
+  assert.equal(a.body.servicos.srv1.temFoto, true);
+  assert.match(a.body.servicos.srv1.fotoV, /^[0-9a-f]{10}$/);
+  assert.equal(JSON.stringify(a.body).includes('base64'), false);
+  amb.fake.seed(`barbearias/${SLUG}/servicos/srv1`, { ...amb.fake.get(`barbearias/${SLUG}/servicos/srv1`), foto: JPEG.replace('AAgG', 'AAgH') });
+  const b = await chamar(negocio, req('GET', { query: { slug: SLUG } }));
+  assert.notEqual(a.body.servicos.srv1.fotoV, b.body.servicos.srv1.fotoV);          // trocou a imagem: versão nova
+  assert.equal(a.body.servicos.srv2.fotoV, undefined);
+});

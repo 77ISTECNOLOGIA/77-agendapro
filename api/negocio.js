@@ -21,7 +21,7 @@ const { comCache } = require('./_lib/cache');
 const { configSinal } = require('./_lib/sinal');
 
 // Por quanto tempo repetir a mesma resposta sem reler o banco
-const TTL_NEGOCIO_MS = 20000, TTL_FOTOS_MS = 120000;   // vale também para "não existe" (tentar links inventados não relê o banco a cada tentativa)
+const TTL_NEGOCIO_MS = 20000, TTL_FOTOS_MS = 20000;   // vale também para "não existe" (tentar links inventados não relê o banco a cada tentativa)
 
 // Manifesto PWA do link do cliente. start_url = o link do próprio negócio.
 function manifestoDoNegocio(slug, nome, nomeIcone) {

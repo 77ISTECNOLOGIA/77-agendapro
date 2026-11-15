@@ -30,6 +30,7 @@ function montar({ prefetch, respostas = [], servicos } = {}) {
   const cartoes = {};
   const ctx = vm.createContext({
     console: { error() {}, log() {} }, Promise, Object, encodeURIComponent, String,
+    JSON, assinaturaDe: () => 'assinatura',
     window: { __negocioPrefetch: prefetch },
     state: { slug: 'lipao', barbearia: null, servicos: servicos || {}, profissionais: {}, agendamentos: [] },
     fetch: async (url) => { chamadas.push(url); const r = fila.shift(); if (r instanceof Error) throw r; return r; },
