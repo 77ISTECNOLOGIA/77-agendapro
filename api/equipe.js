@@ -22,6 +22,7 @@ const E = require('./_lib/equipe');
 const { validarDadosPix, validarSinalPessoa } = require('./_lib/sinal');
 const { precosProfissionalValidos, fotoServicoValida } = require('./_lib/negocio');
 const { reaplicarSocio } = require('./_lib/privacidade');
+const { hojeChaveBrasil } = require('./_lib/tempo');
 
 const BASE = () => process.env.APP_URL || 'https://77-agendapro.vercel.app';
 const TOKEN_OK = /^[A-Za-z0-9_-]{20,64}$/;
@@ -202,7 +203,23 @@ async function remover(firestore, ctx, b) {
     throw new ErroNegocio(409, 'O negócio precisa ter pelo menos uma pessoa que possa gerenciá-lo.');
   }
   await firestore.collection('usuarios').doc(b.uid).delete();     // a conta de login continua existindo, mas sem negócio
-  return { sucesso: true };
+
+  // Quem sai da equipe também sai do link do cliente: o profissional dele fica INATIVO (nada é apagado: histórico, agenda e
+  // clientes continuam). Sem isso o cliente seguia vendo e agendando com alguém que não trabalha mais ali. Se outro login
+  // ainda usa o mesmo profissional, ele continua ativo. O dono reativa depois em Profissionais, se for o caso.
+  const resposta = { sucesso: true };
+  const profId = alvo.profissionalId;
+  if (profId && !membros.some((m) => m.uid !== b.uid && m.profissionalId === profId)) {
+    const profRef = ctx.negocioRef.collection('profissionais').doc(String(profId));
+    const prof = await profRef.get();
+    if (prof.exists) {
+      await profRef.update({ ativo: false, removidoEm: new Date().toISOString() });
+      const futuros = await ctx.negocioRef.collection('agendamentos').where('profissionalId', '==', String(profId)).where('dataChave', '>=', hojeChaveBrasil()).get();
+      resposta.profissionalDesativado = String(prof.data().nome || '');
+      resposta.agendamentosFuturos = futuros.docs.filter((d) => d.data().status === 'confirmado').length;
+    }
+  }
+  return resposta;
 }
 
 async function cancelarConvite(firestore, ctx, b) {

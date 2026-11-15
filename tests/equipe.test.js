@@ -323,3 +323,30 @@ test('push de teste: manda só para os aparelhos de quem pediu', async () => {
   await handler(req('POST', { body: { idToken: 'tok-dono1' } }), r2);
   assert.deepEqual(amb.notificacoes.map((m) => m.token).sort(), ['tok-antigo', 'tok-dono'], 'quem vê tudo também testa os aparelhos antigos');
 });
+
+test('remover: quem sai da equipe sai do link do cliente (profissional vira inativo, nada é apagado) e avisa dos agendamentos futuros', async () => {
+  const socio = amb.fake.get('usuarios/socio1');
+  assert.ok(socio.profissionalId, 'o sócio de teste deve estar ligado a um profissional');
+  const profPath = `barbearias/${SLUG}/profissionais/${socio.profissionalId}`;
+  assert.notEqual(amb.fake.get(profPath).ativo, false);
+  const { dataEmDias } = require('./_helpers');
+  amb.fake.seed(`barbearias/${SLUG}/agendamentos/futuro1`, { profissionalId: socio.profissionalId, dataChave: dataEmDias(3), horario: '10:00', status: 'confirmado', donoVe: true });
+  amb.fake.seed(`barbearias/${SLUG}/agendamentos/cancelado1`, { profissionalId: socio.profissionalId, dataChave: dataEmDias(4), horario: '10:00', status: 'cancelado', donoVe: true });
+  const r = await chamar(comoDono({ action: 'remover', uid: 'socio1' }));
+  assert.equal(r.statusCode, 200);
+  assert.equal(r.body.agendamentosFuturos, 1);
+  assert.ok(r.body.profissionalDesativado);
+  const prof = amb.fake.get(profPath);
+  assert.equal(prof.ativo, false);                          // some do link do cliente...
+  assert.ok(prof.nome);                                     // ...mas o cadastro (e o histórico) continua
+  assert.ok(amb.fake.get(`barbearias/${SLUG}/agendamentos/futuro1`));
+});
+
+test('remover: se outro login ainda usa o mesmo profissional, ele continua ativo', async () => {
+  const socio = amb.fake.get('usuarios/socio1');
+  amb.fake.seed('usuarios/parceiro', { barbeariaId: SLUG, role: 'profissional', profissionalId: socio.profissionalId, email: 'p@teste.com', permissoes: { verTodos: false, gerirNegocio: false }, papel: 'funcionario' });
+  const r = await chamar(comoDono({ action: 'remover', uid: 'socio1' }));
+  assert.equal(r.statusCode, 200);
+  assert.notEqual(amb.fake.get(`barbearias/${SLUG}/profissionais/${socio.profissionalId}`).ativo, false);
+  assert.equal(r.body.profissionalDesativado, undefined);
+});

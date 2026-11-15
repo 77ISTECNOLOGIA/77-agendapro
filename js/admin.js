@@ -2650,9 +2650,9 @@ async function acaoEquipe(acao, dados) {
       renderizarEquipe();
     } else if (acao === 'remover') {
       const m = equipeCache.membros.find((x) => x.uid === dados.uid);
-      if (!confirm('Remover o acesso de ' + (m.nome || m.email) + '? A pessoa deixa de entrar no painel (a agenda e os clientes continuam aqui).')) return;
-      await chamarEquipe('remover', { uid: dados.uid });
-      toast('Acesso removido', 'sucesso');
+      if (!confirm('Remover ' + (m.nome || m.email) + ' da equipe? A pessoa deixa de entrar no painel e o profissional dela deixa de aparecer para os clientes (o histórico fica guardado).')) return;
+      const r = await chamarEquipe('remover', { uid: dados.uid });
+      toast(r && r.profissionalDesativado ? 'Removido. ' + r.profissionalDesativado + ' não aparece mais para os clientes.' + (r.agendamentosFuturos ? ' Atenção: ele ainda tem ' + r.agendamentosFuturos + ' agendamento(s) futuro(s) marcado(s).' : '') : 'Acesso removido', 'sucesso');
       renderizarEquipe();
     } else if (acao === 'papel') {
       modalPapel(dados.uid);
