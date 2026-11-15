@@ -465,6 +465,20 @@
             </div>
           </div>
 
+          <!-- Identidade visual: logo do estabelecimento -->
+          <div class="card-grande" style="margin-top: 20px;" id="card-logo">
+            <div class="card-header"><h3 class="card-titulo">Identidade visual</h3></div>
+            <p class="campo-help" style="margin:0 0 12px;">A logo aparece no topo da página de agendamento dos seus clientes.</p>
+            <div style="display:flex;gap:14px;align-items:center;">
+              <div id="logo-previa" class="foto-previa" style="width:84px;height:84px;"><span>Sem logo</span></div>
+              <div style="display:flex;flex-direction:column;gap:8px;">
+                <label class="btn-acao-secundario" style="cursor:pointer;text-align:center;">Escolher logo<input type="file" id="logo-arquivo" accept="image/*" hidden></label>
+                <button type="button" class="btn-acao-perigo" id="logo-remover" hidden>Remover logo</button>
+              </div>
+            </div>
+            <small class="campo-help" id="logo-ajuda" style="display:block;margin-top:8px;">Funciona melhor com imagem quadrada. A logo inteira é mantida, sem cortes.</small>
+          </div>
+
           <!-- Sinal por Pix e limite por semana -->
           <div class="card-grande" style="margin-top: 20px;" id="card-regras-agendamento">
             <div class="card-header">
@@ -524,8 +538,8 @@
             </div>
             <div class="input-grupo" style="margin-top:6px;">
               <label class="input-label" for="nome-icone">NOME NO ÍCONE DO CELULAR DO CLIENTE</label>
-              <input type="text" id="nome-icone" class="input" maxlength="12" placeholder="Automático" style="max-width:200px;">
-              <small class="campo-help">Até 12 caracteres. Em branco, o sistema escolhe pelo nome do estabelecimento (ex.: “Barbearia do Lipão” vira “Lipão”).</small>
+              <input type="text" id="nome-icone" class="input" maxlength="12" placeholder="AgendaPro" style="max-width:200px;">
+              <small class="campo-help">Até 12 caracteres. Em branco, o ícone se chama “AgendaPro”, como nos apps de agendamento do mercado. O nome do seu estabelecimento continua aparecendo dentro do app.</small>
             </div>
             <div class="input-grupo" style="margin-top:6px;">
               <label class="input-label">LEMBRETE AO CLIENTE (APP INSTALADO NO CELULAR)</label>

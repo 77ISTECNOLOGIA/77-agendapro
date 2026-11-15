@@ -7,7 +7,10 @@
 //     listar            → membros, convites pendentes e profissionais (sem comissão)
 //     convidar          → gera um link de convite (nome, e-mail, profissional e permissões)
 //     alterar           → muda as permissões de um membro
-//     remover           → tira o acesso de um membro
+//     remover           → DESATIVA o cadastro (perde o acesso e some do link do cliente; guardado em equipeInativa, dá para reativar)
+//     reativar          → volta um cadastro desativado
+//     excluir-previa    → mostra quantos agendamentos futuros o profissional tem e quantos podem passar para outro
+//     excluir-profissional → exclui de vez (transfere/cancela o futuro e avisa os clientes; histórico fica). Só o dono; nunca sócio
 //     cancelar-convite  → apaga um convite pendente
 //   Para quem recebeu o link:
 //     convite-info      → mostra para qual negócio é o convite (sem login)
@@ -15,7 +18,7 @@
 // Regras de ouro: ninguém dá ou ganha permissão que não tem; ninguém mexe em quem tem mais poder; o negócio
 // nunca fica sem alguém que o gerencie. Só o servidor grava usuarios/{uid} (firestore.rules proíbe pelo navegador).
 
-const { db, auth } = require('./_lib/firebase');
+const { db, auth, FieldValue } = require('./_lib/firebase');
 const { slugValido } = require('./_lib/negocio');
 const { dentroDoLimite, dentroDoLimitePorChave, responder, ErroNegocio, tratarErro, corpoDe } = require('./_lib/http');
 const E = require('./_lib/equipe');
@@ -23,6 +26,8 @@ const { validarDadosPix, validarSinalPessoa } = require('./_lib/sinal');
 const { precosProfissionalValidos, fotoServicoValida } = require('./_lib/negocio');
 const { reaplicarSocio } = require('./_lib/privacidade');
 const { hojeChaveBrasil } = require('./_lib/tempo');
+const { analisar, resumo, executar } = require('./_lib/saida-profissional');
+const { avisarClienteAlteracao } = require('./_lib/lembrete');
 
 const BASE = () => process.env.APP_URL || 'https://77-agendapro.vercel.app';
 const TOKEN_OK = /^[A-Za-z0-9_-]{20,64}$/;
@@ -47,18 +52,20 @@ function exigirGerir(ctx) {
 }
 
 async function carregarEquipe(firestore, ctx) {
-  const [usSnap, profSnap, convSnap] = await Promise.all([
+  const [usSnap, profSnap, convSnap, inatSnap] = await Promise.all([
     firestore.collection('usuarios').where('barbeariaId', '==', ctx.slug).get(),
     ctx.negocioRef.collection('profissionais').get(),
-    ctx.negocioRef.collection('convites').get()
+    ctx.negocioRef.collection('convites').get(),
+    ctx.negocioRef.collection('equipeInativa').get()
   ]);
   const profissionais = {};
-  profSnap.docs.forEach((d) => { profissionais[d.id] = { id: d.id, nome: d.data().nome || '', ativo: d.data().ativo !== false }; });
+  profSnap.docs.forEach((d) => { profissionais[d.id] = { id: d.id, nome: d.data().nome || '', ativo: d.data().ativo !== false, socio: d.data().socio === true }; });
   const membros = usSnap.docs.map((d) => ({ uid: d.id, ...d.data() }));
   const agoraMs = Date.now();
   const convites = convSnap.docs.map((d) => ({ token: d.id, ...d.data() }))
     .filter((c) => !c.usado && Date.parse(c.expiraEm) > agoraMs);
-  return { profissionais, membros, convites };
+  const inativos = inatSnap.docs.map((d) => ({ uid: d.id, ...d.data() }));
+  return { profissionais, membros, convites, inativos };
 }
 
 const gerentesRestantes = (membros) => membros.filter((m) => E.permissoesDe(m).gerirNegocio).length;
@@ -66,14 +73,23 @@ const gerentesRestantes = (membros) => membros.filter((m) => E.permissoesDe(m).g
 // ---------------------------------------------------------------- ações com login
 async function listar(firestore, ctx) {
   exigirGerir(ctx);
-  const { profissionais, membros, convites } = await carregarEquipe(firestore, ctx);
-  const vinculados = new Set([...membros, ...convites].map((x) => x.profissionalId).filter(Boolean));
+  const { profissionais, membros, convites, inativos } = await carregarEquipe(firestore, ctx);
+  const vinculados = new Set([...membros, ...convites, ...inativos].map((x) => x.profissionalId).filter(Boolean));
+  const souDono = ctx.permissoes.verTodos && ctx.permissoes.gerirNegocio;
   return {
     eu: { uid: ctx.uid, permissoes: ctx.permissoes, papel: E.papelDe(ctx.usuario), profissionalId: ctx.usuario.profissionalId || '' },
     membros: membros.map((m) => ({
       uid: m.uid, nome: m.nome || '', email: m.email || '', role: m.role || 'owner', profissionalId: m.profissionalId || '',
       profissionalNome: (profissionais[m.profissionalId] || {}).nome || '', permissoes: E.permissoesDe(m), papel: E.papelDe(m),
-      eu: m.uid === ctx.uid, podeModificar: m.uid !== ctx.uid && E.podeModificar(ctx.permissoes, E.permissoesDe(m))
+      eu: m.uid === ctx.uid, podeModificar: m.uid !== ctx.uid && E.podeModificar(ctx.permissoes, E.permissoesDe(m)),
+      // só o dono exclui de vez, e nunca um sócio (o cadastro dele é só dele: o dono apenas desativa)
+      podeExcluir: souDono && m.uid !== ctx.uid && E.papelDe(m) === 'funcionario' && !!m.profissionalId && E.podeModificar(ctx.permissoes, E.permissoesDe(m))
+    })),
+    inativos: inativos.map((m) => ({
+      uid: m.uid, nome: m.nome || '', email: m.email || '', papel: E.papelDe(m), profissionalId: m.profissionalId || '',
+      profissionalNome: (profissionais[m.profissionalId] || {}).nome || '', desativadoEm: m.desativadoEm || '',
+      podeReativar: E.podeModificar(ctx.permissoes, E.permissoesDe(m)),
+      podeExcluir: souDono && E.papelDe(m) === 'funcionario' && !!m.profissionalId
     })),
     convites: convites.map((c) => ({
       token: c.token, nome: c.nome, email: c.email, profissionalId: c.profissionalId || '', profissionalNome: (profissionais[c.profissionalId] || {}).nome || '',
@@ -86,8 +102,9 @@ async function listar(firestore, ctx) {
 async function convidar(firestore, ctx, b) {
   exigirGerir(ctx);
   const dados = E.validarConvite(b, ctx.permissoes);
-  const { profissionais, membros, convites } = await carregarEquipe(firestore, ctx);
+  const { profissionais, membros, convites, inativos } = await carregarEquipe(firestore, ctx);
 
+  if (inativos.some((m) => String(m.email || '').toLowerCase() === dados.email)) throw new ErroNegocio(409, 'Esse e-mail está na equipe como desativado. Reative o cadastro em vez de convidar de novo.');
   if (convites.length >= E.MAX_CONVITES_PENDENTES) throw new ErroNegocio(429, 'Há convites demais pendentes. Cancele alguns antes de convidar mais.');
   if (membros.some((m) => String(m.email || '').toLowerCase() === dados.email) || convites.some((c) => c.email === dados.email)) {
     throw new ErroNegocio(409, 'Esse e-mail já faz parte da equipe ou já tem um convite pendente.');
@@ -202,6 +219,11 @@ async function remover(firestore, ctx, b) {
   if (gerentesRestantes(membros.filter((m) => m.uid !== b.uid)) < 1) {
     throw new ErroNegocio(409, 'O negócio precisa ter pelo menos uma pessoa que possa gerenciá-lo.');
   }
+  // Desativar NÃO apaga a pessoa: o vínculo é guardado em equipeInativa (só o servidor lê) para poder reativar depois.
+  await ctx.negocioRef.collection('equipeInativa').doc(b.uid).set({
+    nome: alvo.nome || '', email: alvo.email || '', papel: E.papelDe(alvo), permissoes: E.permissoesDe(alvo), profissionalId: alvo.profissionalId || '',
+    usuarioOriginal: alvo, desativadoEm: agora(), desativadoPor: ctx.uid
+  });
   await firestore.collection('usuarios').doc(b.uid).delete();     // a conta de login continua existindo, mas sem negócio
 
   // Quem sai da equipe também sai do link do cliente: o profissional dele fica INATIVO (nada é apagado: histórico, agenda e
@@ -213,13 +235,120 @@ async function remover(firestore, ctx, b) {
     const profRef = ctx.negocioRef.collection('profissionais').doc(String(profId));
     const prof = await profRef.get();
     if (prof.exists) {
-      await profRef.update({ ativo: false, removidoEm: new Date().toISOString() });
+      await profRef.update({ ativo: false, removidoEm: agora() });
       const futuros = await ctx.negocioRef.collection('agendamentos').where('profissionalId', '==', String(profId)).where('dataChave', '>=', hojeChaveBrasil()).get();
       resposta.profissionalDesativado = String(prof.data().nome || '');
       resposta.agendamentosFuturos = futuros.docs.filter((d) => d.data().status === 'confirmado').length;
     }
   }
   return resposta;
+}
+
+// ---------------------------------------------------------------- reativar
+async function reativar(firestore, ctx, b) {
+  exigirGerir(ctx);
+  const uid = String(b.uid || '');
+  if (!uid || uid.includes('/')) throw new ErroNegocio(400, 'Pessoa inválida.');
+  const arqRef = ctx.negocioRef.collection('equipeInativa').doc(uid);
+  const arq = (await arqRef.get()).data();
+  if (!arq) throw new ErroNegocio(404, 'Cadastro desativado não encontrado.');
+  if (!E.podeModificar(ctx.permissoes, E.permissoesDe(arq))) throw new ErroNegocio(403, 'Você não pode reativar alguém com o mesmo nível de acesso que o seu.');
+  if ((await firestore.collection('usuarios').doc(uid).get()).exists) throw new ErroNegocio(409, 'Essa pessoa já tem acesso a um negócio.');
+  if (arq.email) {
+    const outro = await firestore.collection('usuarios').where('email', '==', arq.email).get();
+    if (outro.docs.length) throw new ErroNegocio(409, 'Esse e-mail já tem acesso a um negócio.');
+  }
+  await firestore.collection('usuarios').doc(uid).set(arq.usuarioOriginal || { barbeariaId: ctx.slug, role: 'profissional', email: arq.email, nome: arq.nome, profissionalId: arq.profissionalId, papel: arq.papel, permissoes: arq.permissoes });
+  if (arq.profissionalId) {
+    const profRef = ctx.negocioRef.collection('profissionais').doc(String(arq.profissionalId));
+    if ((await profRef.get()).exists) await profRef.update({ ativo: true, removidoEm: FieldValue.delete() });
+  }
+  await arqRef.delete();
+  return { sucesso: true };
+}
+
+// ---------------------------------------------------------------- excluir definitivamente (só o dono; nunca sócio)
+async function alvoDeExclusao(firestore, ctx, b) {
+  if (!(ctx.permissoes.verTodos && ctx.permissoes.gerirNegocio)) throw new ErroNegocio(403, 'Só o dono do estabelecimento exclui cadastros.');
+  const id = String(b.profissionalId || '');
+  if (!id || id.length > 64 || id.includes('/')) throw new ErroNegocio(400, 'Profissional inválido.');
+  const profSnap = await ctx.negocioRef.collection('profissionais').doc(id).get();
+  if (!profSnap.exists) throw new ErroNegocio(404, 'Profissional não encontrado.');
+  const prof = { id, ...profSnap.data() };
+  if (prof.socio === true) throw new ErroNegocio(403, 'O cadastro de um sócio não é excluído por aqui: o dono só desativa. Os dados dele são só dele.');
+  if (id === ctx.usuario.profissionalId) throw new ErroNegocio(403, 'Você não pode excluir o seu próprio cadastro.');
+  const { membros, inativos, profissionais } = await carregarEquipe(firestore, ctx);
+  const ligados = membros.filter((m) => m.profissionalId === id);
+  const ligadosInativos = inativos.filter((m) => m.profissionalId === id);
+  for (const m of [...ligados, ...ligadosInativos]) {
+    if (E.papelDe(m) === 'socio' || !E.podeModificar(ctx.permissoes, E.permissoesDe(m))) throw new ErroNegocio(403, 'Esse cadastro está ligado a uma pessoa com acesso igual ou maior que o seu.');
+  }
+  const destinos = Object.values(profissionais).filter((p) => p.id !== id && p.ativo && !p.socio).map((p) => ({ id: p.id, nome: p.nome }));
+  return { prof, ligados, ligadosInativos, destinos };
+}
+
+async function resolverDestino(ctx, destinos, b) {
+  if (!b.destinoId) return null;
+  const d = destinos.find((x) => x.id === String(b.destinoId));
+  if (!d) throw new ErroNegocio(400, 'Escolha um profissional ativo para receber os agendamentos.');
+  const snap = await ctx.negocioRef.collection('profissionais').doc(d.id).get();
+  return { id: d.id, ...snap.data() };
+}
+
+async function excluirPrevia(firestore, ctx, b) {
+  const { prof, ligados, ligadosInativos, destinos } = await alvoDeExclusao(firestore, ctx, b);
+  const info = (await ctx.negocioRef.get()).data() || {};
+  const destino = await resolverDestino(ctx, destinos, b);
+  const { itens, bloqueio } = await analisar({ negocioRef: ctx.negocioRef, info, profissionalId: prof.id, destino });
+  return {
+    nome: prof.nome || '', ligadoA: [...ligados, ...ligadosInativos].map((m) => ({ nome: m.nome || '', email: m.email || '' })),
+    destinos, destinoId: destino ? destino.id : '', bloqueio, ...resumo(itens),
+    itens: itens.slice(0, 30).map((i) => ({ cliente: i.ag.clienteNome || '', dataChave: i.ag.dataChave, horario: i.ag.horario, acao: i.acao, motivo: i.motivo || '' }))
+  };
+}
+
+async function excluirProfissional(firestore, ctx, b) {
+  const { prof, ligados, ligadosInativos, destinos } = await alvoDeExclusao(firestore, ctx, b);
+  const info = (await ctx.negocioRef.get()).data() || {};
+  const destino = b.acaoFuturos === 'transferir' ? await resolverDestino(ctx, destinos, b) : null;
+  if (b.acaoFuturos === 'transferir' && !destino) throw new ErroNegocio(400, 'Escolha para quem transferir os agendamentos.');
+  const previa = await analisar({ negocioRef: ctx.negocioRef, info, profissionalId: prof.id, destino });
+  if (previa.bloqueio) throw new ErroNegocio(409, previa.bloqueio);
+
+  const feitos = await executar({
+    firestore, negocioRef: ctx.negocioRef, slug: ctx.slug, info, profissional: prof, destino,
+    avisar: ({ tipo, id, ag }) => avisarClienteAlteracao(ctx.negocioRef, id, ag, tipo, info.nome)
+  });
+
+  // 1) revoga o acesso, 2) apaga o que é só dele (horários fixos, convites, referências nos serviços, aparelhos, cadastro), 3) apaga o login
+  const uids = [...ligados.map((m) => m.uid), ...ligadosInativos.map((m) => m.uid)];
+  for (const uid of uids) {
+    await firestore.collection('usuarios').doc(uid).delete().catch(() => {});
+    await ctx.negocioRef.collection('equipeInativa').doc(uid).delete().catch(() => {});
+    const aparelhos = await ctx.negocioRef.collection('dispositivos').where('uid', '==', uid).get();
+    for (const d of aparelhos.docs) await d.ref.delete();
+  }
+  const series = await ctx.negocioRef.collection('recorrencias').where('profissionalId', '==', prof.id).get();
+  for (const d of series.docs) await d.ref.delete();
+  const convites = await ctx.negocioRef.collection('convites').get();
+  for (const c of convites.docs) if (c.data().profissionalId === prof.id) await c.ref.delete();
+  const servicos = await ctx.negocioRef.collection('servicos').get();
+  for (const s of servicos.docs) {
+    const d = s.data(), up = {};
+    if (Array.isArray(d.profissionaisIds) && d.profissionaisIds.includes(prof.id)) up.profissionaisIds = d.profissionaisIds.filter((x) => x !== prof.id);
+    if (d.precosProfissional && d.precosProfissional[prof.id] !== undefined) up['precosProfissional.' + prof.id] = FieldValue.delete();
+    if (Object.keys(up).length) await s.ref.update(up);
+  }
+  await firestore.recursiveDelete(ctx.negocioRef.collection('profissionais').doc(prof.id));
+
+  let loginsApagados = 0;
+  if (b.apagarLogin !== false) {
+    for (const uid of uids) {
+      if (uid === ctx.uid) continue;
+      try { await auth().deleteUser(uid); loginsApagados++; } catch (e) { if (!e || e.code !== 'auth/user-not-found') console.error('Falha ao apagar login', e); }
+    }
+  }
+  return { sucesso: true, nome: prof.nome || '', ...feitos, loginsApagados };
 }
 
 async function cancelarConvite(firestore, ctx, b) {
@@ -272,6 +401,18 @@ async function sinalProfissional(firestore, ctx, b) {
   if (sinal.modo === 'ativo' && !(atual.pix && atual.pix.chavePix)) throw new ErroNegocio(400, 'Para cobrar sinal cadastre antes a sua chave Pix.');
   await configRef(ctx, id).set({ ...atual, sinal });
   return { sucesso: true, sinal };
+}
+
+// Foto do profissional: JPEG pequeno em data URL (mesma validação da foto do serviço). Quem pode: o próprio profissional ou, se
+// ele não é sócio, o dono (mesma regra do Pix/preços: profissionalAlvo).
+async function fotoProfissional(firestore, ctx, b) {
+  const id = await profissionalAlvo(firestore, ctx, b);
+  const ref = ctx.negocioRef.collection('profissionais').doc(id);
+  if (!(await ref.get()).exists) throw new ErroNegocio(404, 'Profissional não encontrado.');
+  if (b.foto === null || b.foto === '') { await ref.update({ foto: FieldValue.delete() }); return { sucesso: true, foto: '' }; }
+  if (!fotoServicoValida(b.foto) || b.foto.length > 90000) throw new ErroNegocio(400, 'Foto inválida: use uma imagem JPEG pequena (o painel prepara isso sozinho).');
+  await ref.update({ foto: b.foto });
+  return { sucesso: true };
 }
 
 async function precosProfissional(firestore, ctx, b) {
@@ -416,10 +557,14 @@ module.exports = async function handler(req, res) {
       case 'convidar': return responder(res, 201, await convidar(firestore, await contexto(b, firestore), b));
       case 'alterar': return responder(res, 200, await alterar(firestore, await contexto(b, firestore), b));
       case 'remover': return responder(res, 200, await remover(firestore, await contexto(b, firestore), b));
+      case 'reativar': return responder(res, 200, await reativar(firestore, await contexto(b, firestore), b));
+      case 'excluir-previa': return responder(res, 200, await excluirPrevia(firestore, await contexto(b, firestore), b));
+      case 'excluir-profissional': return responder(res, 200, await excluirProfissional(firestore, await contexto(b, firestore), b));
       case 'equipe-ativar': return responder(res, 200, await equipeAtivar(firestore, await contexto(b, firestore), b));
       case 'sinal-profissional': return responder(res, 200, await sinalProfissional(firestore, await contexto(b, firestore), b));
       case 'servico-proprio': return responder(res, 200, await servicoProprio(firestore, await contexto(b, firestore), b));
       case 'pix-profissional': return responder(res, 200, await pixProfissional(firestore, await contexto(b, firestore), b));
+      case 'foto-profissional': return responder(res, 200, await fotoProfissional(firestore, await contexto(b, firestore), b));
       case 'precos-profissional': return responder(res, 200, await precosProfissional(firestore, await contexto(b, firestore), b));
       case 'cancelar-convite': return responder(res, 200, await cancelarConvite(firestore, await contexto(b, firestore), b));
       default: return responder(res, 400, { erro: 'Ação inválida' });

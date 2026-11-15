@@ -156,6 +156,12 @@ function formatarDataLonga(d) {
 function diasDaSemana() {
   return ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
 }
+// Avatar redondo dos cartões: foto (se houver) ou as iniciais
+function avatarCartao(foto, nome, estiloIniciais) {
+  if (fotoServicoValida(foto)) return `<div class="item-card-emoji"><img src="${foto}" alt="" class="item-card-foto"></div>`;
+  return `<div class="item-card-emoji" style="${estiloIniciais}">${escapeHtml(iniciais(nome))}</div>`;
+}
+
 function iniciais(nome) {
   return (nome || '?').split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase();
 }
@@ -2084,7 +2090,7 @@ function textoQuemRealiza(s) {
 // Prepara a foto no próprio navegador antes de guardar: recorte QUADRADO centralizado, 400x400,
 // JPEG, reduzindo a qualidade até caber no limite. Assim a foto fica leve (dezenas de KB) e dá
 // pra guardá-la junto do serviço no banco, sem serviço de armazenamento pago.
-async function prepararFotoServico(arquivo) {
+async function prepararFotoServico(arquivo, { contido = false } = {}) {
   if (!arquivo || !String(arquivo.type).startsWith('image/')) throw new Error('Escolha um arquivo de imagem (foto).');
   if (arquivo.size > 15 * 1024 * 1024) throw new Error('A foto é grande demais (máximo 15 MB).');
 
@@ -2104,7 +2110,13 @@ async function prepararFotoServico(arquivo) {
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = '#ffffff';                 // fundo branco: PNG transparente não vira preto no JPEG
     ctx.fillRect(0, 0, lado, lado);
-    ctx.drawImage(img, (img.naturalWidth - menor) / 2, (img.naturalHeight - menor) / 2, menor, menor, 0, 0, lado, lado);
+    if (contido) {                              // logo: cabe inteira no quadrado, centralizada (sem cortar)
+      const escala = Math.min(lado / img.naturalWidth, lado / img.naturalHeight);
+      const w = img.naturalWidth * escala, h = img.naturalHeight * escala;
+      ctx.drawImage(img, (lado - w) / 2, (lado - h) / 2, w, h);
+    } else {
+      ctx.drawImage(img, (img.naturalWidth - menor) / 2, (img.naturalHeight - menor) / 2, menor, menor, 0, 0, lado, lado);
+    }
 
     for (let qualidade = 0.78; qualidade >= 0.38; qualidade -= 0.08) {
       const dataUrl = canvas.toDataURL('image/jpeg', qualidade);
@@ -2249,7 +2261,7 @@ async function deletarServico(id) {
 // VIEW: PROFISSIONAIS (CRUD)
 // ========================================
 function renderizarProfissionais() {
-  const lista = Object.entries(state.profissionais).map(([id, p]) => ({ ...p, id }));
+  const lista = Object.entries(state.profissionais).map(([id, p]) => ({ ...p, id })).filter((p) => !(souDono() && p.socio));   // sócio não é "meu profissional": aparece só na Equipe
 
   if (lista.length === 0) {
     $('#lista-profissionais-admin').innerHTML = '<div class="vazio-msg">Nenhum profissional cadastrado.</div>';
@@ -2261,7 +2273,7 @@ function renderizarProfissionais() {
     return `
       <div class="item-card" data-id="${p.id}">
         <div class="item-card-header">
-          <div class="item-card-emoji" style="background:linear-gradient(135deg,var(--accent),var(--accent-dark));color:#fff;font-family:'Bricolage Grotesque';font-weight:700;">${escapeHtml(iniciais(p.nome))}</div>
+          ${avatarCartao(p.foto, p.nome, "background:linear-gradient(135deg,var(--accent),var(--accent-dark));color:#fff;font-family:'Bricolage Grotesque';font-weight:700;")}
           <div style="flex:1;">
             <div class="item-card-titulo">${escapeHtml(p.nome)}</div>
             <div class="item-card-sub">${escapeHtml(p.especialidade || 'Profissional')}</div>
@@ -2395,7 +2407,26 @@ async function modalProfissional(id = null) {
     </div>
     <div class="input-grupo"><label class="input-label">BANCO (OPCIONAL)</label><input type="text" id="pp-pix-banco" class="input" value="${escapeHtml((pixAtual.banco || '').replace(/^Banco /, ''))}" placeholder="Ex.: Inter, Nubank"></div>`;
 
+  // Foto do profissional: quem pode editar o cadastro (dono; ou a própria pessoa, se for sócio). Vai pela API, que confere de quem é.
+  const podeFoto = completo || configurar;
+  let fotoProf = fotoServicoValida(p.foto) ? p.foto : '';
+  const fotoInicial = fotoProf;
+  const AJUDA_FOTO = 'Aparece para o cliente na hora de escolher o profissional. A foto é recortada em quadrado e reduzida automaticamente.';
+  const blocoFoto = !podeFoto ? '' : `
+    <div class="input-grupo">
+      <label class="input-label">FOTO</label>
+      <div style="display:flex;gap:14px;align-items:center;">
+        <div id="prof-foto-previa" class="foto-previa" style="width:84px;height:84px;border-radius:50%;">${fotoProf ? `<img src="${fotoProf}" alt="">` : '<span>Sem foto</span>'}</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <label class="btn-acao-secundario" style="cursor:pointer;text-align:center;">Escolher foto<input type="file" id="prof-foto-arquivo" accept="image/*" hidden></label>
+          <button type="button" class="btn-acao-perigo" id="prof-foto-remover" ${fotoProf ? '' : 'hidden'}>Remover foto</button>
+        </div>
+      </div>
+      <small class="campo-help" id="prof-foto-ajuda">${AJUDA_FOTO}</small>
+    </div>`;
+
   const corpo = `
+    ${blocoFoto}
     <div class="input-grupo">
       <label class="input-label">NOME</label>
       <input type="text" id="prof-nome" class="input" value="${escapeHtml(p.nome)}" placeholder="Nome completo">
@@ -2456,6 +2487,31 @@ async function modalProfissional(id = null) {
     modoSinalEl.addEventListener('change', mostrarDetalhes); mostrarDetalhes();
   }
 
+  if (podeFoto) {
+    const previaFotoProf = () => {
+      $('#prof-foto-previa').innerHTML = fotoProf ? `<img src="${fotoProf}" alt="">` : '<span>Sem foto</span>';
+      $('#prof-foto-remover').hidden = !fotoProf;
+    };
+    $('#prof-foto-arquivo').addEventListener('change', async (ev) => {
+      const arquivo = ev.target.files && ev.target.files[0];
+      if (!arquivo) return;
+      $('#prof-foto-ajuda').textContent = 'Preparando a foto…';
+      try {
+        fotoProf = await prepararFotoServico(arquivo);
+        previaFotoProf();
+        $('#prof-foto-ajuda').textContent = 'Foto pronta! Clique em Salvar para guardar.';
+      } catch (err) {
+        toast(err.message, 'erro');
+        $('#prof-foto-ajuda').textContent = AJUDA_FOTO;
+      }
+      ev.target.value = '';
+    });
+    $('#prof-foto-remover').addEventListener('click', () => { fotoProf = ''; previaFotoProf(); });
+  }
+  const salvarFotoProf = async (profissionalId) => {
+    if (podeFoto && fotoProf !== fotoInicial) await chamarEquipe('foto-profissional', { profissionalId, foto: fotoProf || null });
+  };
+
   $('#modal-cancel').addEventListener('click', fecharModal);
   $('#modal-salvar').addEventListener('click', async () => {
     const horarioTrabalho = {};
@@ -2480,6 +2536,7 @@ async function modalProfissional(id = null) {
       try {
         await updateDoc(doc(db, 'barbearias', state.barbeariaId, 'profissionais', id), dados);
         await salvarPrecosEPixDoProfissional(id);
+        await salvarFotoProf(id);
         toast('Perfil atualizado', 'sucesso');
         fecharModal();
       } catch (err) {
@@ -2515,6 +2572,7 @@ async function modalProfissional(id = null) {
       ));
       await lote.commit();
       if (id) await salvarPrecosEPixDoProfissional(id);
+      await salvarFotoProf(profRef.id);
       toast(id ? 'Profissional atualizado' : 'Profissional criado', 'sucesso');
       fecharModal();
     } catch (err) {
@@ -2549,14 +2607,8 @@ async function salvarPrecosEPixDoProfissional(id) {
   }
 }
 
-async function deletarProfissional(id) {
-  if (!confirm(`Excluir o profissional "${state.profissionais[id].nome}"?`)) return;
-  try {
-    await deleteDoc(doc(db, 'barbearias', state.barbeariaId, 'profissionais', id));
-    toast('Profissional excluído', 'sucesso');
-  } catch (err) {
-    toast('Erro ao excluir', 'erro');
-  }
+function deletarProfissional(id) {
+  abrirModalExcluir({ profissionalId: id, nome: (state.profissionais[id] || {}).nome || 'profissional' });
 }
 
 // ========================================
@@ -2593,10 +2645,11 @@ async function renderizarEquipe() {
     return;
   }
   const { membros, convites } = equipeCache;
+  const inativos = equipeCache.inativos || [];
   const cartoesMembros = membros.map((m) => `
     <div class="item-card">
       <div class="item-card-header">
-        <div class="item-card-emoji" style="background:var(--accent);color:#fff;font-family:'Bricolage Grotesque';font-weight:700;">${escapeHtml(iniciais(m.nome || m.email))}</div>
+        ${avatarCartao((state.profissionais[m.profissionalId] || {}).foto, m.nome || m.email, "background:var(--accent);color:#fff;font-family:'Bricolage Grotesque';font-weight:700;")}
         <div style="flex:1;min-width:0;">
           <div class="item-card-titulo">${escapeHtml(m.nome || m.email)}${m.eu ? ' <span class="tag-inativo" style="background:var(--accent);color:#fff;">você</span>' : ''}</div>
           <div class="item-card-sub">${escapeHtml(m.email)}${m.profissionalNome ? ' · Atende como ' + escapeHtml(m.profissionalNome) : ''}</div>
@@ -2605,7 +2658,24 @@ async function renderizarEquipe() {
       </div>
       <div class="item-card-actions">
         ${m.podeModificar && m.papel !== 'dono' ? `<button class="btn-mini" data-acao="papel" data-uid="${escapeHtml(m.uid)}">Mudar papel</button>
-        <button class="btn-mini perigo" data-acao="remover" data-uid="${escapeHtml(m.uid)}">Remover</button>` : ''}
+        <button class="btn-mini" data-acao="desativar" data-uid="${escapeHtml(m.uid)}">Desativar cadastro</button>` : ''}
+        ${m.podeExcluir ? `<button class="btn-mini perigo" data-acao="excluir" data-uid="${escapeHtml(m.uid)}" data-prof="${escapeHtml(m.profissionalId)}" data-nome="${escapeHtml(m.profissionalNome || m.nome || m.email)}">Excluir definitivamente</button>` : ''}
+      </div>
+    </div>`).join('');
+  const cartoesInativos = inativos.length === 0 ? '' : `
+    <h3 class="card-titulo" style="margin:22px 0 10px;">Cadastros desativados</h3>` + inativos.map((m) => `
+    <div class="item-card" style="opacity:.8;">
+      <div class="item-card-header">
+        <div class="item-card-emoji" style="background:var(--surface-2);color:var(--text-muted);font-family:'Bricolage Grotesque';font-weight:700;">${escapeHtml(iniciais(m.nome || m.email))}</div>
+        <div style="flex:1;min-width:0;">
+          <div class="item-card-titulo">${escapeHtml(m.nome || m.email)} <span class="tag-inativo">Desativado</span></div>
+          <div class="item-card-sub">${escapeHtml(m.email)}${m.profissionalNome ? ' · ' + escapeHtml(m.profissionalNome) : ''}</div>
+        </div>
+        <span class="tag-inativo" style="background:var(--surface-2);color:var(--text);">${escapeHtml(PAPEL_ROTULO[m.papel] || m.papel)}</span>
+      </div>
+      <div class="item-card-actions">
+        ${m.podeReativar ? `<button class="btn-mini" data-acao="reativar" data-uid="${escapeHtml(m.uid)}">Reativar</button>` : ''}
+        ${m.podeExcluir ? `<button class="btn-mini perigo" data-acao="excluir" data-uid="${escapeHtml(m.uid)}" data-prof="${escapeHtml(m.profissionalId)}" data-nome="${escapeHtml(m.profissionalNome || m.nome || m.email)}">Excluir definitivamente</button>` : ''}
       </div>
     </div>`).join('');
   const cartoesConvites = convites.length === 0 ? '' : `
@@ -2624,9 +2694,9 @@ async function renderizarEquipe() {
         <button class="btn-mini perigo" data-acao="cancelar" data-token="${escapeHtml(c.token)}">Cancelar</button>
       </div>
     </div>`).join('');
-  const vazio = membros.length <= 1 && convites.length === 0
+  const vazio = membros.length <= 1 && convites.length === 0 && inativos.length === 0
     ? '<div class="vazio-msg" style="margin-top:14px;">Você ainda não convidou ninguém. Clique em "+ Convidar pessoa" para chamar um <strong>sócio</strong> ou um <strong>funcionário</strong>.</div>' : '';
-  el.innerHTML = cartoesMembros + vazio + cartoesConvites;
+  el.innerHTML = cartoesMembros + vazio + cartoesInativos + cartoesConvites;
 
   $$('#lista-equipe [data-acao]').forEach((b) => b.addEventListener('click', () => acaoEquipe(b.dataset.acao, b.dataset)));
 }
@@ -2648,18 +2718,88 @@ async function acaoEquipe(acao, dados) {
       await chamarEquipe('cancelar-convite', { token: dados.token });
       toast('Convite cancelado', 'sucesso');
       renderizarEquipe();
-    } else if (acao === 'remover') {
+    } else if (acao === 'desativar') {
       const m = equipeCache.membros.find((x) => x.uid === dados.uid);
-      if (!confirm('Remover ' + (m.nome || m.email) + ' da equipe? A pessoa deixa de entrar no painel e o profissional dela deixa de aparecer para os clientes (o histórico fica guardado).')) return;
+      if (!confirm('Desativar o cadastro de ' + (m.nome || m.email) + '? A pessoa perde o acesso e o profissional dela deixa de aparecer para os clientes. Nada é apagado: você pode reativar depois.')) return;
       const r = await chamarEquipe('remover', { uid: dados.uid });
-      toast(r && r.profissionalDesativado ? 'Removido. ' + r.profissionalDesativado + ' não aparece mais para os clientes.' + (r.agendamentosFuturos ? ' Atenção: ele ainda tem ' + r.agendamentosFuturos + ' agendamento(s) futuro(s) marcado(s).' : '') : 'Acesso removido', 'sucesso');
+      toast(r && r.profissionalDesativado ? 'Cadastro desativado. ' + r.profissionalDesativado + ' não aparece mais para os clientes.' + (r.agendamentosFuturos ? ' Atenção: ainda há ' + r.agendamentosFuturos + ' agendamento(s) futuro(s) marcado(s).' : '') : 'Cadastro desativado', 'sucesso');
       renderizarEquipe();
+    } else if (acao === 'reativar') {
+      await chamarEquipe('reativar', { uid: dados.uid });
+      toast('Cadastro reativado', 'sucesso');
+      renderizarEquipe();
+    } else if (acao === 'excluir') {
+      abrirModalExcluir({ profissionalId: dados.prof, nome: dados.nome || 'profissional' });
     } else if (acao === 'papel') {
       modalPapel(dados.uid);
     }
   } catch (err) {
     toast(err.message, 'erro');
   }
+}
+
+
+// ---- Excluir definitivamente (Equipe e Profissionais): prévia dos agendamentos futuros, transferir ou cancelar, avisar os clientes
+function dataCurta(chave) { const [, m, d] = String(chave).split('-'); return d + '/' + m; }
+
+async function abrirModalExcluir({ profissionalId, nome }) {
+  abrirModal('Excluir ' + nome + '?', '<p style="color:var(--text-dim);font-size:14px;">Verificando os agendamentos futuros...</p>', '<button class="btn-acao-secundario" id="modal-cancel">Voltar</button>');
+  $('#modal-cancel').addEventListener('click', fecharModal);
+  let previa;
+  try { previa = await chamarEquipe('excluir-previa', { profissionalId }); }
+  catch (err) { fecharModal(); toast(err.message, 'erro'); return; }
+
+  const desenhar = (p) => {
+    const temFuturos = p.futuros > 0;
+    const opcoes = ['<option value="">Cancelar todos os agendamentos futuros</option>']
+      .concat(p.destinos.map((d) => `<option value="${escapeHtml(d.id)}" ${d.id === p.destinoId ? 'selected' : ''}>Passar para ${escapeHtml(d.nome)} (mesmo dia e horário)</option>`)).join('');
+    const linhas = p.itens.slice(0, 8).map((i) => `<div style="display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border);"><span>${escapeHtml(i.cliente)} · ${dataCurta(i.dataChave)} ${escapeHtml(i.horario)}</span><span style="color:${i.acao === 'transferir' ? 'var(--success)' : 'var(--warning, #ffb86b)'};white-space:nowrap;">${i.acao === 'transferir' ? 'passa' : 'cancela'}</span></div>`).join('');
+    $('#modal-body').innerHTML = `
+      <p style="font-size:14px;line-height:1.5;">${temFuturos ? `<strong>${escapeHtml(p.nome)} tem ${p.futuros} agendamento${p.futuros === 1 ? '' : 's'} futuro${p.futuros === 1 ? '' : 's'}.</strong>` : `<strong>${escapeHtml(p.nome)}</strong> não tem agendamentos futuros.`} O histórico e o faturamento ficam guardados.</p>
+      ${p.bloqueio ? `<div class="vazio-msg" style="margin:10px 0;">${escapeHtml(p.bloqueio)}</div>` : ''}
+      ${temFuturos && !p.bloqueio ? `
+        <div class="input-grupo" style="margin-top:12px;"><label class="input-label">O QUE FAZER COM ELES?</label><select id="exc-destino" class="input">${opcoes}</select></div>
+        ${p.destinoId ? `<div style="display:flex;gap:16px;font-size:13px;margin:6px 0 8px;"><span><strong style="color:var(--success);">${p.transferiveis}</strong> passam para o novo profissional</span><span><strong>${p.cancelados}</strong> cancelados</span></div>
+        <small class="campo-help">Se o preço mudar, o cliente é avisado. O que não couber (horário ocupado ou serviço que o outro não faz) é cancelado.</small>` : `<small class="campo-help">Todos serão cancelados e os clientes avisados.</small>`}
+        <div style="margin-top:8px;">${linhas}</div>` : ''}
+      ${p.ligadoA.length ? `<label class="nag-servico-item" style="margin-top:14px;"><input type="checkbox" id="exc-login" checked> <span>Apagar também o login e o e-mail dele (${escapeHtml(p.ligadoA[0].email)})</span></label>` : ''}
+      <small class="campo-help" style="display:block;margin-top:10px;">Isso não pode ser desfeito.</small>`;
+    $('#modal-footer').innerHTML = `<button class="btn-acao-secundario" id="modal-cancel">Voltar</button><button class="btn-acao" id="exc-confirmar" style="background:#c0392b;" ${p.bloqueio ? 'disabled' : ''}>Excluir definitivamente</button>`;
+    $('#modal-cancel').addEventListener('click', fecharModal);
+    const sel = $('#exc-destino');
+    if (sel) sel.addEventListener('change', async () => {
+      try { previa = await chamarEquipe('excluir-previa', { profissionalId, destinoId: sel.value }); desenhar(previa); } catch (err) { toast(err.message, 'erro'); }
+    });
+    $('#exc-confirmar').addEventListener('click', async () => {
+      const botao = $('#exc-confirmar'); botao.disabled = true; botao.textContent = 'Excluindo...';
+      try {
+        const destinoId = sel ? sel.value : '';
+        const login = $('#exc-login');
+        const r = await chamarEquipe('excluir-profissional', { profissionalId, acaoFuturos: destinoId ? 'transferir' : 'cancelar', destinoId, apagarLogin: login ? login.checked : false });
+        fecharModal();
+        toast(r.nome + ' foi excluído.' + (r.transferidos ? ' ' + r.transferidos + ' agendamento(s) transferido(s).' : '') + (r.cancelados ? ' ' + r.cancelados + ' cancelado(s).' : ''), 'sucesso');
+        if (equipeCache) renderizarEquipe();
+        if (r.semApp && r.semApp.length) modalAvisarClientes(r.nome, r.semApp);
+      } catch (err) { toast(err.message, 'erro'); botao.disabled = false; botao.textContent = 'Excluir definitivamente'; }
+    });
+  };
+  desenhar(previa);
+}
+
+// Clientes que NÃO têm o app (não receberam o aviso automático): o dono avisa por WhatsApp com a mensagem pronta
+function modalAvisarClientes(profNome, lista) {
+  const link = location.origin + '/' + state.barbeariaId;
+  const texto = (c) => {
+    const quem = (c.nome || '').split(' ')[0] || 'tudo bem';
+    const quando = dataCurta(c.dataChave) + ' às ' + c.horario;
+    return c.acao === 'transferir'
+      ? 'Oi ' + quem + '! Aqui é da ' + (state.barbearia.nome || '') + '. ' + profNome + ' não atende mais com a gente e seu horário de ' + quando + ' passou para ' + c.para + '. Qualquer dúvida, é só chamar.'
+      : 'Oi ' + quem + '! Aqui é da ' + (state.barbearia.nome || '') + '. Precisei cancelar seu horário de ' + quando + ' porque ' + profNome + ' não atende mais com a gente. Quer remarcar? ' + link;
+  };
+  const corpo = `<p style="color:var(--text-dim);font-size:13px;margin-bottom:12px;line-height:1.5;">Estes clientes não têm o app e não receberam aviso. Toque para avisar por WhatsApp com a mensagem pronta.</p>
+    ${lista.map((c) => `<div style="display:flex;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);"><div style="flex:1;min-width:0;"><div style="font-weight:600;font-size:14px;">${escapeHtml(c.nome)}</div><div style="font-size:12px;color:var(--text-muted);">${dataCurta(c.dataChave)} ${escapeHtml(c.horario)} · ${c.acao === 'transferir' ? 'passou para ' + escapeHtml(c.para) : 'cancelado'}</div></div><a class="btn-mini" target="_blank" rel="noopener" href="https://wa.me/${encodeURIComponent(c.whatsapp)}?text=${encodeURIComponent(texto(c))}">Avisar</a></div>`).join('')}`;
+  abrirModal('Avisar clientes', corpo, '<button class="btn-acao-secundario" id="modal-cancel">Fechar</button>');
+  $('#modal-cancel').addEventListener('click', fecharModal);
 }
 
 // Escolha de papel com cartões que explicam o que cada um enxerga (nada de "permissões" técnicas)
@@ -2932,6 +3072,7 @@ function renderizarConfiguracoes() {
 
   // Sinal por Pix e limite semanal
   preencherRegrasAgendamento();
+  preencherLogoConfig();
 
   // Status das notificações push (verifica se há pelo menos 1 dispositivo ativado)
   carregarStatusNotificacoes();
@@ -2974,6 +3115,46 @@ function renderizarConfiguracoes() {
     });
   }).catch(() => {
     qrEl.innerHTML = '<div style="color:#666;">QR Code não disponível</div>';
+  });
+}
+
+// ---- Logo do estabelecimento (Configurações → Identidade visual): vai pela API e aparece no topo do link do cliente
+function preencherLogoConfig() {
+  const logo = fotoServicoValida(state.barbearia.logo) ? state.barbearia.logo : '';
+  const previa = $('#logo-previa');
+  if (!previa) return;
+  previa.innerHTML = logo ? `<img src="${logo}" alt="" style="object-fit:contain;background:#fff;">` : '<span>Sem logo</span>';
+  $('#logo-remover').hidden = !logo;
+}
+
+async function enviarLogo(logo) {
+  const resp = await fetch('/api/configurar-negocio', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ idToken: await auth.currentUser.getIdToken(), logo })
+  });
+  const corpo = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(corpo.erro || 'Não foi possível salvar o logo.');
+  state.barbearia.logo = logo || undefined;
+  preencherLogoConfig();
+}
+
+function ligarLogoConfig() {
+  const arquivoEl = $('#logo-arquivo');
+  if (!arquivoEl) return;
+  const AJUDA = 'Funciona melhor com imagem quadrada. A logo inteira é mantida, sem cortes.';
+  arquivoEl.addEventListener('change', async (ev) => {
+    const arquivo = ev.target.files && ev.target.files[0];
+    if (!arquivo) return;
+    $('#logo-ajuda').textContent = 'Preparando a logo…';
+    try {
+      await enviarLogo(await prepararFotoServico(arquivo, { contido: true }));
+      toast('Logo salva. Já aparece para os seus clientes.', 'sucesso');
+    } catch (err) { toast(err.message, 'erro'); }
+    $('#logo-ajuda').textContent = AJUDA;
+    ev.target.value = '';
+  });
+  $('#logo-remover').addEventListener('click', async () => {
+    try { await enviarLogo(''); toast('Logo removida', 'sucesso'); } catch (err) { toast(err.message, 'erro'); }
   });
 }
 
@@ -3152,6 +3333,7 @@ function inicializarEventosViews() {
   });
   $('#btn-novo-agendamento').addEventListener('click', () => modalNovoAgendamento());
   $('#btn-salvar-sinal').addEventListener('click', salvarRegrasAgendamento);
+  ligarLogoConfig();
   UFS.forEach((uf) => { const o = document.createElement('option'); o.value = uf; o.textContent = uf; $('#conf-uf').appendChild(o); });
   ligarBuscaCep({ cep: 'conf-cep', logradouro: 'conf-logradouro', numero: 'conf-numero', bairro: 'conf-bairro', cidade: 'conf-cidade', uf: 'conf-uf', aviso: 'conf-cep-aviso' });
   $('#bloco-endereco').addEventListener('input', () => { $('#bloco-endereco').dataset.sujo = '1'; });

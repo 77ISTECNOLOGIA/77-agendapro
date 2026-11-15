@@ -487,9 +487,26 @@ test('api/negocio: devolve a foto do serviço (e só se for um JPEG válido)', a
   // chamada separada das fotos: só as válidas, e o navegador pode guardar por 5 minutos
   const f = await chamar(negocio, req('GET', { query: { slug: SLUG, fotos: '1' } }));
   assert.equal(f.statusCode, 200);
-  assert.deepEqual(f.body, { fotos: { srv1: JPEG } }, 'valor suspeito é descartado antes de chegar ao navegador do cliente');
+  assert.deepEqual(f.body, { fotos: { srv1: JPEG }, fotosProfissionais: {}, logo: null }, 'valor suspeito é descartado antes de chegar ao navegador do cliente');
   assert.equal(f.headers['Cache-Control'], 'public, max-age=300, s-maxage=300');
-  assert.deepEqual((await chamar(negocio, req('GET', { query: { slug: 'link-que-nao-existe', fotos: '1' } }))).body, { fotos: {} });
+  assert.deepEqual((await chamar(negocio, req('GET', { query: { slug: 'link-que-nao-existe', fotos: '1' } }))).body, { fotos: {}, fotosProfissionais: {}, logo: null });
+});
+
+test('api/negocio: foto do profissional e logo do negócio — o pacote principal só avisa (temFoto/temLogo + versão); as imagens vêm em ?fotos=1', async () => {
+  const JPEG = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsL';
+  amb.fake.seed(`barbearias/${SLUG}/profissionais/prof1`, { ...amb.fake.get(`barbearias/${SLUG}/profissionais/prof1`), foto: JPEG });
+  amb.fake.seed(`barbearias/${SLUG}`, { ...amb.fake.get(`barbearias/${SLUG}`), logo: JPEG });
+  amb.fake.seed(`barbearias/${SLUG}/profissionais/prof9`, { nome: 'Sem foto', ativo: true, foto: 'javascript:alert(1)' });
+  const r = await chamar(negocio, req('GET', { query: { slug: SLUG } }));
+  assert.equal(r.body.profissionais.prof1.temFoto, true);
+  assert.match(r.body.profissionais.prof1.fotoV, /^[0-9a-f]{10}$/);
+  assert.equal(r.body.profissionais.prof9.temFoto, undefined, 'valor suspeito não conta como foto');
+  assert.equal(r.body.barbearia.temLogo, true);
+  assert.match(r.body.barbearia.logoV, /^[0-9a-f]{10}$/);
+  assert.doesNotMatch(JSON.stringify(r.body), /data:image/);
+  const f = await chamar(negocio, req('GET', { query: { slug: SLUG, fotos: '1' } }));
+  assert.deepEqual(f.body.fotosProfissionais, { prof1: JPEG });
+  assert.equal(f.body.logo, JPEG);
 });
 
 test('agendamentos-ocupados: com ?profissionalId= devolve só os desse profissional (menos leituras no banco)', async () => {

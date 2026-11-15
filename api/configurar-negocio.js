@@ -9,7 +9,7 @@
 //        linkMapa?: link do Google Maps ('' remove) }
 // Cada parte é opcional: só o que vier no pedido é validado e gravado.
 
-const { db, auth } = require('./_lib/firebase');
+const { db, auth, FieldValue } = require('./_lib/firebase');
 const { dentroDoLimite, dentroDoLimitePorChave, responder, ErroNegocio, tratarErro, corpoDe } = require('./_lib/http');
 const { normalizarEndereco, camposDoEndereco, validarLinkMapa } = require('./_lib/endereco');
 const { validarDadosPix } = require('./_lib/sinal');
@@ -62,6 +62,12 @@ module.exports = async function handler(req, res) {
       if (!Number.isInteger(limite) || limite < 0 || limite > 14) throw new ErroNegocio(400, 'O limite por semana deve ficar entre 0 (sem limite) e 14.');
       mudancas.limiteAgendamentosSemana = limite;
       resposta.limiteAgendamentosSemana = limite;
+    }
+    if (b.logo !== undefined) {
+      // logo do estabelecimento: JPEG em data URL pequeno (mesma regra da foto do serviço) ou vazio para remover
+      if (b.logo === '' || b.logo === null) { mudancas.logo = FieldValue.delete(); resposta.logo = ''; }
+      else if (require('./_lib/negocio').fotoServicoValida(b.logo) && b.logo.length <= 90000) { mudancas.logo = b.logo; resposta.logo = b.logo; }
+      else throw new ErroNegocio(400, 'Logo inválido: use uma imagem JPEG pequena (o painel prepara isso sozinho).');
     }
     if (b.nomeIcone !== undefined) {
       const nomeIcone = String(b.nomeIcone || '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();

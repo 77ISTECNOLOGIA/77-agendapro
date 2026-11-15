@@ -13,7 +13,7 @@
 const { db } = require('./_lib/firebase');
 const { hojeChaveBrasil } = require('./_lib/tempo');
 const {
-  nomeIconeDe, slugValido, situacaoNegocio, infoPublica, profissionalPublico, servicoPublico, servicoPublicoLeve
+  nomeIconeDe, fotoServicoValida, slugValido, situacaoNegocio, infoPublica, profissionalPublico, servicoPublico, servicoPublicoLeve
 } = require('./_lib/negocio');
 const { dentroDoLimite, responder, tratarErro } = require('./_lib/http');
 const { ocupaHorario } = require('./_lib/sinal');
@@ -109,14 +109,17 @@ module.exports = async function handler(req, res) {
     // Fotos dos serviços: chamada separada, feita pelo link DEPOIS de mostrar a tela. Só lê os serviços e o
     // navegador/CDN podem guardar por 5 minutos (a foto muda raramente; o resto da resposta continua sem cache no navegador).
     if (String((req.query && req.query.fotos) || '') === '1') {
-      const fotos = await comCache('fotos:' + slug, TTL_FOTOS_MS, async () => {
-        const snap = await db().collection('barbearias').doc(slug).collection('servicos').get();
-        const f = {};
-        snap.docs.forEach((d) => { const foto = servicoPublico(d.id, d.data()).foto; if (foto) f[d.id] = foto; });
-        return f;
+      const pacote = await comCache('fotos:' + slug, TTL_FOTOS_MS, async () => {
+        const negocioRef = db().collection('barbearias').doc(slug);
+        const [servSnap, profSnap, negSnap] = await Promise.all([negocioRef.collection('servicos').get(), negocioRef.collection('profissionais').get(), negocioRef.get()]);
+        const fotos = {}, fotosProfissionais = {};
+        servSnap.docs.forEach((d) => { const foto = servicoPublico(d.id, d.data()).foto; if (foto) fotos[d.id] = foto; });
+        profSnap.docs.forEach((d) => { const foto = d.data().foto; if (fotoServicoValida(foto)) fotosProfissionais[d.id] = foto; });
+        const logo = fotoServicoValida((negSnap.data() || {}).logo) ? negSnap.data().logo : null;
+        return { fotos, fotosProfissionais, logo };
       });
       res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=300');
-      return res.status(200).json({ fotos });
+      return res.status(200).json(pacote);
     }
 
     // Manifesto do app instalável DESTE negócio (nome e link próprios): o cliente instala o negócio, não o painel do dono.

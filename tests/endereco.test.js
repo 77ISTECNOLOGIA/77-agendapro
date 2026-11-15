@@ -280,6 +280,7 @@ test('mapa: o cabeçalho mostra o botão quando há endereço/link e esconde qua
   const navegador = { userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120', platform: 'Win32', maxTouchPoints: 0 };
   const ctx = vm.createContext({ state, $: (s) => els[s], String, encodeURIComponent, URL, navigator: navegador, Number });
   ['consultaMapa', 'linkMapaValido', 'urlMapa', 'ehAppleMobile', 'urlAppleMaps'].forEach((f) => vm.runInContext(extrairFuncao(utils, f), ctx));
+  ctx.aplicarLogoNegocio = () => {};          // a logo do cabeçalho não é o assunto aqui
   vm.runInContext(extrairFuncao(app, 'renderizarHeader'), ctx);
   vm.runInContext('renderizarHeader()', ctx);
   assert.equal(els['#btn-mapa'].escondido, false);
@@ -311,6 +312,7 @@ function carregarMapaIos(userAgent, extra = {}) {
   const state = { barbearia: { nome: 'Lipão', enderecoCurto: 'Mangueira, Rio de Janeiro', endereco: TEXTO_COMPLETO, consultaMapa: '20911-135, Rio de Janeiro - RJ', linkMapa: '' } };
   const ctx = vm.createContext({ state, $: (s) => els[s], String, encodeURIComponent, URL, Number, navigator: { userAgent, platform: 'iPhone', maxTouchPoints: 5, ...extra } });
   ['consultaMapa', 'linkMapaValido', 'urlMapa', 'ehAppleMobile', 'urlAppleMaps'].forEach((f) => vm.runInContext(extrairFuncao(utils, f), ctx));
+  ctx.aplicarLogoNegocio = () => {};          // a logo do cabeçalho não é o assunto aqui
   vm.runInContext(extrairFuncao(app, 'renderizarHeader'), ctx);
   vm.runInContext('renderizarHeader()', ctx);
   return { els, ctx };

@@ -45,28 +45,14 @@ function situacaoNegocio(info, agoraMs = Date.now()) {
 
 // Só estes campos do documento do negócio vão para o visitante anônimo.
 // (A chave Pix só sai pelo servidor, para quem acabou de reservar: api/criar-agendamento.js e api/sinal.js.)
-// Nome que aparece embaixo do ícone na tela inicial do celular (cabe ~12 caracteres). O dono pode definir o dele (`nomeIcone`);
-// sem isso: o nome do negócio se couber; senão tira o prefixo genérico ("Barbearia do", "Salão da"...) e corta só em palavra inteira.
+// Nome que aparece embaixo do ícone na tela inicial do celular (cabe ~12 caracteres). Padrão: o nome do SISTEMA ("AgendaPro"),
+// como nos apps de agendamento do mercado; o nome do estabelecimento continua na tela de instalação, na abertura e no cabeçalho.
+// O dono pode definir um nome próprio (`nomeIcone`, até 12 caracteres).
 const NOME_ICONE_MAX = 12;
+const NOME_ICONE_PADRAO = 'AgendaPro';
 function nomeIconeDe(nome, personalizado) {
-  const limpo = (v) => String(v || '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();
-  const meu = limpo(personalizado).slice(0, NOME_ICONE_MAX).trim();
-  if (meu) return meu;
-  const inteiro = limpo(nome);
-  if (!inteiro) return 'Agendamento';
-  if (inteiro.length <= NOME_ICONE_MAX) return inteiro;
-  let resto = inteiro.replace(/^(barbearia|barber\s?shop|sal[aã]o|studio|est[uú]dio|espa[cç]o|cl[ií]nica)\s+/i, '');
-  while (/^(do|da|de|dos|das)\s+/i.test(resto)) resto = resto.replace(/^(do|da|de|dos|das)\s+/i, '');
-  if (!resto) resto = inteiro;
-  if (resto.length <= NOME_ICONE_MAX) return resto;
-  let acc = '';
-  for (const palavra of resto.split(' ')) {
-    const prox = acc ? acc + ' ' + palavra : palavra;
-    if (prox.length > NOME_ICONE_MAX) break;
-    acc = prox;
-  }
-  acc = acc.replace(/\s+(e|de|do|da|dos|das|\&)$/i, '');      // não termina em "e", "de"...
-  return acc || resto.slice(0, NOME_ICONE_MAX);
+  const meu = String(personalizado || '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, NOME_ICONE_MAX).trim();
+  return meu || NOME_ICONE_PADRAO;
 }
 
 function infoPublica(info) {
@@ -86,7 +72,8 @@ function infoPublica(info) {
       ? i.enderecoDetalhe.bairro + ', ' + i.enderecoDetalhe.cidade : (i.endereco || ''),
     telefone: i.telefone || '',
     tipoNegocio: i.tipoNegocio || 'barbearia',
-    horarioFuncionamento: i.horarioFuncionamento || {}
+    horarioFuncionamento: i.horarioFuncionamento || {},
+    ...(fotoServicoValida(i.logo) ? { temLogo: true, logoV: versaoFoto(i.logo) } : {})
   };
 }
 
@@ -102,7 +89,8 @@ function profissionalPublico(id, p, hojeChave) {
     especialidade: p.especialidade || '',
     ativo: p.ativo !== false,
     horarioTrabalho: p.horarioTrabalho || null,
-    bloqueios
+    bloqueios,
+    ...(fotoServicoValida(p.foto) ? { temFoto: true, fotoV: versaoFoto(p.foto) } : {})      // a foto em si vem em /api/negocio?fotos=1
   };
 }
 
@@ -157,14 +145,17 @@ function servicoPublico(id, s) {
 
 // Versão leve para a 1ª tela do link: SEM a foto (que pesa até ~70 mil caracteres por serviço e fazia toda
 // abertura do link baixar todas as fotos). `temFoto` avisa que ela existe; as fotos vêm depois, em /api/negocio?fotos=1.
+// "Versão" de uma foto (muda quando a imagem muda): o link só baixa de novo o que mudou e a URL das fotos leva isso (fura o cache).
+function versaoFoto(foto) { return require('node:crypto').createHash('sha1').update(String(foto)).digest('hex').slice(0, 10); }
+
 function servicoPublicoLeve(id, s) {
   const { foto, ...resto } = servicoPublico(id, s);
   // fotoV = "versão" da foto: muda quando o dono troca a imagem. O link usa isso para baixar de novo só quando mudou e para
   // furar o cache do navegador/CDN (a URL das fotos leva ?v=...).
-  return { ...resto, temFoto: !!foto, ...(foto ? { fotoV: require('node:crypto').createHash('sha1').update(foto).digest('hex').slice(0, 10) } : {}) };
+  return { ...resto, temFoto: !!foto, ...(foto ? { fotoV: versaoFoto(foto) } : {}) };
 }
 
 module.exports = {
-  NOME_ICONE_MAX, nomeIconeDe, CARENCIA_TRIAL_DIAS, SLUGS_RESERVADOS, TIPOS_NEGOCIO,
+  versaoFoto, NOME_ICONE_MAX, nomeIconeDe, CARENCIA_TRIAL_DIAS, SLUGS_RESERVADOS, TIPOS_NEGOCIO,
   slugValido, situacaoNegocio, infoPublica, profissionalPublico, servicoPublico, servicoPublicoLeve, profissionalRealizaServico, fotoServicoValida, precosProfissionalValidos, servicoParaProfissional
 };

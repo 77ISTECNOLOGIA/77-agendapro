@@ -18,7 +18,7 @@ function extrair(src, nome) {
   for (; i < src.length; i++) { if (src[i] === '{') n++; else if (src[i] === '}' && --n === 0) break; }
   return src.slice(m.index, i + 1);
 }
-const CODIGO = [extrair(utils, 'fotoServicoValida'), extrair(app, 'carregarBarbearia'), extrair(app, 'carregarFotosServicos'), extrair(app, 'aplicarFotosServicos')].join('\n');
+const CODIGO = [extrair(utils, 'fotoServicoValida'), extrair(app, 'carregarBarbearia'), extrair(app, 'carregarFotosServicos'), extrair(app, 'aplicarFotosServicos'), extrair(app, 'aplicarFotosProfissionais'), extrair(app, 'aplicarLogoNegocio')].join('\n');
 const JPEG = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsL';
 
 const resposta = (status, corpo) => ({ ok: status >= 200 && status < 300, status, json: async () => corpo });
@@ -35,7 +35,7 @@ function montar({ prefetch, respostas = [], servicos } = {}) {
     state: { slug: 'lipao', barbearia: null, servicos: servicos || {}, profissionais: {}, agendamentos: [] },
     fetch: async (url) => { chamadas.push(url); const r = fila.shift(); if (r instanceof Error) throw r; return r; },
     $$: () => Object.values(cartoes),
-    document: { createElement: () => ({ classList: {}, src: '', alt: '' }) }
+    document: { createElement: () => ({ classList: {}, src: '', alt: '' }), querySelector: () => null }
   });
   vm.runInContext(CODIGO, ctx);
   const cartao = (id, pendente = true) => {

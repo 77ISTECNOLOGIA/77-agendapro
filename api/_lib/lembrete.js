@@ -86,6 +86,10 @@ async function avisarClienteAlteracao(negocioRef, agendamentoId, ag, tipo, nomeN
   if (tipo === 'remarcado') {
     titulo = '🔁 Horário remarcado';
     corpo = ag.remarcadoDeDataChave ? `${nome}\nDe: ${quandoExtenso(ag.remarcadoDeDataChave, ag.remarcadoDeHorario)}\nPara: ${quandoNovo}` : `${nome}\nNovo horário: ${quandoNovo}`;
+  } else if (tipo === 'transferido') {
+    titulo = '👤 Profissional alterado';
+    const mudouValor = ag.valorAntes !== undefined && Number(ag.valorAntes) !== Number(ag.valorTotal);
+    corpo = [nome, (ag.remarcadoDeProfissional || 'O profissional') + ' não atende mais aqui.', `Seu horário de ${quandoNovo} agora é com ${ag.profissionalNome}.`, mudouValor ? 'Novo valor: R$ ' + Number(ag.valorTotal).toFixed(2).replace('.', ',') : null].filter(Boolean).join('\n');
   } else if (tipo === 'cancelado') {
     titulo = '❌ Horário cancelado';
     corpo = `${nome}\nSeu horário de ${quandoNovo} foi cancelado.\nToque para agendar outro.`;
@@ -96,7 +100,7 @@ async function avisarClienteAlteracao(negocioRef, agendamentoId, ag, tipo, nomeN
     titulo = '⚠️ Pagamento não confirmado';
     corpo = `${nome}\nPagamento não confirmado.\nO horário de ${quandoNovo} foi liberado.`;
   }
-  return enviarParaCliente(negocioRef, ag.clienteWhatsapp, { titulo, corpo, tag: `cli-${tipo}-${agendamentoId}-${ag.remarcadoEm || ag.canceladoEm || ag.sinalConfirmadoEm || ''}` });
+  return enviarParaCliente(negocioRef, ag.clienteWhatsapp, { titulo, corpo, tag: `cli-${tipo}-${agendamentoId}-${ag.remarcadoEm || ag.canceladoEm || ag.sinalConfirmadoEm || ag.transferidoEm || Date.now()}` });
 }
 
 /**

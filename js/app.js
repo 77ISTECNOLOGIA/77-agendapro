@@ -172,22 +172,68 @@ async function inicializar() {
 // As fotos dos serviços vêm numa chamada separada (o pacote principal não leva mais as fotos, que pesam muito).
 // Enquanto não chegam, o cartão mostra uma caixa cinza do mesmo tamanho (sem a tela "pular" quando a foto aparece).
 async function carregarFotosServicos() {
-  const faltam = Object.values(state.servicos).filter((s) => s.temFoto && !fotoServicoValida(s.foto));
-  if (!faltam.length) return;
-  const versao = Object.values(state.servicos).map((s) => s.fotoV || '').join('');
+  const barbearia = state.barbearia || {};
+  const faltamServ = Object.values(state.servicos).filter((s) => s.temFoto && !fotoServicoValida(s.foto));
+  const faltamProf = Object.values(state.profissionais || {}).filter((p) => p.temFoto && !fotoServicoValida(p.foto));
+  const faltaLogo = !!barbearia.temLogo && !fotoServicoValida(barbearia.logo);
+  if (!faltamServ.length && !faltamProf.length && !faltaLogo) return;
+  const versao = [
+    ...Object.values(state.servicos).map((s) => s.fotoV || ''),
+    ...Object.values(state.profissionais || {}).map((p) => p.fotoV || ''),
+    barbearia.logoV || ''
+  ].join('');
   try {
     const resp = await fetch(`/api/negocio?slug=${encodeURIComponent(state.slug)}&fotos=1${versao ? '&v=' + encodeURIComponent(versao) : ''}`);
     if (!resp.ok) throw new Error('fotos indisponíveis');
-    const { fotos } = await resp.json();
+    const { fotos, fotosProfissionais, logo } = await resp.json();
     Object.entries(fotos || {}).forEach(([id, foto]) => {
       if (state.servicos[id] && fotoServicoValida(foto)) state.servicos[id].foto = foto;
     });
+    Object.entries(fotosProfissionais || {}).forEach(([id, foto]) => {
+      if (state.profissionais && state.profissionais[id] && fotoServicoValida(foto)) state.profissionais[id].foto = foto;
+    });
+    if (state.barbearia && fotoServicoValida(logo)) state.barbearia.logo = logo;
   } catch (err) {
-    console.error('Fotos dos serviços:', err);
+    console.error('Fotos:', err);
   }
   // quem não recebeu foto deixa de esperar por ela (cartão sem foto, como qualquer outro)
   Object.values(state.servicos).forEach((s) => { if (!fotoServicoValida(s.foto)) s.temFoto = false; });
+  Object.values(state.profissionais || {}).forEach((p) => { if (!fotoServicoValida(p.foto)) p.temFoto = false; });
+  if (state.barbearia && !fotoServicoValida(state.barbearia.logo)) state.barbearia.temLogo = false;
   aplicarFotosServicos();
+  aplicarFotosProfissionais();
+  aplicarLogoNegocio();
+}
+
+// Foto do profissional nos cartões da escolha (se já desenhados): troca as iniciais pela foto
+function aplicarFotosProfissionais() {
+  $$('#grid-profissionais .prof-card').forEach((card) => {
+    const p = (state.profissionais || {})[card.dataset.id];
+    const alvo = card.querySelector('.prof-foto');
+    if (!p || !alvo || alvo.querySelector('img') || !fotoServicoValida(p.foto)) return;
+    alvo.textContent = '';
+    alvo.style.background = 'none';
+    const img = document.createElement('img');
+    img.src = p.foto;
+    img.alt = '';
+    alvo.appendChild(img);
+  });
+}
+
+// Logo do estabelecimento no cabeçalho (no lugar do símbolo do sistema); sem logo, volta o símbolo padrão
+function aplicarLogoNegocio() {
+  const img = document.querySelector('.header-logo');
+  if (!img) return;
+  const logo = (state.barbearia || {}).logo;
+  if (fotoServicoValida(logo)) {
+    if (img.src !== logo) img.src = logo;
+    img.alt = state.barbearia.nome || '';
+    img.classList.add('logo-negocio');
+  } else if (img.classList.contains('logo-negocio')) {
+    img.src = '/img/logo-77is.png';
+    img.alt = '77 IS';
+    img.classList.remove('logo-negocio');
+  }
 }
 
 function aplicarFotosServicos() {
@@ -255,8 +301,12 @@ async function atualizarDadosNegocio() {
     const novos = dados.servicos || {};
     Object.entries(novos).forEach(([id, s]) => { const a = state.servicos[id]; if (a && a.foto && a.fotoV === s.fotoV) s.foto = a.foto; });
     state.servicos = novos;
-    state.profissionais = dados.profissionais || {};
-    state.barbearia = { ...state.barbearia, ...(dados.barbearia || {}) };
+    const novosProf = dados.profissionais || {};
+    Object.entries(novosProf).forEach(([id, p]) => { const a = state.profissionais[id]; if (a && a.foto && a.fotoV === p.fotoV) p.foto = a.foto; });
+    state.profissionais = novosProf;
+    const logoAntes = (state.barbearia || {}).logo, logoVAntes = (state.barbearia || {}).logoV;
+    state.barbearia = { ...(dados.barbearia || {}) };
+    if (logoAntes && state.barbearia.temLogo && state.barbearia.logoV === logoVAntes) state.barbearia.logo = logoAntes;
 
     if (state.barbearia.aceitaAgendamentos === false) {            // suspenso / trial vencido enquanto a página estava aberta
       $('#app').classList.add('hidden');
@@ -320,6 +370,7 @@ function mostrarErroBarbearia(titulo, mensagem, icone) {
 
 
 function renderizarHeader() {
+  aplicarLogoNegocio();
   $('#header-nome').textContent = state.barbearia.nome || 'Barbearia';
   $('#header-passo').textContent = state.barbearia.enderecoCurto || state.barbearia.endereco || '';
   const mapa = $('#btn-mapa');
@@ -555,7 +606,7 @@ function renderizarProfissionais(ativos = profissionaisAtivos()) {
     card.className = `prof-card${id === state.profissionalId ? ' selecionado' : ''}`;
     card.dataset.id = id;
     card.innerHTML = `
-      <div class="prof-foto" style="background: linear-gradient(135deg, var(--accent), var(--accent-dark));">${escapeHtml(iniciais)}</div>
+      <div class="prof-foto" style="${fotoServicoValida(p.foto) ? 'background:none;' : 'background: linear-gradient(135deg, var(--accent), var(--accent-dark));'}">${fotoServicoValida(p.foto) ? `<img src="${p.foto}" alt="">` : escapeHtml(iniciais)}</div>
       <div class="prof-nome">${escapeHtml(p.nome.split(' ')[0])}</div>
       <div class="prof-spec">${escapeHtml(p.especialidade) || 'Profissional'}</div>
     `;
