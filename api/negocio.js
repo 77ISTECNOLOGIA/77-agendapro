@@ -23,6 +23,27 @@ const { configSinal } = require('./_lib/sinal');
 // Por quanto tempo repetir a mesma resposta sem reler o banco
 const TTL_NEGOCIO_MS = 20000, TTL_FOTOS_MS = 120000;   // vale também para "não existe" (tentar links inventados não relê o banco a cada tentativa)
 
+// Manifesto PWA do link do cliente. start_url = o link do próprio negócio.
+function manifestoDoNegocio(slug, nome) {
+  const nomeLimpo = String(nome || 'Agendamento').slice(0, 45);
+  return {
+    id: '/' + slug,
+    name: nomeLimpo,
+    short_name: nomeLimpo.slice(0, 12),
+    start_url: '/' + slug,
+    scope: '/',
+    display: 'standalone',
+    background_color: '#0A0A0F',
+    theme_color: '#0A0A0F',
+    icons: [
+      { src: '/img/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+      { src: '/img/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+      { src: '/img/icon-maskable-192.png', sizes: '192x192', type: 'image/png', purpose: 'maskable' },
+      { src: '/img/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
+    ]
+  };
+}
+
 async function montarResposta(slug, querOcupados) {
   const negocioRef = db().collection('barbearias').doc(slug);
   const hoje = hojeChaveBrasil();
@@ -96,6 +117,14 @@ module.exports = async function handler(req, res) {
       });
       res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=300');
       return res.status(200).json({ fotos });
+    }
+
+    // Manifesto do app instalável DESTE negócio (nome e link próprios): o cliente instala o negócio, não o painel do dono.
+    if (String((req.query && req.query.manifest) || '') === '1') {
+      const r = await comCache('negocio:' + slug, TTL_NEGOCIO_MS, () => montarResposta(slug, false));
+      if (r.status !== 200) return responder(res, r.status, r.corpo);
+      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=300');
+      return res.status(200).json(manifestoDoNegocio(slug, r.corpo.barbearia.nome));
     }
 
     // A chave do cache ignora qualquer parâmetro além de slug e ocupados (quem inventa parâmetros não fura o cache)

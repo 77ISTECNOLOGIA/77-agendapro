@@ -541,3 +541,15 @@ test('proteção da cota do Firestore: repetir a consulta pública (até com par
     invalidar('');
   }
 });
+
+test('negocio: ?manifest=1 devolve o app instalável DO NEGÓCIO (link e nome próprios, não o painel do dono)', async () => {
+  const r = await chamar(negocio, req('GET', { query: { slug: SLUG, manifest: '1' } }));
+  assert.equal(r.statusCode, 200);
+  const m = r.body;
+  assert.equal(m.start_url, '/' + SLUG);
+  assert.equal(m.display, 'standalone');
+  assert.ok(m.name && m.name.length <= 45 && m.short_name.length <= 12);
+  assert.equal(JSON.stringify(m).includes('/admin'), false);
+  const inexistente = await chamar(negocio, req('GET', { query: { slug: 'nao-existe-aqui', manifest: '1' } }));
+  assert.equal(inexistente.statusCode, 404);
+});

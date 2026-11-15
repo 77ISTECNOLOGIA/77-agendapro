@@ -893,3 +893,14 @@ input { font-family: inherit; }
 .menu-mapa.hidden { display: none; }
 .menu-mapa a { padding: 12px 14px; border-radius: 8px; color: var(--text); font-size: 14px; font-weight: 600; text-decoration: none; }
 .menu-mapa a:active, .menu-mapa a:hover { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+
+/* Convite para instalar o app (link do cliente) — js/instalar.js */
+.banner-instalar { display: flex; align-items: flex-start; gap: 12px; margin: 12px 16px 0; padding: 14px 14px 14px 14px; background: #14141c; border: 1px solid #262636; border-radius: 14px; color: #fff; position: relative; }
+.banner-instalar.hidden { display: none; }
+.banner-instalar .bi-icone { flex: 0 0 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; background: rgba(0, 119, 255, 0.16); color: #4da3ff; }
+.banner-instalar .bi-texto { flex: 1; min-width: 0; padding-right: 18px; }
+.banner-instalar .bi-titulo { font-weight: 700; font-size: 14px; letter-spacing: -0.01em; }
+.banner-instalar .bi-sub { margin-top: 3px; font-size: 12.5px; line-height: 1.45; color: #b4b4c0; }
+.banner-instalar .bi-sub strong { color: #fff; }
+.banner-instalar .bi-botao { margin-top: 10px; padding: 8px 16px; border: 0; border-radius: 9px; background: #0077FF; color: #fff; font-weight: 700; font-size: 13px; cursor: pointer; }
+.banner-instalar .bi-fechar { position: absolute; top: 6px; right: 8px; width: 28px; height: 28px; border: 0; background: transparent; color: #8a8a98; font-size: 20px; line-height: 1; cursor: pointer; }

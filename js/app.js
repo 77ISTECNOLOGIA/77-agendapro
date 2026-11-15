@@ -7,6 +7,7 @@
 // validam no servidor e só devolvem o que o visitante pode ver.
 import { aplicarTema } from './vocabulario.js';
 import { toast } from './toast.js';
+import { iniciarInstalacao, mostrarConvite } from './instalar.js';
 import { escapeHtml, profissionalRealizaServico, fotoServicoValida, urlMapa, urlAppleMaps, ehAppleMobile, pausaDoDia, servicoParaProfissional } from './utils.js';
 
 // ========================================
@@ -148,6 +149,7 @@ async function inicializar() {
     inicializarEventos();
     mostrarApp();
     carregarFotosServicos();                             // sem esperar: a tela já está de pé
+    iniciarInstalacao({ slug: state.slug, nome: state.barbearia.nome });
   } catch (err) {
     console.error('Erro ao inicializar:', err);
     mostrarErroBarbearia();
@@ -1070,6 +1072,7 @@ function renderizarTelaSucesso(agendamentoId) {
   `;
 
   renderizarBotaoAgenda(data, fimMin, prof, servicos);
+  mostrarConvite('sucesso');                              // hora em que o cliente mais quer o lembrete
 }
 
 function renderizarBotaoAgenda(data, fimMin, prof, servicos) {
