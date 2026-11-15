@@ -235,7 +235,7 @@ function inicializarAuth() {
         anotarAbertura({ ok: true, ...tempos, totalMs: Date.now() - inicio });
         // O que não é preciso para ver a tela fica para depois que ela já apareceu
         setTimeout(() => {
-          if (state.papel.verTodos) renovarHorariosFixos();   // reforço da rotina diária (no máximo 1x a cada 4 h por aparelho)
+          if (state.papel.verTodos) { renovarHorariosFixos(); carregarRetornos(); }   // reforço da rotina diária (no máximo 1x a cada 4 h por aparelho)
           ouvirNotificacoesEmPrimeiroPlano();
           atualizarServiceWorker();
         }, 1500);
@@ -1429,6 +1429,7 @@ function renderizarPendencias() {
     if (totalSelo && !selo) { selo = document.createElement('span'); selo.className = 'nav-selo'; navDash.appendChild(selo); }
     if (selo) { if (totalSelo) selo.textContent = totalSelo; else selo.parentNode.removeChild(selo); }
   }
+  renderizarRetornos();
   const box = $('#pendencias-resolver');
   if (!box) return;
   if (!lista.length) { box.hidden = true; box.innerHTML = ''; return; }
@@ -1453,6 +1454,64 @@ function renderizarPendencias() {
 }
 // o tempo passa mesmo sem nenhuma alteração no banco: reavalia a cada minuto
 setInterval(() => { if (state.dadosCarregados) renderizarPendencias(); }, 60000);
+
+// ---- Retorno inteligente: clientes que passaram do tempo em que costumam voltar (fichas com `retornoEm` vencido; ver api/_lib/retorno.js)
+const JANELA_RETORNO_DIAS = 120;       // depois de 4 meses sem voltar, deixa de aparecer aqui (já virou "cliente perdido")
+function chaveDiasDepois(n) { const d = new Date(); d.setDate(d.getDate() + n); return dataParaChave(d); }
+
+async function carregarRetornos() {
+  if (!state.papel.verTodos) return;                  // as fichas do dono são as únicas que ele lê; sócio tem as próprias
+  try {
+    const snap = await getDocs(query(collection(db, 'barbearias', state.barbeariaId, 'clientes'),
+      where('donoVe', '==', true), where('retornoEm', '>=', chaveDiasAtras(JANELA_RETORNO_DIAS)), where('retornoEm', '<=', dataParaChave(new Date()))));
+    state.retornos = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  } catch (err) {
+    console.error('Erro ao buscar clientes para chamar de volta:', err);
+    state.retornos = [];
+  }
+  renderizarRetornos();
+}
+
+function renderizarRetornos() {
+  const box = $('#retorno-chamar');
+  if (!box) return;
+  const hoje = dataParaChave(new Date());
+  const ocupados = new Set(Object.values(state.agendamentos).filter((a) => a.dataChave >= hoje && ['confirmado', 'aguardando_sinal', 'sinal_informado'].includes(a.status)).map((a) => a.clienteWhatsapp));
+  const lista = (state.retornos || [])
+    .filter((c) => c.whatsapp && !ocupados.has(c.whatsapp) && !(c.retornoAdiadoAte && c.retornoAdiadoAte > hoje))
+    .sort((a, b) => String(b.retornoEm).localeCompare(String(a.retornoEm)))      // quem passou do prazo há menos tempo (mais fácil de voltar) primeiro
+    .slice(0, 8);
+  if (!lista.length) { box.hidden = true; box.innerHTML = ''; return; }
+  const diasDesde = (c) => { const u = (c.ultimasVisitas || []).slice(-1)[0]; return u ? Math.round((Date.now() - Date.parse(u + 'T12:00:00')) / 86400000) : null; };
+  box.hidden = false;
+  box.innerHTML = `
+    <div class="pendencias-titulo">👋 ${lista.length} cliente${lista.length !== 1 ? 's' : ''} para chamar de volta</div>
+    <div class="pendencias-sub">Passaram do tempo em que costumam voltar e não têm horário marcado.</div>
+    ${lista.map((c) => {
+      const dias = diasDesde(c);
+      const msg = 'Oi ' + (String(c.nome || '').split(' ')[0] || '') + '! Aqui é da ' + (state.barbearia.nome || '') + '. Faz um tempinho que você não passa por aqui. Quer marcar um horário? ' + location.origin + '/' + state.barbeariaId;
+      return `
+      <div class="pendencia-item">
+        <div class="pendencia-info">
+          <div class="pendencia-quando">${escapeHtml(c.nome || 'Cliente')}</div>
+          <div class="pendencia-det">${c.cadenciaPersonalizada ? 'costuma voltar a cada ~' + c.cadenciaDias + ' dias' : 'sem histórico: prazo padrão de ' + c.cadenciaDias + ' dias'}${dias !== null ? ' · última visita há ' + dias + ' dias' : ''}</div>
+        </div>
+        <div class="pendencia-acoes">
+          <a class="pend-concluir ret-whats" data-id="${escapeHtml(c.id)}" target="_blank" rel="noopener" href="https://wa.me/${encodeURIComponent(c.whatsapp)}?text=${encodeURIComponent(msg)}" style="text-decoration:none;">💬 Chamar</a>
+          <button class="pend-faltou ret-depois" data-id="${escapeHtml(c.id)}">Depois</button>
+        </div>
+      </div>`;
+    }).join('')}`;
+  const adiar = async (id, dias) => {
+    const c = state.retornos.find((x) => x.id === id);
+    if (c) c.retornoAdiadoAte = chaveDiasDepois(dias);
+    renderizarRetornos();
+    try { await updateDoc(doc(db, 'barbearias', state.barbeariaId, 'clientes', id), { retornoAdiadoAte: chaveDiasDepois(dias) }); }
+    catch (err) { console.error('Erro ao adiar o retorno:', err); }
+  };
+  $$('#retorno-chamar .ret-whats').forEach((a) => a.addEventListener('click', () => adiar(a.dataset.id, 14)));      // abriu o WhatsApp: não repete por 2 semanas
+  $$('#retorno-chamar .ret-depois').forEach((b) => b.addEventListener('click', () => adiar(b.dataset.id, 7)));
+}
 
 // Avisa o cliente (push no app dele) do que o estabelecimento acabou de fazer. Melhor esforço, sem travar a tela:
 // o servidor confere no banco se aquilo realmente aconteceu e monta o texto.
@@ -3171,6 +3230,8 @@ function preencherRegrasAgendamento() {
   $('#sinal-banco').value = sinal.banco || '';
   $('#limite-semana').value = state.barbearia.limiteAgendamentosSemana || 0;
   $('#lembrete-cliente-min').value = String(minutosLembrete(state.barbearia));
+  $('#retorno-automatico').checked = state.barbearia.retornoAutomatico !== false;
+  $('#resumo-semanal').checked = state.barbearia.resumoSemanal !== false;
   $('#nome-icone').value = state.barbearia.nomeIcone || '';
   // Chave Pix do negócio: só o administrador pleno altera (os demais gerentes usam o Pix próprio, em Meu perfil)
   const soAdmin = !(state.papel.verTodos && state.papel.gerirNegocio);
@@ -3199,6 +3260,8 @@ async function salvarRegrasAgendamento() {
         idToken: await auth.currentUser.getIdToken(),
         limiteAgendamentosSemana: Number($('#limite-semana').value || 0),
         lembreteClienteMin: Number($('#lembrete-cliente-min').value),
+        retornoAutomatico: $('#retorno-automatico').checked,
+        resumoSemanal: $('#resumo-semanal').checked,
         nomeIcone: $('#nome-icone').value.trim(),
         sinal: {
           ativo: $('#sinal-ativo').checked,

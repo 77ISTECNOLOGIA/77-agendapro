@@ -162,6 +162,9 @@
         <!-- Atendimentos esquecidos: concluir ou cancelar -->
         <div id="pendencias-resolver" class="pendencias-card" hidden></div>
 
+        <!-- Retorno inteligente: clientes para chamar de volta -->
+        <div id="retorno-chamar" class="pendencias-card" hidden></div>
+
         <!-- KPIs Principais -->
         <div class="kpis-grid">
           <div class="kpi-card destaque">
@@ -552,6 +555,18 @@
                 <option value="1440">1 dia antes</option>
               </select>
               <small class="campo-help">Só chega para quem instalou o app do seu link na tela inicial e ativou os avisos. Vale para os agendamentos novos e remarcados.</small>
+            </div>
+            <div class="input-grupo" style="margin-top:10px;">
+              <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;">
+                <input type="checkbox" id="retorno-automatico" style="margin-top:3px;">
+                <span>Avisar automaticamente os clientes que passaram do tempo de voltar<br><small class="campo-help">Só chega a quem instalou o app. Cada cliente tem o próprio ritmo, calculado pelos últimos atendimentos. Você também vê a lista no Dashboard.</small></span>
+              </label>
+            </div>
+            <div class="input-grupo" style="margin-top:6px;">
+              <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;">
+                <input type="checkbox" id="resumo-semanal" style="margin-top:3px;">
+                <span>Receber o resumo da semana toda segunda-feira (notificação)<br><small class="campo-help">Faturamento, atendimentos, melhor dia, faltas e clientes para chamar de volta.</small></span>
+              </label>
             </div>
             <button type="button" id="btn-salvar-sinal" class="btn-acao" style="margin-top:14px;">Salvar regras de agendamento</button>
           </div>

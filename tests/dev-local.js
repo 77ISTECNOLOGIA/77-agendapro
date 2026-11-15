@@ -37,6 +37,8 @@ fake.seed('barbearias/barbearia-do-joao/agendamentos/t3', AG('prof2', 'Ana do Ca
 fake.seed('barbearias/barbearia-do-joao/agendamentos/t4', AG('prof1', 'Antigo do João', '5521999990009', -20, '11:00', [{ id: 'srv1', nome: 'Corte', preco: 40, duracaoMin: 30 }], 40, 30, 'concluido'));   // fora da janela de 7 dias
 fake.seed('barbearias/barbearia-do-joao/agendamentos/t5', AG('prof2', 'Antigo do Carlos', '5521999990010', -40, '15:00', [{ id: 'srv2', nome: 'Barba', preco: 35, duracaoMin: 30 }], 35, 30, 'concluido'));
 fake.seed('barbearias/barbearia-do-joao/clientes/5521999990001', { nome: 'Maria do João', whatsapp: '5521999990001', totalAgendamentos: 3, donoVe: true });
+// retorno inteligente (cartão "clientes para chamar de volta" do Dashboard): ritmo de 21 dias, passou há 5 dias
+fake.seed('barbearias/barbearia-do-joao/clientes/5521977770009', { nome: 'Ricardo Almeida', whatsapp: '5521977770009', totalAgendamentos: 4, donoVe: true, ultimasVisitas: [dataEmDias(-68), dataEmDias(-47), dataEmDias(-26)], cadenciaDias: 21, cadenciaPersonalizada: true, retornoEm: dataEmDias(-5) });
 fake.seed('barbearias/barbearia-do-joao/clientes/prof2__5521999990002', { nome: 'Pedro do Carlos', whatsapp: '5521999990002', totalAgendamentos: 1, donoVe: false });   // cliente do SÓCIO (Carlos): ficha do lado dele
 semearNegocio(fake, 'trial-vencido', { nome: 'Salão Trial Vencido', status: 'trial', trialFim: '2020-01-01T00:00:00.000Z' });
 semearNegocio(fake, 'estudio-suspenso', { nome: 'Estúdio Suspenso', status: 'suspensa' });

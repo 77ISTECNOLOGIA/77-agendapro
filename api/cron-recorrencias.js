@@ -15,6 +15,9 @@ const { avisarPendentes, limparSinaisVencidos } = require('./_lib/pendencias');
 const { situacaoNegocio } = require('./_lib/negocio');
 const { responder, tratarErro } = require('./_lib/http');
 const { enviarLembretesVencidos } = require('./_lib/lembrete');
+const { atualizarEstatisticas, avisarRetornos } = require('./_lib/retorno');
+const { enviarResumos } = require('./_lib/resumo-semanal');
+const { diaSemanaDaChave } = require('./_lib/tempo');
 
 module.exports = async function handler(req, res) {
   const segredo = process.env.CRON_SECRET;
@@ -26,6 +29,13 @@ module.exports = async function handler(req, res) {
     if (String((req.query && req.query.tarefa) || '') === 'lembretes') {
       return responder(res, 200, { sucesso: true, ...(await enviarLembretesVencidos(agoraBrasil())) });
     }
+
+    // Execuções manuais (com a senha): ?tarefa=retorno (estatísticas + avisos de retorno) e ?tarefa=resumo (resumo semanal, em qualquer dia)
+    if (String((req.query && req.query.tarefa) || '') === 'retorno') {
+      const est = await atualizarEstatisticas();
+      return responder(res, 200, { sucesso: true, estatisticas: est, avisos: await avisarRetornos() });
+    }
+    if (String((req.query && req.query.tarefa) || '') === 'resumo') return responder(res, 200, { sucesso: true, ...(await enviarResumos()) });
 
     const firestore = db();
     const hojeChave = hojeChaveBrasil();
@@ -50,6 +60,9 @@ module.exports = async function handler(req, res) {
     const LOTE = 5;
     for (let i = 0; i < negocios.docs.length; i += LOTE) await Promise.all(negocios.docs.slice(i, i + LOTE).map(processar));
     total.lembretes = await enviarLembretesVencidos(agora).catch((e) => { console.error('Falha nos lembretes ao cliente:', e); return null; });   // reforço do cron diário
+    // Retorno inteligente (estatísticas das fichas + push aos clientes que passaram do tempo) e, às segundas, o resumo semanal
+    total.retorno = await atualizarEstatisticas().then(async (est) => ({ ...est, ...(await avisarRetornos({ hojeChave })) })).catch((e) => { console.error('Falha no retorno inteligente:', e); return null; });
+    if (diaSemanaDaChave(hojeChave) === 'segunda') total.resumo = await enviarResumos({ hojeChave }).catch((e) => { console.error('Falha no resumo semanal:', e); return null; });
     return responder(res, 200, { sucesso: true, ...total });
   } catch (err) {
     return tratarErro(res, err, 'cron-recorrencias');

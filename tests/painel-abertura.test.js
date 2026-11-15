@@ -59,7 +59,7 @@ function montar({ palpite = null, papelPalpite = PAPEL_TOTAL } = {}) {
     renderizarTudo: async () => { log.push('renderizarTudo'); },
     renderizarViewAtual: () => log.push('desenhou'),
     tratarLinkDeNotificacao: () => log.push('linkNotificacao'),
-    renovarHorariosFixos: () => log.push('renovar'), ouvirNotificacoesEmPrimeiroPlano: () => log.push('ouvirNotif'), atualizarServiceWorker: () => log.push('atualizarSW')
+    renovarHorariosFixos: () => log.push('renovar'), carregarRetornos: () => log.push('retornos'), ouvirNotificacoesEmPrimeiroPlano: () => log.push('ouvirNotif'), atualizarServiceWorker: () => log.push('atualizarSW')
   });
   vm.runInContext(CODIGO_UTILS, ctx);
   vm.runInContext(CODIGO, ctx);
