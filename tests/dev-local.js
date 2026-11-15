@@ -41,9 +41,17 @@ const FAKE_SDK = path.join(__dirname, 'fake-sdk');
 const reescreverImports = (texto) => texto.replace(/https:\/\/www\.gstatic\.com\/firebasejs\/[\d.]+\/firebase-(app|auth|firestore|messaging)\.js/g, '/__fake/$1.js');
 const json = (res, status, corpo) => { res.statusCode = status; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(corpo)); };
 
+const { permitir } = require('./regras-lite');
+const NEGACOES = [];
 async function bancoFalso(req, res, corpo) {
   try {
-    const { op, path: p, data, filtros, ord, lim } = corpo;
+    const { op, path: p, data, filtros, ord, lim, uid } = corpo;
+    const motivo = await permitir(fake, uid, { op, path: p, data, filtros });   // regras simplificadas (tests/regras-lite.js)
+    if (motivo) {
+      NEGACOES.push({ quando: new Date().toISOString(), uid, op, path: p, motivo });
+      console.log('REGRA NEGOU (' + (uid || 'sem login') + '): ' + op + ' ' + p + ' — ' + motivo);
+      return json(res, 403, { erro: 'Missing or insufficient permissions.', code: 'permission-denied' });
+    }
     if (op === 'get') return json(res, 200, { data: (await fake.doc(p).get()).data() ?? null });
     if (op === 'list') {
       let q = fake.collection(p);
@@ -92,6 +100,7 @@ function lerCorpo(req) {
 http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
 
+  if (url.pathname === '/__negacoes') return json(res, 200, NEGACOES);
   if (url.pathname === '/__fs' && req.method === 'POST') return bancoFalso(req, res, await lerCorpo(req));
   if (url.pathname.startsWith('/__auth/') && req.method === 'POST') return authFalso(url.pathname.slice(8), await lerCorpo(req), res);
   if (url.pathname.startsWith('/__fake/')) {

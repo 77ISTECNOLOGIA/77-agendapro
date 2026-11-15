@@ -27,8 +27,9 @@ export function query(col, ...restr) {
   return { __tipo: 'query', path: col.path, filtros: restr.filter((r) => r.campo), ord: (restr.find((r) => r.__ord) || {}).__ord, lim: (restr.find((r) => r.__lim) || {}).__lim };
 }
 
+function quemSou() { try { return (JSON.parse(localStorage.getItem('fake_user') || 'null') || {}).uid || null; } catch (_) { return null; } }
 async function fs(corpo) {
-  const r = await fetch('/__fs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
+  const r = await fetch('/__fs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...corpo, uid: quemSou() }) });
   const j = await r.json();
   if (!r.ok) { const e = new Error(j.erro || 'erro'); e.code = j.code || 'unavailable'; throw e; }
   return j;
