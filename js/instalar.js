@@ -71,7 +71,7 @@ export function mostrarConvite(contexto = 'topo') {
     standalone: jaEstaInstalado(),
     apple: ehAppleMobile(nav),
     android: /Android/i.test(String(nav.userAgent || '')) && !!eventoInstalacao,
-    instalado: ler('ap_inst_ok_' + ctx.slug) === '1',
+    instalado: false,        // NÃO guardar "já instalou" para sempre: quem apaga o ícone precisa poder instalar de novo (o Chrome só oferece se não estiver instalado)
     dispensadoEm: Number(ler('ap_inst_x_' + ctx.slug)) || null,
     agora: Date.now(),
     contexto
@@ -94,6 +94,6 @@ export function iniciarInstalacao({ slug, nome, nomeIcone }) {
   const link = document.getElementById('manifest-link');
   if (link) link.href = '/api/negocio?slug=' + encodeURIComponent(slug) + '&manifest=1';
   window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); eventoInstalacao = e; mostrarConvite('topo'); });
-  window.addEventListener('appinstalled', () => { guardar('ap_inst_ok_' + slug, '1'); eventoInstalacao = null; mostrarConvite('topo'); });
+  window.addEventListener('appinstalled', () => { eventoInstalacao = null; const el = document.getElementById('banner-instalar'); if (el) el.classList.add('hidden'); });
   mostrarConvite('topo');                // iPhone: não há evento, o cartão ensinando aparece direto
 }
