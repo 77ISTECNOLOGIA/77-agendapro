@@ -16,7 +16,7 @@ function extrair(src, nome) {
   for (; i < src.length; i++) { if (src[i] === '{') n++; else if (src[i] === '}' && --n === 0) break; }
   return src.slice(m.index, i + 1);
 }
-const CODIGO = ['lerVinculoGuardado', 'guardarVinculo', 'inicializarAuth', 'ativarListenersTempoReal', 'desativarListeners', 'mostrarApp', 'lerPapelGuardado', 'guardarPapel', 'papelDe', 'mesmoPapel']
+const CODIGO = ['lerVinculoGuardado', 'guardarVinculo', 'inicializarAuth', 'ativarListenersTempoReal', 'desativarListeners', 'mostrarApp', 'lerPapelGuardado', 'guardarPapel', 'papelDe', 'mesmoPapel', 'anotarAbertura']
   .map((f) => extrair(admin, f)).join('\n');
 
 const flush = () => new Promise((r) => setImmediate(r));
@@ -157,7 +157,7 @@ test('negócio inexistente ou erro ao ler: volta ao login com a mensagem de erro
   await flush();
   t.entregarTudo(t.escutas, t.snap(false));
   await fim;
-  assert.ok(t.log.includes('login:Erro ao carregar dados. Tente novamente.'));
+  assert.ok(t.log.some((l) => l.startsWith('login:Erro ao carregar dados. Tente novamente. [')));
   assert.ok(t.escutas.every((e) => e.cancelada));
   assert.ok(!t.log.includes('renderizarTudo'));
 
@@ -168,7 +168,7 @@ test('negócio inexistente ou erro ao ler: volta ao login com a mensagem de erro
   await flush();
   t.escutas[2].erro(new Error('permission-denied'));
   await fim;
-  assert.ok(t.log.includes('login:Erro ao carregar dados. Tente novamente.'));
+  assert.ok(t.log.some((l) => l.startsWith('login:Erro ao carregar dados. Tente novamente. [')));
 });
 
 test('depois da tela aparecer, as escutas redesenham; o que não é urgente vai para depois (adiado)', async () => {
@@ -292,4 +292,10 @@ test('permissoesDe do navegador dá o mesmo resultado que o do servidor', () => 
     { permissoes: { verTodos: true, gerirNegocio: false } }, { permissoes: { verTodos: 'sim', gerirNegocio: 1 } }, { role: 'x', permissoes: {} }]) {
     assert.deepEqual(JSON.parse(JSON.stringify(vm.runInContext('permissoesDe', ctx)(u))), servidor.permissoesDe(u), JSON.stringify(u));
   }
+});
+
+test('entrar e sair várias vezes não liga os botões de novo, e cada abertura deixa o tempo anotado', () => {
+  assert.match(admin, /let eventosLigados = false;[\s\S]*?async function renderizarTudo\(\) \{\s*if \(!eventosLigados\) \{\s*inicializarNavegacao\(\);\s*inicializarEventosViews\(\);\s*eventosLigados = true;/);
+  assert.match(admin, /anotarAbertura\(\{ ok: true/);
+  assert.match(admin, /anotarAbertura\(\{ ok: false/);
 });

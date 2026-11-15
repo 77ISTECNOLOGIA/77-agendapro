@@ -83,6 +83,16 @@ function lerPapelGuardado(uid) {
 function guardarPapel(uid, papel) {
   try { localStorage.setItem('ap_papel_' + uid, JSON.stringify(papel)); } catch (_) { /* só perde a otimização */ }
 }
+// Diagnóstico de abertura: guarda neste aparelho os tempos das últimas 8 aberturas (e o motivo, se falhou) na chave ap_diag.
+// Serve para descobrir ONDE o tempo vai quando o painel demora ou falha (lido no console: localStorage.ap_diag).
+function anotarAbertura(dados) {
+  try {
+    const lista = JSON.parse(localStorage.getItem('ap_diag') || '[]');
+    lista.push({ quando: new Date().toISOString(), ...dados });
+    localStorage.setItem('ap_diag', JSON.stringify(lista.slice(-8)));
+  } catch (_) { /* sem armazenamento: sem diagnóstico */ }
+}
+
 function papelDe(usuario) { return { ...permissoesDe(usuario), profissionalId: String((usuario && usuario.profissionalId) || '') }; }
 function mesmoPapel(a, b) { return !!a && !!b && a.verTodos === b.verTodos && a.gerirNegocio === b.gerirNegocio && a.profissionalId === b.profissionalId; }
 
@@ -163,6 +173,7 @@ function inicializarAuth() {
   onAuthStateChanged(auth, async (user) => {
     if (user) {
       state.user = user;
+      const inicio = Date.now(), tempos = {};
       try {
         // O banco fica nos EUA: cada ida e volta custa ~150–250 ms, então o que vai em fila custa caro.
         // Com o palpite da última visita, os dados já começam a chegar EM PARALELO com a confirmação do vínculo;
@@ -189,6 +200,7 @@ function inicializarAuth() {
           return;
         }
         const userData = snap.data();
+        tempos.vinculoMs = Date.now() - inicio;
         state.dadosCarregados = false;
         const papelReal = papelDe(userData);
         if (!palpite || !papelPalpite || userData.barbeariaId !== palpite || !mesmoPapel(papelReal, papelPalpite)) {   // 1ª visita neste aparelho, ou o vínculo/papel mudou
@@ -198,7 +210,9 @@ function inicializarAuth() {
         }
         guardarVinculo(user.uid, userData.barbeariaId);
         guardarPapel(user.uid, papelReal);
+        tempos.palpite = !!(palpite && papelPalpite);
         await prontos;                               // 1º retrato de negócio, serviços, profissionais, agendamentos e clientes
+        tempos.dadosMs = Date.now() - inicio;
         if (!state.negocioExiste) throw new Error('Barbearia não encontrada');
         aplicarTema(state.barbearia.tipoNegocio);
         $('#sidebar-barbearia').textContent = state.barbearia.nome || '—';
@@ -209,6 +223,7 @@ function inicializarAuth() {
         await renderizarTudo();
         state.dadosCarregados = true;
         tratarLinkDeNotificacao();                   // aberto pelo toque numa notificação: já mostra o agendamento
+        anotarAbertura({ ok: true, ...tempos, totalMs: Date.now() - inicio });
         // O que não é preciso para ver a tela fica para depois que ela já apareceu
         setTimeout(() => {
           if (state.papel.verTodos) renovarHorariosFixos();   // reforço da rotina diária (no máximo 1x a cada 4 h por aparelho)
@@ -218,9 +233,11 @@ function inicializarAuth() {
       } catch (err) {
         desativarListeners();
         console.error('Erro ao carregar usuário:', err);
+        anotarAbertura({ ok: false, ...tempos, totalMs: Date.now() - inicio, erro: (err && (err.code || err.message)) || 'desconhecido', faltam: err && err.faltam });
         const motivo = err && err.code === 'tempo-esgotado' ? ' O banco não respondeu (' + err.faltam + '). Verifique a internet e tente de novo.'
           : err && err.code === 'permission-denied' ? ' Sem permissão de leitura. Fale com o suporte.' : '';
-        mostrarLogin('Erro ao carregar dados.' + (motivo || ' Tente novamente.'));
+        const detalhe = ' [' + ((err && (err.code || err.message)) || 'erro') + (err && err.faltam ? ': ' + err.faltam : '') + ' · ' + Math.round((Date.now() - inicio) / 1000) + ' s]';   // para me passar o que aconteceu
+        mostrarLogin('Erro ao carregar dados.' + (motivo || ' Tente novamente.') + detalhe);
       }
     } else {
       state.dadosCarregados = false;
@@ -747,9 +764,15 @@ function renderizarViewAtual() {
   }
 }
 
+// Os botões e atalhos são ligados UMA vez só. Antes, cada saída e nova entrada no painel (sem recarregar a página) ligava
+// tudo de novo: depois de algumas entradas cada clique rodava várias vezes (telas redesenhadas em dobro, salvar/confirmar repetidos).
+let eventosLigados = false;
 async function renderizarTudo() {
-  inicializarNavegacao();
-  inicializarEventosViews();
+  if (!eventosLigados) {
+    inicializarNavegacao();
+    inicializarEventosViews();
+    eventosLigados = true;
+  }
   renderizarViewAtual();
 }
 
