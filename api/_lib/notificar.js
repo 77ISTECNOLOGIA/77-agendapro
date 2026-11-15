@@ -19,15 +19,33 @@ const ERROS_TOKEN_INVALIDO = [
   'messaging/invalid-registration-token'
 ];
 
-function montarCorpo(ag) {
-  const [ano, mes, dia] = String(ag.dataChave || '').split('-').map(Number);
-  const dow = ano ? new Date(Date.UTC(ano, mes - 1, dia)).getUTCDay() : null;
-  const dataStr = dow === null ? '' : `${DIAS_ABREV[dow]} ${String(dia).padStart(2, '0')}/${String(mes).padStart(2, '0')}`;
-  const servicosStr = (ag.servicos || []).map(s => s.nome).join(' + ');
-  const nomeCliente = String(ag.clienteNome || '').split(' ')[0];
-  const nomeProf = String(ag.profissionalNome || '').split(' ')[0];
-  return `${nomeCliente} — ${dataStr} às ${ag.horario} — ${servicosStr} com ${nomeProf}`;
+const DIAS_EXTENSO = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+
+// "segunda, 16/11 às 09:00"
+function quandoExtenso(dataChave, horario) {
+  const [ano, mes, dia] = String(dataChave || '').split('-').map(Number);
+  if (!ano) return String(horario || '');
+  const dow = new Date(Date.UTC(ano, mes - 1, dia)).getUTCDay();
+  return DIAS_EXTENSO[dow] + ', ' + String(dia).padStart(2, '0') + '/' + String(mes).padStart(2, '0') + (horario ? ' às ' + horario : '');
 }
+const brl = (v) => 'R$ ' + Number(v || 0).toFixed(2).replace('.', ',');
+
+// Corpo da notificação ao dono: uma informação por linha, com rótulo (a primeira linha é a que mais importa).
+//   Cliente: Maria Souza / Serviço: Corte + Barba / Data: segunda, 16/11 às 09:00 / Profissional: Felipe / Valor: R$ 40,00
+function linhasAgendamento(ag, extras = {}) {
+  const servicos = (ag.servicos || []).map((s) => s.nome).join(' + ');
+  const l = [];
+  l.push('Cliente: ' + (String(ag.clienteNome || '').trim() || '—'));
+  l.push('Serviço: ' + (servicos || '—'));
+  if (extras.de) { l.push('De: ' + extras.de); l.push('Para: ' + quandoExtenso(ag.dataChave, ag.horario)); }
+  else l.push('Data: ' + quandoExtenso(ag.dataChave, ag.horario));
+  if (ag.profissionalNome) l.push('Profissional: ' + ag.profissionalNome);
+  if (extras.sinal !== undefined) l.push('Sinal: ' + brl(extras.sinal)); else if (ag.valorTotal !== undefined && !extras.semValor) l.push('Valor: ' + brl(ag.valorTotal));
+  if (extras.rodape) l.push(extras.rodape);
+  return l.join('\n');
+}
+
+function montarCorpo(ag) { return linhasAgendamento(ag); }
 
 /**
  * Escolhe QUEM recebe, entre os aparelhos de barbearias/{slug}/dispositivos. Cada aparelho guarda o `uid` de quem o ativou;
@@ -113,18 +131,14 @@ function dataHora(dataChave, horario) {
  */
 async function notificarAlteracaoCliente(negocioRef, agendamentoId, { tipo, ag, antes }) {
   try {
-    const nome = String(ag.clienteNome || '').split(' ')[0] || 'Cliente';
-    const servicos = (ag.servicos || []).map((s) => s.nome).join(' + ');
-    const nomeProf = String(ag.profissionalNome || '').split(' ')[0];
-    const com = nomeProf ? ` com ${nomeProf}` : '';
     let titulo, corpo, tag;
     if (tipo === 'remarcou') {
       titulo = '🔁 Cliente remarcou';
-      corpo = `${nome} remarcou: ${dataHora(antes.dataChave, antes.horario)} → ${dataHora(ag.dataChave, ag.horario)} — ${servicos}${com}`;
+      corpo = linhasAgendamento(ag, { de: quandoExtenso(antes.dataChave, antes.horario) });
       tag = `remarcou-${agendamentoId}-${ag.remarcacoesCliente || Date.now()}`;
     } else {
       titulo = '❌ Cliente cancelou';
-      corpo = `${nome} cancelou: ${dataHora(ag.dataChave, ag.horario)} — ${servicos}${com}`;
+      corpo = linhasAgendamento(ag, { rodape: 'O horário foi liberado.' });
       tag = `cancelou-${agendamentoId}`;
     }
     const r = await enviarParaDispositivos(negocioRef, {
@@ -142,12 +156,9 @@ async function notificarAlteracaoCliente(negocioRef, agendamentoId, { tipo, ag, 
 /** Cliente tocou em "Já paguei": avisa o dono para conferir o Pix e confirmar. Nunca lança. */
 async function notificarSinalInformado(negocioRef, agendamentoId, ag) {
   try {
-    const nome = String(ag.clienteNome || '').split(' ')[0] || 'Cliente';
-    const servicos = (ag.servicos || []).map((s) => s.nome).join(' + ');
-    const valor = Number(ag.sinalValor || 0).toFixed(2).replace('.', ',');
     const r = await enviarParaDispositivos(negocioRef, {
-      titulo: '💰 Sinal informado',
-      corpo: `${nome} informou o Pix de R$ ${valor} — ${dataHora(ag.dataChave, ag.horario)} — ${servicos}. Confira e confirme no painel.`,
+      titulo: '💰 Pagamento informado',
+      corpo: linhasAgendamento(ag, { sinal: ag.sinalValor, rodape: 'Confira o Pix e confirme no painel.' }),
       tag: `sinal-${agendamentoId}`, profissionalId: ag.profissionalId,
       dados: { agendamentoId, tipo: 'sinal' },
       link: `${process.env.APP_URL || 'https://77-agendapro.vercel.app'}/admin?agendamento=${encodeURIComponent(agendamentoId)}`
@@ -165,6 +176,7 @@ async function notificarNovoAgendamento(negocioRef, agendamentoRef, agendamento)
     // Uma identificação por agendamento: mesma tag substitui a anterior (nunca duplica),
     // e agendamentos diferentes continuam empilhando.
     const r = await enviarParaDispositivos(negocioRef, {
+      titulo: '📅 Novo agendamento',
       corpo: montarCorpo(agendamento),
       tag: `agendamento-${agendamentoRef.id}`, profissionalId: agendamento.profissionalId,
       dados: { agendamentoId: agendamentoRef.id },
@@ -179,4 +191,4 @@ async function notificarNovoAgendamento(negocioRef, agendamentoRef, agendamento)
   }
 }
 
-module.exports = { notificarNovoAgendamento, notificarAlteracaoCliente, notificarSinalInformado, enviarParaDispositivos, montarCorpo };
+module.exports = { quandoExtenso, linhasAgendamento, notificarNovoAgendamento, notificarAlteracaoCliente, notificarSinalInformado, enviarParaDispositivos, montarCorpo };

@@ -230,7 +230,7 @@ test('avisar-cliente: sinal confirmado e remarcação pelo dono', async () => {
   amb.fake.seed(caminhoAg(id), { ...base, remarcadoPor: 'dono', remarcadoEm: new Date().toISOString(), remarcadoDeDataChave: dataEmDias(1), remarcadoDeHorario: '10:00', dataChave: dataEmDias(2), horario: '11:00' });
   r = await chamar(recorrencia, acaoDono({ action: 'avisar-cliente', agendamentoId: id, tipo: 'remarcado' }));
   assert.equal(r.body.enviado, true);
-  assert.match(amb.notificacoes[0].notification.body, /→/);
+  assert.match(amb.notificacoes[0].notification.body, /\nDe: .*\nPara: /);
 });
 
 // ---------------------------------------------------------------- telas

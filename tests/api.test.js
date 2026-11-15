@@ -144,7 +144,9 @@ test('criar-agendamento: notifica o dono, remove token morto e nunca vaza erro i
   const r = await chamar(criarAgendamento, req('POST', { body: corpoAgendamento() }));
   assert.equal(r.statusCode, 201);
   assert.equal(amb.notificacoes.length, 1);
-  assert.match(amb.notificacoes[0].notification.body, /Maria — .* às 10:00 — Corte \+ Barba com João/);
+  assert.equal(amb.notificacoes[0].notification.title, '📅 Novo agendamento');
+  // uma informação por linha, com rótulo: cliente, serviço, data, profissional, valor
+  assert.match(amb.notificacoes[0].notification.body, /^Cliente: Maria Souza\nServiço: Corte \+ Barba\nData: [a-zçé]+, \d\d\/\d\d às 10:00\nProfissional: João Silva\nValor: R\$ 75,00$/);
   // identificação única por agendamento (evita notificação duplicada) e link que abre o painel
   assert.equal(amb.notificacoes[0].data.agendamentoId, r.body.id);
   assert.equal(amb.notificacoes[0].webpush.notification.tag, `agendamento-${r.body.id}`);

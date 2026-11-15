@@ -42,7 +42,7 @@ test('cliente remarca: o dono recebe o aviso com o horário de antes e o de depo
   assert.equal(amb.notificacoes.length, 2, 'um aviso por aparelho');
   const n = amb.notificacoes[0];
   assert.equal(n.notification.title, '🔁 Cliente remarcou');
-  assert.match(n.notification.body, /^Maria remarcou: .* às 10:00 → .* às 09:00 — Corte com João$/);
+  assert.match(n.notification.body, /^Cliente: Maria Souza\nServiço: Corte\nDe: [a-zçé]+, \d\d\/\d\d às 10:00\nPara: [a-zçé]+, \d\d\/\d\d às 09:00\nProfissional: João Silva\nValor: R\$ 40,00$/);
   assert.match(n.webpush.fcmOptions.link, new RegExp(`/admin\\?agendamento=${id}$`));
   assert.match(n.data.tag, new RegExp(`^remarcou-${id}-`));
 });
@@ -54,7 +54,7 @@ test('cliente cancela: o dono recebe o aviso de cancelamento', async () => {
   assert.equal(r.statusCode, 200);
   assert.equal(amb.notificacoes.length, 2);
   assert.equal(amb.notificacoes[0].notification.title, '❌ Cliente cancelou');
-  assert.match(amb.notificacoes[0].notification.body, /^Maria cancelou: .* às 10:00 — Corte com João$/);
+  assert.match(amb.notificacoes[0].notification.body, /^Cliente: Maria Souza\nServiço: Corte\nData: [a-zçé]+, \d\d\/\d\d às 10:00\nProfissional: João Silva\nValor: R\$ 40,00\nO horário foi liberado\.$/);
   assert.equal(amb.notificacoes[0].data.tag, `cancelou-${id}`);
 });
 

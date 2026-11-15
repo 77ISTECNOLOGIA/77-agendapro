@@ -14,6 +14,7 @@ const { db, messaging, FieldValue } = require('./firebase');
 const { agoraBrasil, somarDias, horaParaMinutos } = require('./tempo');
 const { statusEfetivo } = require('./sinal');
 const { situacaoNegocio } = require('./negocio');
+const { quandoExtenso } = require('./notificar');
 
 const URL_BASE = process.env.APP_URL || 'https://77-agendapro.vercel.app';
 const ICONE_77 = `${URL_BASE}/img/icon-192.png`;
@@ -79,21 +80,21 @@ async function enviarParaCliente(negocioRef, whatsapp, { titulo, corpo, tag, lin
 
 /** Aviso ao cliente por mudança feita pelo estabelecimento. tipo: cancelado | remarcado | sinal-confirmado | sinal-recusado. */
 async function avisarClienteAlteracao(negocioRef, agendamentoId, ag, tipo, nomeNegocio) {
-  const nome = nomeNegocio || 'o estabelecimento';
-  const quandoNovo = quando(ag.dataChave, ag.horario);
+  const nome = nomeNegocio || 'O estabelecimento';
+  const quandoNovo = quandoExtenso(ag.dataChave, ag.horario);
   let titulo, corpo;
   if (tipo === 'remarcado') {
     titulo = '🔁 Horário remarcado';
-    corpo = ag.remarcadoDeDataChave ? `${nome} remarcou: ${quando(ag.remarcadoDeDataChave, ag.remarcadoDeHorario)} → ${quandoNovo}.` : `${nome} remarcou seu horário para ${quandoNovo}.`;
+    corpo = ag.remarcadoDeDataChave ? `${nome}\nDe: ${quandoExtenso(ag.remarcadoDeDataChave, ag.remarcadoDeHorario)}\nPara: ${quandoNovo}` : `${nome}\nNovo horário: ${quandoNovo}`;
   } else if (tipo === 'cancelado') {
     titulo = '❌ Horário cancelado';
-    corpo = `${nome} cancelou seu horário de ${quandoNovo}. Toque para agendar outro.`;
+    corpo = `${nome}\nSeu horário de ${quandoNovo} foi cancelado.\nToque para agendar outro.`;
   } else if (tipo === 'sinal-confirmado') {
     titulo = '✅ Pagamento confirmado';
-    corpo = `${nome}: seu horário de ${quandoNovo} está confirmado.`;
+    corpo = `${nome}\nPagamento confirmado.\nHorário: ${quandoNovo}`;
   } else {
     titulo = '⚠️ Pagamento não confirmado';
-    corpo = `${nome} não confirmou o pagamento do sinal e o horário de ${quandoNovo} foi liberado.`;
+    corpo = `${nome}\nPagamento não confirmado.\nO horário de ${quandoNovo} foi liberado.`;
   }
   return enviarParaCliente(negocioRef, ag.clienteWhatsapp, { titulo, corpo, tag: `cli-${tipo}-${agendamentoId}-${ag.remarcadoEm || ag.canceladoEm || ag.sinalConfirmadoEm || ''}` });
 }
@@ -123,7 +124,7 @@ async function enviarLembretesVencidos(agora = agoraBrasil(), limite = 300) {
       if (!info || !situacaoNegocio(info).aceita || statusEfetivo(ag) !== 'confirmado' || jaComecou) { await limpar(); resumo.descartados++; continue; }
       const r = await enviarParaCliente(negocioRef, ag.clienteWhatsapp, {
         titulo: `⏰ Seu horário é ${ag.dataChave === agora.dataChave ? 'hoje' : 'amanhã'}${ag.horario ? ' às ' + ag.horario : ''}`,
-        corpo: `${info.nome || 'Seu horário'}${ag.profissionalNome ? ' — ' + String(ag.profissionalNome).split(' ')[0] : ''} — ${(ag.servicos || []).map((s) => s.nome).join(' + ')}. Até já!`,
+        corpo: [info.nome || 'Seu horário', 'Serviço: ' + ((ag.servicos || []).map((s) => s.nome).join(' + ') || '—'), ag.profissionalNome ? 'Profissional: ' + ag.profissionalNome : null].filter(Boolean).join('\n'),
         tag: `lembrete-${d.id}`
       });
       await limpar({ lembreteAppEnviadoEm: new Date().toISOString() });

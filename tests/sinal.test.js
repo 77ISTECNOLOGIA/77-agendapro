@@ -133,8 +133,8 @@ test('"Já paguei": vira sinal_informado, avisa o dono uma única vez e não exp
   assert.equal(r.statusCode, 200);
   assert.equal(amb.fake.get(path(a.body.id)).status, 'sinal_informado');
   assert.equal(amb.notificacoes.length, 1);
-  assert.equal(amb.notificacoes[0].notification.title, '💰 Sinal informado');
-  assert.match(amb.notificacoes[0].notification.body, /^Maria informou o Pix de R\$ 37,50 — .* às 10:00 — Corte \+ Barba\. Confira e confirme no painel\.$/);
+  assert.equal(amb.notificacoes[0].notification.title, '💰 Pagamento informado');
+  assert.match(amb.notificacoes[0].notification.body, /^Cliente: Maria Souza\nServiço: Corte \+ Barba\nData: [a-zçé]+, \d\d\/\d\d às 10:00\nProfissional: João Silva\nSinal: R\$ 37,50\nConfira o Pix e confirme no painel\.$/);
   assert.match(amb.notificacoes[0].webpush.fcmOptions.link, new RegExp(`/admin\\?agendamento=${a.body.id}$`));
 
   const denovo = await chamar(agendamentoCliente, acaoSinal('informar', a.body.id));
