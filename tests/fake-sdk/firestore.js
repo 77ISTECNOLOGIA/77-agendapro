@@ -21,7 +21,11 @@ export function doc(pai, ...seg) {
 }
 doc.__ = null;
 export function where(campo, op, valor) { return { campo, op, valor }; }
-export function query(col, ...filtros) { return { __tipo: 'query', path: col.path, filtros }; }
+export function orderBy(campo, dir = 'asc') { return { __ord: [campo, dir] }; }
+export function limit(n) { return { __lim: n }; }
+export function query(col, ...restr) {
+  return { __tipo: 'query', path: col.path, filtros: restr.filter((r) => r.campo), ord: (restr.find((r) => r.__ord) || {}).__ord, lim: (restr.find((r) => r.__lim) || {}).__lim };
+}
 
 async function fs(corpo) {
   const r = await fetch('/__fs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
@@ -31,7 +35,7 @@ async function fs(corpo) {
 }
 const snapDoc = (caminho, dado) => ({ id: caminho.split('/').pop(), ref: { path: caminho }, exists: () => dado !== null && dado !== undefined, data: () => (dado === null || dado === undefined ? undefined : JSON.parse(JSON.stringify(dado))) });
 const snapLista = (docs) => ({ docs, size: docs.length, empty: docs.length === 0, forEach: (f) => docs.forEach(f) });
-const listar = async (alvo) => snapLista((await fs({ op: 'list', path: alvo.path, filtros: alvo.filtros || [] })).docs.map((d) => snapDoc(d.path, d.data)));
+const listar = async (alvo) => snapLista((await fs({ op: 'list', path: alvo.path, filtros: alvo.filtros || [], ord: alvo.ord, lim: alvo.lim })).docs.map((d) => snapDoc(d.path, d.data)));
 
 export async function getDoc(ref) { return snapDoc(ref.path, (await fs({ op: 'get', path: ref.path })).data); }
 export async function getDocs(alvo) { return listar(alvo); }

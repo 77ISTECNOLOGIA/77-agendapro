@@ -1284,7 +1284,24 @@ function renderizarPagamentos() {
   return lista.length;
 }
 
+// Negócio novo ainda sem NENHUM profissional ativo: o link do cliente mostra "Nenhum profissional disponível". Avisa o dono logo
+// na abertura do painel (só quem administra tudo) e leva direto ao cadastro.
+function renderizarPrimeirosPassos() {
+  const box = $('#primeiros-passos');
+  if (!box) return;
+  const admin = state.papel.verTodos && state.papel.gerirNegocio;
+  const semProfissional = !Object.values(state.profissionais).some((p) => p.ativo !== false);
+  if (!admin || !semProfissional) { box.hidden = true; box.innerHTML = ''; return; }
+  box.hidden = false;
+  box.innerHTML = `
+    <div class="pendencias-titulo">👋 Falta um passo para receber agendamentos</div>
+    <div class="pendencias-sub">Seu link ainda não aceita agendamentos porque não há nenhum profissional cadastrado. Cadastre quem atende (pode ser você mesmo).</div>
+    <div class="pendencia-acoes" style="margin-top:10px;"><button type="button" id="btn-primeiro-prof" class="btn-acao">+ Cadastrar profissional</button></div>`;
+  $('#btn-primeiro-prof').onclick = () => modalProfissional();
+}
+
 function renderizarPendencias() {
+  renderizarPrimeirosPassos();
   const lista = atendimentosParaResolver(state.agendamentos, new Date(), MARGEM_PENDENCIA_MIN);
   const totalPagamentos = renderizarPagamentos();
   const totalSelo = lista.length + totalPagamentos;

@@ -23,7 +23,8 @@ semearNegocio(fake, 'barbearia-solo', { nome: 'Barbearia Solo' });   // um só p
 // ---- Painéis (admin/convite) com SDK de mentira (tests/fake-sdk): logins de teste, senha "senha123"
 //   dono1@teste.com  → dono (acesso total, conta antiga)           socio1@teste.com → só vê o profissional Carlos (prof2)
 //   gerente1@teste.com → gerencia o negócio e vê só o profissional João (prof1)
-const CONTAS = { 'dono1@teste.com': 'dono1', 'socio1@teste.com': 'socio1', 'gerente1@teste.com': 'gerente1' };
+const CONTAS = { 'dono1@teste.com': 'dono1', 'socio1@teste.com': 'socio1', 'gerente1@teste.com': 'gerente1', 'adm1@teste.com': 'adm1' };
+fake.seed('admins77/adm1', { role: 'super_admin', nome: 'Admin 77', email: 'adm1@teste.com' });   // adm1@teste.com → painel interno da 77 IS (/painel77)
 fake.seed('usuarios/dono1', { barbeariaId: 'barbearia-do-joao', role: 'owner', nome: 'Dono Teste', email: 'dono1@teste.com' });
 fake.seed('usuarios/socio1', { barbeariaId: 'barbearia-do-joao', role: 'profissional', profissionalId: 'prof2', nome: 'Carlos Lima', email: 'socio1@teste.com', permissoes: { verTodos: false, gerirNegocio: false } });
 fake.seed('usuarios/gerente1', { barbeariaId: 'barbearia-do-joao', role: 'profissional', profissionalId: 'prof1', nome: 'João Silva', email: 'gerente1@teste.com', permissoes: { verTodos: false, gerirNegocio: true } });
@@ -42,13 +43,16 @@ const json = (res, status, corpo) => { res.statusCode = status; res.setHeader('C
 
 async function bancoFalso(req, res, corpo) {
   try {
-    const { op, path: p, data, filtros } = corpo;
+    const { op, path: p, data, filtros, ord, lim } = corpo;
     if (op === 'get') return json(res, 200, { data: (await fake.doc(p).get()).data() ?? null });
     if (op === 'list') {
       let q = fake.collection(p);
       (filtros || []).forEach((f) => { q = q.where(f.campo, f.op, f.valor); });
       const snap = await q.get();
-      return json(res, 200, { docs: snap.docs.map((d) => ({ path: d.ref.path, data: d.data() })) });
+      let docs = snap.docs.map((d) => ({ path: d.ref.path, data: d.data() }));
+      if (ord) docs.sort((a, b) => ((a.data[ord[0]] > b.data[ord[0]]) - (a.data[ord[0]] < b.data[ord[0]])) * (ord[1] === 'desc' ? -1 : 1));
+      if (lim) docs = docs.slice(0, lim);
+      return json(res, 200, { docs });
     }
     if (op === 'set') { await fake.doc(p).set(data); return json(res, 200, {}); }
     if (op === 'update') { await fake.doc(p).update(data); return json(res, 200, {}); }

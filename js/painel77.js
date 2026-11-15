@@ -197,32 +197,37 @@ function ativarListeners() {
       state[key] = obj;
       atualizarBadges();
       renderizarView();
+      // Contagens só depois de os negócios chegarem (antes eram pedidas na hora, com a lista ainda vazia, e nunca apareciam)
+      if (key === 'negocios') {
+        const faltam = Object.keys(obj).filter((id) => !state.contagens[id]);
+        if (faltam.length) carregarContagens(faltam);
+      }
     });
     state.listeners.push(unsub);
   });
-  carregarContagens();
 }
 function desativarListeners() {
   state.listeners.forEach(unsub => unsub());
   state.listeners = [];
 }
 
-async function carregarContagens() {
-  const ids = Object.keys(state.negocios);
+async function carregarContagens(ids = Object.keys(state.negocios)) {
   await Promise.all(ids.map(async (id) => {
-    const agsRef = collection(db, 'barbearias', id, 'agendamentos');
-    const [agsCount, srvCount, profCount, ultimoSnap] = await Promise.all([
-      getCountFromServer(agsRef),
-      getCountFromServer(collection(db, 'barbearias', id, 'servicos')),
-      getCountFromServer(collection(db, 'barbearias', id, 'profissionais')),
-      getDocs(query(agsRef, orderBy('criadoEm', 'desc'), limit(1))).catch(() => null),
-    ]);
-    state.contagens[id] = {
-      totalAgs: agsCount.data().count,
-      totalServicos: srvCount.data().count,
-      totalProfs: profCount.data().count,
-      ultimoAg: (ultimoSnap && !ultimoSnap.empty) ? ultimoSnap.docs[0].data().criadoEm : null,
-    };
+    try {
+      const agsRef = collection(db, 'barbearias', id, 'agendamentos');
+      const [agsCount, srvCount, profCount, ultimoSnap] = await Promise.all([
+        getCountFromServer(agsRef),
+        getCountFromServer(collection(db, 'barbearias', id, 'servicos')),
+        getCountFromServer(collection(db, 'barbearias', id, 'profissionais')),
+        getDocs(query(agsRef, orderBy('criadoEm', 'desc'), limit(1))).catch(() => null),
+      ]);
+      state.contagens[id] = {
+        totalAgs: agsCount.data().count,
+        totalServicos: srvCount.data().count,
+        totalProfs: profCount.data().count,
+        ultimoAg: (ultimoSnap && !ultimoSnap.empty) ? ultimoSnap.docs[0].data().criadoEm : null,
+      };
+    } catch (err) { console.error('Contagens de ' + id + ':', err); }   // um negócio com problema não derruba os outros
   }));
   renderizarView();
 }
@@ -240,7 +245,7 @@ function atualizarBadges() {
 $$('.nav-item').forEach(item => {
   item.addEventListener('click', () => irPara(item.dataset.view));
 });
-$('#btn-atualizar').addEventListener('click', renderizarView);
+$('#btn-atualizar').addEventListener('click', () => { state.contagens = {}; carregarContagens(); });   // recarrega também as contagens (antes só redesenhava)
 $('#modal-close').addEventListener('click', fecharModal);
 $('#modal-overlay').addEventListener('click', e => { if(e.target.id==='modal-overlay') fecharModal(); });
 

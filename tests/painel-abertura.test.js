@@ -306,3 +306,16 @@ test('auditoria 2026-11-14: perfil herda o horário do estabelecimento, cartão 
   assert.match(admin, /tituloPerfil\.textContent = p\.verTodos \? 'Profissionais' : 'Meu perfil'/);
   assert.match(admin, /toast\(err\.code \? `Erro ao salvar profissional \(\$\{err\.code\}\)` : err\.message, 'erro'\)/);
 });
+
+test('negócio novo sem profissional: o painel mostra o aviso "primeiros passos" só para quem administra tudo', () => {
+  assert.match(admin, /function renderizarPrimeirosPassos\(\) \{[\s\S]*?state\.papel\.verTodos && state\.papel\.gerirNegocio[\s\S]*?p\.ativo !== false[\s\S]*?modalProfissional\(\)/);
+  assert.match(admin, /function renderizarPendencias\(\) \{\s*renderizarPrimeirosPassos\(\);/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', 'admin.html'), 'utf8'), /id="primeiros-passos"/);
+});
+
+test('painel 77: as contagens por negócio são pedidas DEPOIS de a lista de negócios chegar (antes saíam com a lista vazia e ficavam em 0)', () => {
+  const p77 = fs.readFileSync(path.join(__dirname, '..', 'js', 'painel77.js'), 'utf8');
+  assert.match(p77, /if \(key === 'negocios'\) \{\s*const faltam = Object\.keys\(obj\)\.filter\(\(id\) => !state\.contagens\[id\]\);\s*if \(faltam\.length\) carregarContagens\(faltam\);/);
+  assert.doesNotMatch(p77, /\}\);\s*carregarContagens\(\);\s*\}\s*function desativarListeners/);
+  assert.match(p77, /'#btn-atualizar'\)\.addEventListener\('click', \(\) => \{ state\.contagens = \{\}; carregarContagens\(\); \}\)/);
+});

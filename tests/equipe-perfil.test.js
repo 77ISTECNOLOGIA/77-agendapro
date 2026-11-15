@@ -233,3 +233,20 @@ test('trava contra se trancar para fora: tirar "Ver tudo" exige estar ligado a u
   // manter "Ver tudo" não exige profissional
   assert.equal((await chamar({ idToken: 'tok-socio2', action: 'alterar', uid: 'socio2', permissoes: SO_GERE })).statusCode, 200);
 });
+
+test('sinal-dados (reabrir o Pix depois): usa a chave de quem atende, não só a do negócio', async () => {
+  const agCliente = require('../api/agendamento-cliente');
+  amb.fake.seed(`barbearias/${SLUG}`, { ...amb.fake.get(`barbearias/${SLUG}`), sinal: SINAL_NEGOCIO });
+  amb.fake.seed(`barbearias/${SLUG}/profissionais/prof2`, { ...prof('prof2'), pix: PIX_PROF });
+  const W = '(21) 99999-1234';
+  const a = await agendar({ profissionalId: 'prof2' });
+  assert.equal(a.statusCode, 201);
+  const dados = async (id) => { const r = res(); await agCliente(req('POST', { body: { slug: SLUG, whatsapp: W, action: 'sinal-dados', agendamentoId: id } }), r); limparLimites(); return r; };
+  const r2 = await dados(a.body.id);
+  assert.equal(r2.statusCode, 200, JSON.stringify(r2.body));
+  assert.ok(r2.body.pixCopiaECola.includes('pedro@barbearia.com'));
+  assert.equal(r2.body.recebedor, 'Pedro Alves');
+  const b = await agendar({ profissionalId: 'prof1', horario: '14:00', whatsapp: '(21) 98888-7777' });
+  const r1 = await (async () => { const r = res(); await agCliente(req('POST', { body: { slug: SLUG, whatsapp: '(21) 98888-7777', action: 'sinal-dados', agendamentoId: b.body.id } }), r); limparLimites(); return r; })();
+  assert.ok(r1.body.pixCopiaECola.includes('dono@barbearia.com'), 'sem Pix próprio: o do negócio');
+});
