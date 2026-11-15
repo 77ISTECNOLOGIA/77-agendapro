@@ -727,6 +727,7 @@ function viewPermitida(view) {
   return true;
 }
 
+let cartaoPushOrigem = null;   // onde o cartão de notificações mora em Configurações (para devolvê-lo ao trocar de conta)
 function aplicarPermissoesNaTela() {
   const p = state.papel;
   $$('.nav-item').forEach((n) => { n.style.display = viewPermitida(n.dataset.view) ? '' : 'none'; });
@@ -737,9 +738,14 @@ function aplicarPermissoesNaTela() {
   // Notificações: todos recebem o que é do seu profissional. Quem não vê Configurações (onde fica o cartão) o encontra em Meu perfil.
   const cartaoPush = $('#card-notificacoes-push');
   const viewPerfil = $('#view-profissionais');
+  if (cartaoPush && !cartaoPushOrigem) cartaoPushOrigem = { pai: cartaoPush.parentNode, proximo: cartaoPush.nextSibling };
   if (cartaoPush && viewPerfil && !p.gerirNegocio) { cartaoPush.style.marginTop = '20px'; viewPerfil.appendChild(cartaoPush); }
+  else if (cartaoPush && cartaoPushOrigem && cartaoPush.parentNode !== cartaoPushOrigem.pai) cartaoPushOrigem.pai.insertBefore(cartaoPush, cartaoPushOrigem.proximo);   // troca de conta sem recarregar: volta para Configurações
   const rotulo = document.querySelector('.nav-item[data-view="profissionais"] .nav-label');
   if (rotulo) rotulo.textContent = p.verTodos ? 'Profissionais' : 'Meu perfil';
+  const tituloPerfil = document.querySelector('#view-profissionais .view-titulo'), subPerfil = document.querySelector('#view-profissionais .view-sub');
+  if (tituloPerfil) tituloPerfil.textContent = p.verTodos ? 'Profissionais' : 'Meu perfil';
+  if (subPerfil) subPerfil.textContent = p.verTodos ? 'Gerencie a equipe e horários de trabalho' : 'Seus dados, horário de trabalho, preços e Pix';
 }
 
 function irPara(view) {
@@ -2227,7 +2233,10 @@ function modalProfissional(id = null) {
     <p class="campo-help" style="margin:0 0 12px;">Intervalo próprio (opcional): se ficar desmarcado, vale o intervalo do estabelecimento (em Configurações).</p>
     <div class="horarios-conf">
       ${dias.map(dia => {
-        const h = p.horarioTrabalho?.[dia] || { ativo: false, inicio: '09:00', fim: '18:00' };
+        // Profissional SEM horário próprio usa o do estabelecimento: ao editar, mostra esse (e não "tudo desligado"),
+        // senão salvar qualquer coisa (preço, Pix) tiraria o profissional da agenda sem ninguém perceber.
+        const herdado = id && !p.horarioTrabalho ? (state.barbearia.horarioFuncionamento || {})[dia] : null;
+        const h = p.horarioTrabalho?.[dia] || herdado || { ativo: false, inicio: '09:00', fim: '18:00' };
         return `
           <div class="horario-linha" data-dia="${dia}">
             <div class="horario-dia">${labelsDias[dia]}</div>
@@ -2279,7 +2288,7 @@ function modalProfissional(id = null) {
         fecharModal();
       } catch (err) {
         console.error('Erro ao salvar perfil:', err);
-        toast(`Erro ao salvar (${err.code || 'desconhecido'})`, 'erro');
+        toast(err.code ? `Erro ao salvar (${err.code})` : err.message, 'erro');   // erro da API (ex.: chave Pix inválida) já vem em português
       }
       return;
     }
@@ -2314,7 +2323,7 @@ function modalProfissional(id = null) {
       fecharModal();
     } catch (err) {
       console.error('Erro ao salvar profissional:', err);
-      toast(`Erro ao salvar profissional (${err.code || 'desconhecido'})`, 'erro');
+      toast(err.code ? `Erro ao salvar profissional (${err.code})` : err.message, 'erro');   // erro da API (ex.: chave Pix inválida) já vem em português
     }
   });
 }

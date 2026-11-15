@@ -299,3 +299,10 @@ test('entrar e sair várias vezes não liga os botões de novo, e cada abertura 
   assert.match(admin, /anotarAbertura\(\{ ok: true/);
   assert.match(admin, /anotarAbertura\(\{ ok: false/);
 });
+
+test('auditoria 2026-11-14: perfil herda o horário do estabelecimento, cartão de push volta ao trocar de conta, título "Meu perfil"', () => {
+  assert.match(admin, /const herdado = id && !p\.horarioTrabalho \? \(state\.barbearia\.horarioFuncionamento \|\| \{\}\)\[dia\] : null;/);
+  assert.match(admin, /cartaoPushOrigem\.pai\.insertBefore\(cartaoPush, cartaoPushOrigem\.proximo\)/);
+  assert.match(admin, /tituloPerfil\.textContent = p\.verTodos \? 'Profissionais' : 'Meu perfil'/);
+  assert.match(admin, /toast\(err\.code \? `Erro ao salvar profissional \(\$\{err\.code\}\)` : err\.message, 'erro'\)/);
+});
