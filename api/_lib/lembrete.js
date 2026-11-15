@@ -122,7 +122,7 @@ async function enviarLembretesVencidos(agora = agoraBrasil(), limite = 300) {
       const jaComecou = ag.dataChave < agora.dataChave || (ag.dataChave === agora.dataChave && inicioMin <= agora.minutos);
       if (!info || !situacaoNegocio(info).aceita || statusEfetivo(ag) !== 'confirmado' || jaComecou) { await limpar(); resumo.descartados++; continue; }
       const r = await enviarParaCliente(negocioRef, ag.clienteWhatsapp, {
-        titulo: `⏰ Seu horário é hoje${ag.horario ? ' às ' + ag.horario : ''}`,
+        titulo: `⏰ Seu horário é ${ag.dataChave === agora.dataChave ? 'hoje' : 'amanhã'}${ag.horario ? ' às ' + ag.horario : ''}`,
         corpo: `${info.nome || 'Seu horário'}${ag.profissionalNome ? ' — ' + String(ag.profissionalNome).split(' ')[0] : ''} — ${(ag.servicos || []).map((s) => s.nome).join(' + ')}. Até já!`,
         tag: `lembrete-${d.id}`
       });
