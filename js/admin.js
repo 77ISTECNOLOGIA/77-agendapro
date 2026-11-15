@@ -2990,6 +2990,7 @@ function preencherRegrasAgendamento() {
   $('#sinal-banco').value = sinal.banco || '';
   $('#limite-semana').value = state.barbearia.limiteAgendamentosSemana || 0;
   $('#lembrete-cliente-min').value = String(minutosLembrete(state.barbearia));
+  $('#nome-icone').value = state.barbearia.nomeIcone || '';
   // Chave Pix do negócio: só o administrador pleno altera (os demais gerentes usam o Pix próprio, em Meu perfil)
   const soAdmin = !(state.papel.verTodos && state.papel.gerirNegocio);
   ['#sinal-tipo-chave', '#sinal-chave', '#sinal-nome-recebedor', '#sinal-cidade-recebedor', '#sinal-banco'].forEach((s) => { $(s).disabled = soAdmin; });
@@ -3017,6 +3018,7 @@ async function salvarRegrasAgendamento() {
         idToken: await auth.currentUser.getIdToken(),
         limiteAgendamentosSemana: Number($('#limite-semana').value || 0),
         lembreteClienteMin: Number($('#lembrete-cliente-min').value),
+        nomeIcone: $('#nome-icone').value.trim(),
         sinal: {
           ativo: $('#sinal-ativo').checked,
           percentual: Number($('#sinal-percentual').value),

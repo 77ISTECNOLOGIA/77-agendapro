@@ -82,8 +82,14 @@ export function mostrarConvite(contexto = 'topo') {
 }
 
 // Chamar uma vez quando o negócio carregou: aponta o manifesto do negócio (nome e link próprios) e escuta o evento de instalação.
-export function iniciarInstalacao({ slug, nome }) {
+export function iniciarInstalacao({ slug, nome, nomeIcone }) {
   ctx = { slug, nome };
+  // iPhone ignora o manifesto e usa este título como nome do ícone na Tela de Início
+  if (nomeIcone) {
+    let meta = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+    if (!meta) { meta = document.createElement('meta'); meta.name = 'apple-mobile-web-app-title'; document.head.appendChild(meta); }
+    meta.content = nomeIcone;
+  }
   if (jaEstaInstalado()) return;
   const link = document.getElementById('manifest-link');
   if (link) link.href = '/api/negocio?slug=' + encodeURIComponent(slug) + '&manifest=1';

@@ -150,7 +150,7 @@ async function inicializar() {
     inicializarEventos();
     mostrarApp();
     carregarFotosServicos();                             // sem esperar: a tela já está de pé
-    iniciarInstalacao({ slug: state.slug, nome: state.barbearia.nome });
+    iniciarInstalacao({ slug: state.slug, nome: state.barbearia.nome, nomeIcone: state.barbearia.nomeIcone });
   } catch (err) {
     console.error('Erro ao inicializar:', err);
     mostrarErroBarbearia();

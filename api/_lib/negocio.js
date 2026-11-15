@@ -45,6 +45,30 @@ function situacaoNegocio(info, agoraMs = Date.now()) {
 
 // Só estes campos do documento do negócio vão para o visitante anônimo.
 // (A chave Pix só sai pelo servidor, para quem acabou de reservar: api/criar-agendamento.js e api/sinal.js.)
+// Nome que aparece embaixo do ícone na tela inicial do celular (cabe ~12 caracteres). O dono pode definir o dele (`nomeIcone`);
+// sem isso: o nome do negócio se couber; senão tira o prefixo genérico ("Barbearia do", "Salão da"...) e corta só em palavra inteira.
+const NOME_ICONE_MAX = 12;
+function nomeIconeDe(nome, personalizado) {
+  const limpo = (v) => String(v || '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();
+  const meu = limpo(personalizado).slice(0, NOME_ICONE_MAX).trim();
+  if (meu) return meu;
+  const inteiro = limpo(nome);
+  if (!inteiro) return 'Agendamento';
+  if (inteiro.length <= NOME_ICONE_MAX) return inteiro;
+  let resto = inteiro.replace(/^(barbearia|barber\s?shop|sal[aã]o|studio|est[uú]dio|espa[cç]o|cl[ií]nica)\s+/i, '');
+  while (/^(do|da|de|dos|das)\s+/i.test(resto)) resto = resto.replace(/^(do|da|de|dos|das)\s+/i, '');
+  if (!resto) resto = inteiro;
+  if (resto.length <= NOME_ICONE_MAX) return resto;
+  let acc = '';
+  for (const palavra of resto.split(' ')) {
+    const prox = acc ? acc + ' ' + palavra : palavra;
+    if (prox.length > NOME_ICONE_MAX) break;
+    acc = prox;
+  }
+  acc = acc.replace(/\s+(e|de|do|da|dos|das|\&)$/i, '');      // não termina em "e", "de"...
+  return acc || resto.slice(0, NOME_ICONE_MAX);
+}
+
 function infoPublica(info) {
   const i = info || {};
   const cfg = configSinal(i);
@@ -52,6 +76,7 @@ function infoPublica(info) {
     sinal: { ativo: cfg.ativo, percentual: cfg.percentual, prazoHoras: cfg.prazoHoras },
     limiteAgendamentosSemana: limiteSemanal(i),
     nome: i.nome || '',
+    nomeIcone: nomeIconeDe(i.nome, i.nomeIcone),
     endereco: i.endereco || '',
     // cabeçalho curto do link do cliente: "Bairro, Cidade" (negócios antigos, sem endereço detalhado, mostram o texto que já tinham)
     // botão "Ver no mapa": link exato colado pelo dono (se houver) ou busca pelo CEP (ver consultaMapa)
@@ -138,6 +163,6 @@ function servicoPublicoLeve(id, s) {
 }
 
 module.exports = {
-  CARENCIA_TRIAL_DIAS, SLUGS_RESERVADOS, TIPOS_NEGOCIO,
+  NOME_ICONE_MAX, nomeIconeDe, CARENCIA_TRIAL_DIAS, SLUGS_RESERVADOS, TIPOS_NEGOCIO,
   slugValido, situacaoNegocio, infoPublica, profissionalPublico, servicoPublico, servicoPublicoLeve, profissionalRealizaServico, fotoServicoValida, precosProfissionalValidos, servicoParaProfissional
 };

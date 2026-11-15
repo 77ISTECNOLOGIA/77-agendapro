@@ -38,3 +38,19 @@ test('index.html tem o gancho do cartão e o manifesto do negócio (não o do pa
   assert.ok(html.includes('id="manifest-link"'));
   assert.equal(/rel="manifest"[^>]*href="\/manifest\.json"/.test(html), false);
 });
+
+test('nome no ícone: automático tira o prefixo genérico e corta em palavra inteira; o do dono vale', () => {
+  const { nomeIconeDe, infoPublica } = require('../api/_lib/negocio');
+  assert.equal(nomeIconeDe('Barbearia do Lipão'), 'Lipão');
+  assert.equal(nomeIconeDe('Salão da Maria Souza'), 'Maria Souza');
+  assert.equal(nomeIconeDe('Studio Beleza Pura'), 'Beleza Pura');
+  assert.equal(nomeIconeDe('Barbearia 77'), 'Barbearia 77');             // cabe: fica como está
+  assert.equal(nomeIconeDe('Espaço Corte e Estilo Premium'), 'Corte');
+  assert.equal(nomeIconeDe('Supercalifragilístico Barber'), 'Supercalifra');
+  assert.equal(nomeIconeDe('', ''), 'Agendamento');
+  assert.equal(nomeIconeDe('Barbearia do Lipão', '  Lipão   Cuts  '), 'Lipão Cuts');
+  assert.equal(nomeIconeDe('Barbearia do Lipão', 'Nome bem maior que doze'), 'Nome bem mai');
+  for (const n of ['Barbearia do Lipão', 'Clínica Odontológica Sorriso Feliz', 'X']) assert.ok(nomeIconeDe(n).length <= 12);
+  assert.equal(infoPublica({ nome: 'Barbearia do Lipão' }).nomeIcone, 'Lipão');
+  assert.equal(infoPublica({ nome: 'Barbearia do Lipão', nomeIcone: 'Lipão BB' }).nomeIcone, 'Lipão BB');
+});

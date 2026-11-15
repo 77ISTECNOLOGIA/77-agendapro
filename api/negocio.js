@@ -13,7 +13,7 @@
 const { db } = require('./_lib/firebase');
 const { hojeChaveBrasil } = require('./_lib/tempo');
 const {
-  slugValido, situacaoNegocio, infoPublica, profissionalPublico, servicoPublico, servicoPublicoLeve
+  nomeIconeDe, slugValido, situacaoNegocio, infoPublica, profissionalPublico, servicoPublico, servicoPublicoLeve
 } = require('./_lib/negocio');
 const { dentroDoLimite, responder, tratarErro } = require('./_lib/http');
 const { ocupaHorario } = require('./_lib/sinal');
@@ -24,12 +24,12 @@ const { configSinal } = require('./_lib/sinal');
 const TTL_NEGOCIO_MS = 20000, TTL_FOTOS_MS = 120000;   // vale também para "não existe" (tentar links inventados não relê o banco a cada tentativa)
 
 // Manifesto PWA do link do cliente. start_url = o link do próprio negócio.
-function manifestoDoNegocio(slug, nome) {
+function manifestoDoNegocio(slug, nome, nomeIcone) {
   const nomeLimpo = String(nome || 'Agendamento').slice(0, 45);
   return {
     id: '/' + slug,
     name: nomeLimpo,
-    short_name: nomeLimpo.slice(0, 12),
+    short_name: nomeIcone || nomeIconeDe(nome),
     start_url: '/' + slug,
     scope: '/',
     display: 'standalone',
@@ -124,7 +124,7 @@ module.exports = async function handler(req, res) {
       const r = await comCache('negocio:' + slug, TTL_NEGOCIO_MS, () => montarResposta(slug, false));
       if (r.status !== 200) return responder(res, r.status, r.corpo);
       res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=300');
-      return res.status(200).json(manifestoDoNegocio(slug, r.corpo.barbearia.nome));
+      return res.status(200).json(manifestoDoNegocio(slug, r.corpo.barbearia.nome, r.corpo.barbearia.nomeIcone));
     }
 
     // A chave do cache ignora qualquer parâmetro além de slug e ocupados (quem inventa parâmetros não fura o cache)

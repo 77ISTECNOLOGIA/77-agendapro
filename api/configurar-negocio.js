@@ -63,6 +63,12 @@ module.exports = async function handler(req, res) {
       mudancas.limiteAgendamentosSemana = limite;
       resposta.limiteAgendamentosSemana = limite;
     }
+    if (b.nomeIcone !== undefined) {
+      const nomeIcone = String(b.nomeIcone || '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (nomeIcone.length > 12) throw new ErroNegocio(400, 'O nome no ícone pode ter no máximo 12 caracteres.');
+      mudancas.nomeIcone = nomeIcone;          // vazio = volta ao automático
+      resposta.nomeIcone = nomeIcone;
+    }
     if (b.lembreteClienteMin !== undefined) {
       const min = Number(b.lembreteClienteMin);
       if (!require('./_lib/lembrete').OPCOES_MINUTOS.includes(min)) throw new ErroNegocio(400, 'Antecedência do lembrete inválida.');
