@@ -34,6 +34,7 @@ const { statusEfetivo, contarNaSemana, limiteSemanal, semanaDaChave, ocupaHorari
 const { dentroDoLimite, responder, ErroNegocio, tratarErro, corpoDe } = require('./_lib/http');
 const { minutosLembrete, calcularLembreteAppEm, idAparelho, MAX_APARELHOS_POR_WHATSAPP } = require('./_lib/lembrete');
 const { FieldValue } = require('./_lib/firebase');
+const clube = require('./_lib/clube');
 
 const LIMITE_REMARCACOES_CLIENTE = 1;
 const HISTORICO_DIAS = 60;
@@ -48,6 +49,7 @@ function publico(a) {
     horario: a.horario,
     duracaoMin: a.duracaoMin,
     valorTotal: a.valorTotal,
+    usaPlano: a.usaPlano === true,
     status: statusEfetivo(a),
     sinalValor: a.sinalValor || 0,
     sinalExpiraEm: a.sinalExpiraEm || null,
@@ -128,6 +130,9 @@ module.exports = async function handler(req, res) {
       return responder(res, 200, await executarSinal({ firestore, negocioRef, agendamentoId, whatsNorm, action }));
     }
 
+    // o que o cliente tem no clube de assinatura (plano, usos, vencimento)
+    if (action === 'assinatura') return responder(res, 200, await clube.resumoParaCliente(negocioRef, whatsNorm));
+
     if (action !== 'cancelar' && action !== 'remarcar') {
       return responder(res, 400, { erro: 'Ação inválida' });
     }
@@ -201,6 +206,14 @@ module.exports = async function handler(req, res) {
 
       const profSnap = await tx.get(negocioRef.collection('profissionais').doc(ag.profissionalId));
       const prof = profSnap.exists ? { id: profSnap.id, ...profSnap.data() } : null;
+
+      // horário coberto pelo plano: a nova data tem de continuar dentro do ciclo da assinatura
+      if (ag.assinaturaId) {
+        const ass = (await tx.get(negocioRef.collection('assinaturas').doc(ag.assinaturaId))).data();
+        if (!ass || ass.status !== 'ativa' || novaDataChave < ass.cicloInicio || novaDataChave > ass.venceEm) {
+          throw new ErroNegocio(409, 'Este horário usa o seu plano' + (ass ? ', que vale até ' + ass.venceEm.slice(8, 10) + '/' + ass.venceEm.slice(5, 7) : '') + '. Escolha uma data dentro desse prazo.');
+        }
+      }
 
       const v = verificarSlot({
         prof, info,

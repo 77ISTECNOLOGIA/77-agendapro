@@ -22,6 +22,7 @@ const state = {
   agendamentos: {},
 
   cliente: { whatsapp: null, nome: null, novo: true },
+  assinatura: null,                                  // plano do clube do cliente (se tiver)
   servicosSelecionados: [],
   profissionalId: null,
   dataSelecionada: null,
@@ -567,6 +568,7 @@ function handleContinuarIdentificacao() {
   state.cliente.whatsapp = normalizarWhatsapp(whatsappRaw);
   state.cliente.nome = nome;
 
+  carregarAssinatura();                          // sem esperar: se for assinante, a tela 2 se redesenha com "incluso no plano"
   renderizarTela2();
   mostrarTela(2);
 }
@@ -658,7 +660,7 @@ function renderizarServicos() {
         : (s.temFoto ? '<div class="servico-foto com-foto foto-carregando"></div>' : '')}
       <div class="servico-info">
         <div class="servico-nome">${escapeHtml(s.nome)}</div>
-        <div class="servico-detalhes">${s.duracaoMin} min • <span class="servico-preco">${formatarMoeda(s.preco)}</span></div>
+        <div class="servico-detalhes">${s.duracaoMin} min • ${planoTemSaldo() && (state.assinatura.servicosIds || []).includes(id) ? '<span class="servico-preco" style="color:#6ee7a0;">Incluso no plano</span>' : `<span class="servico-preco">${formatarMoeda(s.preco)}</span>`}</div>
       </div>
       <div class="check-circle">✓</div>
     `;
@@ -686,6 +688,52 @@ function toggleServico(id) {
   atualizarResumoTela2();
 }
 
+// ---- Clube de assinatura (cliente com plano ativo): o que o plano cobre e o que o cliente paga ----
+// O servidor decide (api/criar-agendamento.js reconfere tudo); aqui só espelhamos a regra para mostrar "incluso no plano" e o total.
+async function carregarAssinatura() {
+  state.assinatura = null;
+  if (!state.cliente.whatsapp) return;
+  try {
+    const resp = await fetch('/api/agendamento-cliente', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: state.slug, whatsapp: state.cliente.whatsapp, action: 'assinatura' })
+    });
+    if (resp.ok) { const dados = await resp.json(); state.assinatura = dados && dados.ativa ? dados : null; }
+  } catch (_) { state.assinatura = null; }
+  const ativa = (n) => { const el = $('#tela-' + n); return !!el && el.classList.contains('ativa'); };
+  if (ativa(2)) renderizarTela2();                         // redesenha com "incluso no plano"
+  if (ativa(6)) renderizarCartaoPlano();
+}
+
+function planoTemSaldo() {
+  const a = state.assinatura;
+  return !!a && a.ativa && (a.ilimitado || a.restantes > 0);
+}
+
+// O plano cobre estes serviços (e esta data, quando já escolhida)? Todos os serviços precisam estar no plano e haver saldo.
+function planoCobre(servicos, dataChave) {
+  const a = state.assinatura;
+  if (!planoTemSaldo() || !servicos.length) return false;
+  if (!servicos.every((s) => (a.servicosIds || []).includes(s.id))) return false;
+  if (dataChave && (dataChave < a.cicloInicio || dataChave > a.venceEm)) return false;
+  return true;
+}
+
+function totalDosServicos(servicos, dataChave) {
+  return planoCobre(servicos, dataChave) ? 0 : servicos.reduce((sum, s) => sum + s.preco, 0);
+}
+
+function renderizarCartaoPlano() {
+  const el = $('#card-plano');
+  if (!el) return;
+  const a = state.assinatura;
+  if (!a) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+  const [, m, d] = String(a.venceEm).split('-');
+  const uso = a.ilimitado ? 'Usos ilimitados neste ciclo' : 'Usou ' + a.usados + ' de ' + a.usosPorMes + (a.reservados ? ' · ' + a.reservados + ' agendado(s)' : '') + (a.restantes === 0 ? ' · sem usos disponíveis' : '');
+  el.innerHTML = '<span class="ca-sino" aria-hidden="true">🎟️</span><div class="ca-texto"><div class="ca-titulo">' + escapeHtml(a.planoNome) + '</div><div class="ca-sub">' + escapeHtml(uso) + '. Vale até ' + d + '/' + m + '.</div></div>';
+  el.classList.remove('hidden');
+}
+
 // Serviços escolhidos, com o preço e a duração de QUEM VAI ATENDER (cada profissional pode ter os seus).
 // O servidor refaz a conta ao agendar.
 function servicosEscolhidos(profissionalId = state.profissionalId) {
@@ -697,7 +745,7 @@ function servicosEscolhidos(profissionalId = state.profissionalId) {
 
 function atualizarResumoTela2() {
   const servicos = servicosEscolhidos();
-  const total = servicos.reduce((sum, s) => sum + s.preco, 0);
+  const total = totalDosServicos(servicos);
   const duracaoTotal = servicos.reduce((sum, s) => sum + s.duracaoMin, 0);
 
   if (servicos.length === 0) {
@@ -894,7 +942,8 @@ function validarBtnContinuar3() {
 // ========================================
 function renderizarResumoFinal() {
   const servicos = servicosEscolhidos();
-  const total = servicos.reduce((sum, s) => sum + s.preco, 0);
+  const cobertoPeloPlano = planoCobre(servicos, dataParaChave(state.dataSelecionada));
+  const total = totalDosServicos(servicos, dataParaChave(state.dataSelecionada));
   const duracao = servicos.reduce((sum, s) => sum + s.duracaoMin, 0);
   const prof = state.profissionais[state.profissionalId];
   const data = state.dataSelecionada;
@@ -911,7 +960,7 @@ function renderizarResumoFinal() {
     <div class="resumo-linha"><span class="label">Data</span><span class="valor">${dataStr}</span></div>
     <div class="resumo-linha"><span class="label">Horário</span><span class="valor">${state.horarioSelecionado} — ${horaFim}</span></div>
     <div class="resumo-linha"><span class="label">Serviços</span><span class="valor">${servicos.map(s => escapeHtml(s.nome)).join(' + ')}</span></div>
-    <div class="resumo-linha destaque"><span class="label">Total</span><span class="valor">${formatarMoeda(total)}</span></div>
+    <div class="resumo-linha destaque"><span class="label">Total</span><span class="valor">${cobertoPeloPlano ? `Incluso no plano ${escapeHtml(state.assinatura.planoNome)}` : formatarMoeda(total)}</span></div>
   `;
 
   // Sinal por Pix: avisa ANTES de confirmar quanto é e quanto tempo tem para pagar
@@ -961,7 +1010,7 @@ async function handleConfirmarAgendamento() {
         servicosIds: state.servicosSelecionados,
         dataChave: dataParaChave(state.dataSelecionada),
         horario: state.horarioSelecionado,
-        valorEsperado: servicosEscolhidos().reduce((soma, s) => soma + s.preco, 0)      // o total que o cliente está vendo
+        valorEsperado: totalDosServicos(servicosEscolhidos(), dataParaChave(state.dataSelecionada))      // o total que o cliente está vendo (0 se o plano cobre)
       })
     });
     const corpo = await resp.json().catch(() => ({}));
@@ -1027,6 +1076,7 @@ async function recarregarAgendamentos(profissionalId = '') {
 // ========================================
 // O sinal é POR PESSOA: vale o do profissional escolhido (o servidor manda { ativo, percentual, prazoHoras } de cada um).
 function sinalDoProfissional() {
+  if ((state.servicosSelecionados || []).length && state.dataSelecionada && planoCobre(servicosEscolhidos(), dataParaChave(state.dataSelecionada))) return null;   // atendimento do plano não tem sinal
   const p = state.profissionais && state.profissionais[state.profissionalId];
   if (p && p.sinal) return p.sinal;
   return state.barbearia && state.barbearia.sinal;
@@ -1096,7 +1146,7 @@ function renderizarTelaSinal() {
     <div class="resumo-linha"><span class="label">Profissional</span><span class="valor">${escapeHtml(ag.profissionalNome || '')}</span></div>
     <div class="resumo-linha"><span class="label">Quando</span><span class="valor">${escapeHtml(textoDataHora(ag.dataChave, ag.horario))}</span></div>
     <div class="resumo-linha"><span class="label">Serviços</span><span class="valor">${(ag.servicos || []).map(x => escapeHtml(x.nome)).join(' + ')}</span></div>
-    <div class="resumo-linha"><span class="label">Total do serviço</span><span class="valor">${formatarMoeda(ag.valorTotal)}</span></div>
+    <div class="resumo-linha"><span class="label">Total do serviço</span><span class="valor">${ag.usaPlano ? 'Incluso no plano' : formatarMoeda(ag.valorTotal)}</span></div>
   `;
 
   $('#sinal-valor').textContent = formatarMoeda(s.valor);
@@ -1200,7 +1250,7 @@ async function abrirPagamentoSinal(agendamentoId) {
 // ========================================
 function renderizarTelaSucesso(agendamentoId) {
   const servicos = servicosEscolhidos();
-  const total = servicos.reduce((sum, s) => sum + s.preco, 0);
+  const total = totalDosServicos(servicos, dataParaChave(state.dataSelecionada));
   const duracao = servicos.reduce((sum, s) => sum + s.duracaoMin, 0);
   const prof = state.profissionais[state.profissionalId];
   const data = state.dataSelecionada;
@@ -1295,6 +1345,7 @@ async function abrirMeusAgendamentos() {
   }
 
   state.cliente.whatsapp = normalizarWhatsapp(whatsappRaw);
+  carregarAssinatura();
   mostrarTela(6);
   mostrarPainelLista();
   await carregarMeusAgendamentos();
@@ -1344,7 +1395,7 @@ function renderizarMeusAgendamentos() {
           <span class="meu-ag-status meu-ag-status-${a.status}">${labelStatus[a.status] || a.status}</span>
         </div>
         <div class="meu-ag-info">${escapeHtml(a.profissionalNome)} • ${(a.servicos || []).map(s => escapeHtml(s.nome)).join(' + ')}</div>
-        <div class="meu-ag-valor">${formatarMoeda(a.valorTotal)}</div>
+        <div class="meu-ag-valor">${a.usaPlano ? 'Plano' : formatarMoeda(a.valorTotal)}</div>
         ${a.status === 'aguardando_sinal' ? `
           <div class="meu-ag-acoes">
             <button class="btn-outline btn-mini-full" data-acao="pagar" data-id="${a.id}" type="button">Pagar sinal (${formatarMoeda(a.sinalValor)})</button>

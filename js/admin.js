@@ -810,7 +810,7 @@ const ROTULO_PERFIL = { dono: 'Profissionais', socio: 'Minhas configurações', 
 
 function viewPermitida(view) {
   const papel = state.papel.papel;
-  if (view === 'configuracoes' || view === 'equipe') return souDono();
+  if (view === 'configuracoes' || view === 'equipe' || view === 'clube') return souDono();     // o clube de assinatura é do dono
   if (view === 'servicos') return souDono() || papel === 'socio';     // sócio vê o catálogo e cuida dos serviços que são só dele
   return true;
 }
@@ -866,6 +866,7 @@ function renderizarViewAtual() {
     case 'clientes': renderizarClientes(); break;
     case 'configuracoes': renderizarConfiguracoes(); renderizarCartaoEquipeConfig(); break;
     case 'equipe': renderizarEquipe(); break;
+    case 'clube': renderizarClube(); break;
   }
 }
 
@@ -2798,6 +2799,154 @@ async function acaoEquipe(acao, dados) {
 }
 
 
+// ========================================
+// VIEW: CLUBE (planos mensais e assinantes) — tudo pela API (api/_lib/clube.js); só o dono
+// ========================================
+let clubeCache = null;
+
+async function chamarClube(action, dados = {}) {
+  const resp = await fetch('/api/configurar-negocio', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ idToken: await auth.currentUser.getIdToken(), action, ...dados })
+  });
+  const corpo = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(corpo.erro || 'Não foi possível concluir. Tente de novo.');
+  return corpo;
+}
+
+const FORMAS_PAGAMENTO = [['pix', 'Pix'], ['dinheiro', 'Dinheiro'], ['cartao', 'Cartão'], ['outro', 'Outro']];
+const usosTexto = (usosPorMes) => usosPorMes > 0 ? usosPorMes + ' uso' + (usosPorMes === 1 ? '' : 's') + ' por mês' : 'usos ilimitados';
+
+async function renderizarClube() {
+  const el = $('#lista-clube');
+  if (!souDono()) { el.innerHTML = ''; return; }
+  try { clubeCache = await chamarClube('clube-listar'); }
+  catch (err) { el.innerHTML = '<div class="vazio-msg">' + escapeHtml(err.message) + '</div>'; return; }
+  const { planos, assinantes, kpis } = clubeCache;
+  $('#clube-kpis').innerHTML = `
+    <div class="kpi-card destaque"><div class="kpi-icon">🎟️</div><div class="kpi-info"><div class="kpi-label">Receita recorrente</div><div class="kpi-valor">${formatarMoeda(kpis.receitaRecorrente)}</div><div class="kpi-extra">por mês, dos assinantes ativos</div></div></div>
+    <div class="kpi-card"><div class="kpi-icon">👥</div><div class="kpi-info"><div class="kpi-label">Assinantes ativos</div><div class="kpi-valor">${kpis.assinantesAtivos}</div><div class="kpi-extra">${planos.filter((p) => p.ativo !== false).length} plano(s) ativo(s)</div></div></div>`;
+  if (!planos.length) {
+    el.innerHTML = '<div class="vazio-msg">Você ainda não criou nenhum plano. Toque em <strong>Planos</strong> para criar o primeiro (ex.: "Clube do Corte", 4 cortes por mês).</div>';
+    return;
+  }
+  if (!assinantes.length) {
+    el.innerHTML = '<div class="vazio-msg">Nenhum assinante ainda. Depois de receber o pagamento do cliente, toque em <strong>+ Novo assinante</strong>.</div>';
+    return;
+  }
+  const rotuloStatus = { ativa: ['Ativo', 'var(--success)'], vencida: ['Vencido', '#ffb86b'], cancelada: ['Cancelado', 'var(--text-muted)'] };
+  el.innerHTML = assinantes.map((a) => {
+    const [rot, cor] = rotuloStatus[a.status] || [a.status, 'var(--text-muted)'];
+    const total = a.usosPorMes > 0 ? a.usosPorMes : null;
+    const pct = total ? Math.min(100, Math.round(((a.usados + a.reservados) / total) * 100)) : 0;
+    const vence = a.status === 'cancelada' ? '' : (a.diasParaVencer < 0 ? 'venceu em ' + formatarDataCurta(a.venceEm) : a.diasParaVencer === 0 ? 'vence hoje' : 'vence em ' + formatarDataCurta(a.venceEm) + (a.diasParaVencer <= 5 ? ' (' + a.diasParaVencer + ' dia' + (a.diasParaVencer === 1 ? '' : 's') + ')' : ''));
+    return `
+    <div class="item-card" ${a.status === 'cancelada' ? 'style="opacity:.6;"' : ''}>
+      <div class="item-card-header">
+        ${avatarCartao('', a.clienteNome, "background:var(--accent);color:#fff;font-family:'Bricolage Grotesque';font-weight:700;")}
+        <div style="flex:1;min-width:0;">
+          <div class="item-card-titulo">${escapeHtml(a.clienteNome)} <span class="tag-inativo" style="background:transparent;color:${cor};border:1px solid ${cor};">${rot}</span></div>
+          <div class="item-card-sub">${escapeHtml(a.planoNome)} · ${formatarMoeda(a.preco)}/mês · ${escapeHtml(vence)}</div>
+        </div>
+      </div>
+      <div style="margin:8px 0 4px;font-size:12px;color:var(--text-dim);">${total ? 'Usou ' + a.usados + ' de ' + total + (a.reservados ? ' · ' + a.reservados + ' agendado(s)' : '') : 'Usou ' + a.usados + ' · ' + usosTexto(0)}</div>
+      ${total ? `<div style="height:6px;border-radius:4px;background:var(--surface-2);"><div style="height:6px;border-radius:4px;background:var(--accent);width:${pct}%;"></div></div>` : ''}
+      <div class="item-card-actions" style="margin-top:10px;">
+        ${a.podeRenovar || a.status === 'vencida' ? `<button class="btn-mini" data-clube="renovar" data-id="${escapeHtml(a.id)}">Registrar renovação</button>` : ''}
+        ${a.status !== 'cancelada' ? `<button class="btn-mini perigo" data-clube="cancelar" data-id="${escapeHtml(a.id)}">Cancelar assinatura</button>` : ''}
+        <a class="btn-mini" target="_blank" rel="noopener" href="https://wa.me/${encodeURIComponent(a.clienteWhatsapp)}">WhatsApp</a>
+      </div>
+    </div>`;
+  }).join('');
+  $$('#lista-clube [data-clube]').forEach((b) => b.addEventListener('click', () => acaoClube(b.dataset.clube, b.dataset.id)));
+}
+
+async function acaoClube(acao, id) {
+  const a = clubeCache.assinantes.find((x) => x.id === id);
+  try {
+    if (acao === 'cancelar') {
+      if (!confirm('Cancelar a assinatura de ' + a.clienteNome + '? Os horários já marcados com o plano continuam valendo; novos agendamentos voltam a ser cobrados normalmente.')) return;
+      await chamarClube('clube-cancelar', { id });
+      toast('Assinatura cancelada', 'sucesso');
+      renderizarClube();
+    } else if (acao === 'renovar') {
+      const corpo = `<p style="font-size:14px;line-height:1.5;margin-bottom:12px;">Registrar o pagamento de <strong>${escapeHtml(a.clienteNome)}</strong> (${formatarMoeda(a.preco)}). Um novo ciclo de 30 dias começa hoje e o saldo de usos recomeça${a.status === 'ativa' && a.diasParaVencer > 0 ? '. Os usos que sobraram deste ciclo se encerram' : ''}.</p>
+        <div class="input-grupo"><label class="input-label">COMO O CLIENTE PAGOU?</label><select id="clube-forma" class="input">${FORMAS_PAGAMENTO.map(([v, r]) => `<option value="${v}">${r}</option>`).join('')}</select></div>`;
+      abrirModal('Registrar renovação', corpo, '<button class="btn-acao-secundario" id="modal-cancel">Voltar</button><button class="btn-acao" id="clube-ok">Já recebi, renovar</button>');
+      $('#modal-cancel').addEventListener('click', fecharModal);
+      $('#clube-ok').addEventListener('click', async () => {
+        try { await chamarClube('clube-renovar', { id, forma: $('#clube-forma').value }); fecharModal(); toast('Renovado por mais 30 dias', 'sucesso'); renderizarClube(); }
+        catch (err) { toast(err.message, 'erro'); }
+      });
+    }
+  } catch (err) { toast(err.message, 'erro'); }
+}
+
+function modalNovoAssinante() {
+  const ativos = (clubeCache.planos || []).filter((p) => p.ativo !== false);
+  if (!ativos.length) { toast('Crie um plano primeiro (botão Planos).', 'erro'); return; }
+  const corpo = `
+    <div class="input-grupo"><label class="input-label">NOME DO CLIENTE</label><input type="text" id="ca-nome" class="input" placeholder="Nome completo"></div>
+    <div class="input-grupo"><label class="input-label">WHATSAPP (é por ele que o cliente é reconhecido no agendamento)</label><input type="tel" id="ca-whats" class="input" placeholder="(21) 98765-4321" autocomplete="off"></div>
+    <div class="input-grupo"><label class="input-label">PLANO</label><select id="ca-plano" class="input">${ativos.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.nome)} · ${formatarMoeda(p.preco)}/mês · ${escapeHtml(usosTexto(p.usosPorMes))}</option>`).join('')}</select></div>
+    <div class="input-grupo"><label class="input-label">COMO O CLIENTE PAGOU?</label><select id="ca-forma" class="input">${FORMAS_PAGAMENTO.map(([v, r]) => `<option value="${v}">${r}</option>`).join('')}</select></div>
+    <small class="campo-help">O pagamento vai direto para você; o sistema só registra. O plano vale por 30 dias a partir de hoje.</small>`;
+  abrirModal('Novo assinante', corpo, '<button class="btn-acao-secundario" id="modal-cancel">Cancelar</button><button class="btn-acao" id="ca-ok">Já recebi, ativar plano</button>');
+  $('#modal-cancel').addEventListener('click', fecharModal);
+  $('#ca-ok').addEventListener('click', async () => {
+    const botao = $('#ca-ok'); botao.disabled = true;
+    try {
+      await chamarClube('clube-assinar', { nome: $('#ca-nome').value.trim(), whatsapp: $('#ca-whats').value, planoId: $('#ca-plano').value, forma: $('#ca-forma').value });
+      fecharModal(); toast('Assinatura ativada', 'sucesso'); renderizarClube();
+    } catch (err) { toast(err.message, 'erro'); botao.disabled = false; }
+  });
+}
+
+function modalPlanos() {
+  const planos = clubeCache.planos || [];
+  const corpo = `
+    ${planos.length ? planos.map((p) => `
+      <div class="item-card" ${p.ativo === false ? 'style="opacity:.6;"' : ''}>
+        <div class="item-card-header"><div style="flex:1;min-width:0;"><div class="item-card-titulo">${escapeHtml(p.nome)} ${p.ativo === false ? '<span class="tag-inativo">Desativado</span>' : ''}</div>
+        <div class="item-card-sub">${formatarMoeda(p.preco)}/mês · ${escapeHtml(usosTexto(p.usosPorMes))} · ${p.servicosIds.map((id) => escapeHtml((state.servicos[id] || {}).nome || '?')).join(', ')}</div></div></div>
+        <div class="item-card-actions"><button class="btn-mini" data-plano="${escapeHtml(p.id)}">Editar</button></div>
+      </div>`).join('') : '<p style="color:var(--text-dim);font-size:14px;">Nenhum plano ainda.</p>'}
+    <div style="margin-top:14px;"><button class="btn-acao" id="plano-novo">+ Novo plano</button></div>`;
+  abrirModal('Planos do clube', corpo, '<button class="btn-acao-secundario" id="modal-cancel">Fechar</button>');
+  $('#modal-cancel').addEventListener('click', fecharModal);
+  $('#plano-novo').addEventListener('click', () => modalEditarPlano(null));
+  $$('#modal-body [data-plano]').forEach((b) => b.addEventListener('click', () => modalEditarPlano(planos.find((p) => p.id === b.dataset.plano))));
+}
+
+function modalEditarPlano(plano) {
+  const p = plano || { nome: '', preco: '', usosPorMes: 4, servicosIds: [], ativo: true };
+  const servicos = Object.entries(state.servicos).filter(([, s]) => s.ativo !== false).sort((a, b) => (a[1].ordem || 0) - (b[1].ordem || 0));
+  const corpo = `
+    <div class="input-grupo"><label class="input-label">NOME DO PLANO</label><input type="text" id="pl-nome" class="input" value="${escapeHtml(p.nome)}" placeholder="Ex.: Clube do Corte"></div>
+    <div class="form-grid">
+      <div class="input-grupo"><label class="input-label">PREÇO POR MÊS (R$)</label><input type="number" id="pl-preco" class="input" min="1" step="0.5" value="${p.preco}"></div>
+      <div class="input-grupo"><label class="input-label">USOS POR MÊS</label><input type="number" id="pl-usos" class="input" min="0" max="60" step="1" value="${p.usosPorMes}"><small class="campo-help">0 = ilimitado</small></div>
+    </div>
+    <div class="input-grupo"><label class="input-label">SERVIÇOS INCLUÍDOS</label>
+      <div class="nag-servicos-lista">${servicos.map(([sid, s]) => `<label class="nag-servico-item"><input type="checkbox" class="pl-serv" value="${escapeHtml(sid)}" ${p.servicosIds.includes(sid) ? 'checked' : ''}><span>${escapeHtml(s.nome)} · ${formatarMoeda(s.preco)}</span></label>`).join('')}</div>
+      <small class="campo-help">O agendamento só é coberto pelo plano se TODOS os serviços escolhidos estiverem aqui. Cada agendamento coberto gasta 1 uso, quando o atendimento é concluído.</small></div>
+    ${plano ? `<div class="input-grupo"><label style="display:flex;gap:10px;align-items:center;cursor:pointer;"><input type="checkbox" id="pl-ativo" ${p.ativo !== false ? 'checked' : ''}><span>Plano ativo (aceita novos assinantes)</span></label></div>` : ''}`;
+  abrirModal(plano ? 'Editar plano' : 'Novo plano', corpo, '<button class="btn-acao-secundario" id="modal-cancel">Voltar</button><button class="btn-acao" id="pl-salvar">Salvar plano</button>');
+  $('#modal-cancel').addEventListener('click', modalPlanos);
+  $('#pl-salvar').addEventListener('click', async () => {
+    try {
+      await chamarClube('clube-plano', { plano: {
+        id: plano ? plano.id : undefined, nome: $('#pl-nome').value, preco: Number($('#pl-preco').value), usosPorMes: Number($('#pl-usos').value || 0),
+        servicosIds: $$('#modal-body .pl-serv:checked').map((c) => c.value), ativo: plano ? $('#pl-ativo').checked : true
+      } });
+      toast('Plano salvo', 'sucesso');
+      clubeCache = await chamarClube('clube-listar');
+      renderizarClube();
+      modalPlanos();
+    } catch (err) { toast(err.message, 'erro'); }
+  });
+}
+
 // ---- Excluir definitivamente (Equipe e Profissionais): prévia dos agendamentos futuros, transferir ou cancelar, avisar os clientes
 function dataCurta(chave) { const [, m, d] = String(chave).split('-'); return d + '/' + m; }
 
@@ -3365,6 +3514,8 @@ function inicializarEventosViews() {
 
   // Equipe
   $('#btn-convidar').addEventListener('click', () => { if (equipeCache) modalConvidar(); });
+  $('#btn-clube-planos').addEventListener('click', () => { if (clubeCache) modalPlanos(); });
+  $('#btn-clube-assinante').addEventListener('click', () => { if (clubeCache) modalNovoAssinante(); });
 
   // Dashboard
   $('#btn-atualizar-dash').addEventListener('click', renderizarDashboard);

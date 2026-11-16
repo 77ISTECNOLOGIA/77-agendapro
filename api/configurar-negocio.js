@@ -34,16 +34,17 @@ function validarSinal(s) {
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return responder(res, 405, { erro: 'Método não permitido' });
-  if (!dentroDoLimite(req, 'configurar-negocio', 30, 3600000)) return responder(res, 429, { erro: 'Muitas requisições. Tente mais tarde.' });
-
   const b = corpoDe(req);
+  const ehClube = String(b.action || '').startsWith('clube-');          // o clube (planos e assinantes) é usado com mais frequência que as configurações
+  if (!dentroDoLimite(req, ehClube ? 'clube' : 'configurar-negocio', ehClube ? 240 : 30, 3600000)) return responder(res, 429, { erro: 'Muitas requisições. Tente mais tarde.' });
+
   if (!b.idToken) return responder(res, 401, { erro: 'Sessão inválida. Entre novamente.' });
 
   try {
     let decoded;
     try { decoded = await auth().verifyIdToken(String(b.idToken)); }
     catch (_) { throw new ErroNegocio(401, 'Sessão inválida. Entre novamente.'); }
-    if (!dentroDoLimitePorChave(`configurar-negocio:${decoded.uid}`, 20, 600000)) throw new ErroNegocio(429, 'Muitas alterações seguidas. Aguarde um pouco.');
+    if (!dentroDoLimitePorChave(`${ehClube ? 'clube' : 'configurar-negocio'}:${decoded.uid}`, ehClube ? 80 : 20, 600000)) throw new ErroNegocio(429, 'Muitas alterações seguidas. Aguarde um pouco.');
 
     const firestore = db();
     const vinculo = (await firestore.collection('usuarios').doc(decoded.uid).get()).data();
@@ -53,6 +54,12 @@ module.exports = async function handler(req, res) {
     const negocioSnap = await negocioRef.get();
     if (!negocioSnap.exists) throw new ErroNegocio(404, 'Negócio não encontrado');
     const permissoes = require('./_lib/equipe').permissoesDe(vinculo);
+
+    // Clube de assinatura: só o dono (vê tudo + gerencia). A lógica fica em api/_lib/clube.js
+    if (ehClube) {
+      if (!(permissoes.verTodos && permissoes.gerirNegocio)) throw new ErroNegocio(403, 'Só o dono gerencia o clube de assinatura.');
+      return responder(res, 200, await require('./_lib/clube').executarAcao({ negocioRef, firestore }, b));
+    }
 
     const mudancas = {};
     const resposta = { sucesso: true };

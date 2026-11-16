@@ -125,5 +125,5 @@ test('a atualização é disparada ao voltar para a aba, a cada 30 s, ao entrar 
   assert.ok(/visibilitychange[\s\S]{0,200}atualizarDadosNegocio/.test(app));
   assert.ok(/setInterval\([\s\S]{0,700}atualizarDadosNegocio\(\)[\s\S]{0,400}30000\)/.test(app));
   assert.ok(/numero === 2 && Date\.now\(\) - ultimaAtualizacaoNegocio > 5000\) atualizarDadosNegocio/.test(app));
-  assert.ok(/valorEsperado: servicosEscolhidos\(\)/.test(app) && /O valor mudou/.test(app) && /Profissional indispon/.test(app));
+  assert.ok(/valorEsperado: totalDosServicos\(servicosEscolhidos\(\)/.test(app) && /O valor mudou/.test(app) && /Profissional indispon/.test(app));
 });

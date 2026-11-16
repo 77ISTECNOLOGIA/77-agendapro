@@ -19,6 +19,7 @@ const {
 const { verificarSlot } = require('./_lib/disponibilidade');
 const { slugValido, situacaoNegocio, profissionalRealizaServico, servicoParaProfissional } = require('./_lib/negocio');
 const { minutosLembrete, calcularLembreteAppEm } = require('./_lib/lembrete');
+const clube = require('./_lib/clube');
 const { dentroDoLimite, responder, ErroNegocio, tratarErro, corpoDe } = require('./_lib/http');
 const { notificarNovoAgendamento } = require('./_lib/notificar');
 const { invalidar } = require('./_lib/cache');
@@ -95,8 +96,11 @@ module.exports = async function handler(req, res) {
       const efetivo = servicoParaProfissional(d, profissionalId);
       return { id: s.id, nome: d.nome, preco: efetivo.preco, duracaoMin: efetivo.duracaoMin };
     });
-    const valorTotal = servicos.reduce((soma, s) => soma + s.preco, 0);
+    const valorTabela = servicos.reduce((soma, s) => soma + s.preco, 0);
     const duracaoMin = servicos.reduce((soma, s) => soma + s.duracaoMin, 0);
+    // Clube de assinatura: plano ativo que inclui TODOS os serviços, com saldo e data dentro do ciclo = atendimento incluso (R$ 0)
+    const cobertura = await clube.avaliarCobertura({ negocioRef, whatsapp, servicosIds: servicos.map((s) => s.id), dataChave });
+    const valorTotal = cobertura.coberto ? 0 : valorTabela;
     // O cliente confirma olhando um total na tela. Se o dono mudou preço/serviço nesse meio tempo, NÃO agenda pelo valor novo
     // sem o cliente ver: devolve 409 e a tela mostra o total atualizado para ele confirmar de novo.
     const esperado = Number(b.valorEsperado);
@@ -133,7 +137,8 @@ module.exports = async function handler(req, res) {
       status: 'confirmado',
       criadoEm: agora,
       origem: 'cliente',
-      donoVe: donoVePara(prof)                     // false = agendamento de sócio (o dono não lê)
+      donoVe: donoVePara(prof),                    // false = agendamento de sócio (o dono não lê)
+      ...(cobertura.coberto ? { usaPlano: true, assinaturaId: cobertura.assinatura.id, planoNome: cobertura.assinatura.planoNome, valorTabela } : {})
     };
 
     const lembreteAppEm = calcularLembreteAppEm(dataChave, horario, minutosLembrete(info));   // aviso push ao cliente (se ele instalou o app)
@@ -142,8 +147,9 @@ module.exports = async function handler(req, res) {
     // Sinal por Pix: o horário fica reservado (aguardando_sinal) até o cliente pagar e avisar, ou o prazo vencer
     const cfgSinal = configSinal(info, prof, privSnap.exists ? privSnap.data() : null);   // sinal e Pix de quem atende
     const agoraMs = Date.now();
+    const comSinal = cfgSinal.ativo && !cobertura.coberto;        // atendimento do plano não tem sinal (valor R$ 0)
     let sinal = null;
-    if (cfgSinal.ativo) {
+    if (comSinal) {
       const valorSinal = calcularSinal(valorTotal, cfgSinal.percentual);
       agendamento.status = 'aguardando_sinal';
       agendamento.sinalValor = valorSinal;
@@ -166,8 +172,14 @@ module.exports = async function handler(req, res) {
       ]);
       const doClienteAgora = doClienteSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
+      // Plano: reconfere o saldo DENTRO da transação (dois pedidos ao mesmo tempo não gastam o mesmo último uso)
+      if (cobertura.coberto) {
+        const agsPlano = (await tx.get(agsRef.where('assinaturaId', '==', cobertura.assinatura.id))).docs.map((d) => ({ id: d.id, ...d.data() }));
+        if (!clube.temSaldo(clube.saldoDe(cobertura.assinatura, agsPlano))) throw new ErroNegocio(409, 'Seu plano não tem mais usos disponíveis neste ciclo. Tente de novo para pagar o valor normal.');
+      }
+
       // uma reserva aguardando sinal por vez (evita reservar vários horários sem pagar)
-      if (cfgSinal.ativo && doClienteAgora.some((a) => a.status === 'aguardando_sinal' && ocupaHorario(a, agoraMs))) {
+      if (comSinal && doClienteAgora.some((a) => a.status === 'aguardando_sinal' && ocupaHorario(a, agoraMs))) {
         throw new ErroNegocio(409, 'Você já tem uma reserva aguardando o pagamento do sinal. Pague (ou cancele) antes de fazer outra.');
       }
       // limite de agendamentos por semana (segunda a domingo), por cliente

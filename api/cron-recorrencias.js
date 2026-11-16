@@ -17,6 +17,7 @@ const { responder, tratarErro } = require('./_lib/http');
 const { enviarLembretesVencidos } = require('./_lib/lembrete');
 const { atualizarEstatisticas, avisarRetornos } = require('./_lib/retorno');
 const { enviarResumos } = require('./_lib/resumo-semanal');
+const { avisarVencimentos } = require('./_lib/clube');
 const { diaSemanaDaChave } = require('./_lib/tempo');
 
 module.exports = async function handler(req, res) {
@@ -62,6 +63,7 @@ module.exports = async function handler(req, res) {
     total.lembretes = await enviarLembretesVencidos(agora).catch((e) => { console.error('Falha nos lembretes ao cliente:', e); return null; });   // reforço do cron diário
     // Retorno inteligente (estatísticas das fichas + push aos clientes que passaram do tempo) e, às segundas, o resumo semanal
     total.retorno = await atualizarEstatisticas().then(async (est) => ({ ...est, ...(await avisarRetornos({ hojeChave })) })).catch((e) => { console.error('Falha no retorno inteligente:', e); return null; });
+    total.clube = await avisarVencimentos({ firestore, hojeChave }).catch((e) => { console.error('Falha no aviso de vencimento do clube:', e); return null; });
     if (diaSemanaDaChave(hojeChave) === 'segunda') total.resumo = await enviarResumos({ hojeChave }).catch((e) => { console.error('Falha no resumo semanal:', e); return null; });
     return responder(res, 200, { sucesso: true, ...total });
   } catch (err) {

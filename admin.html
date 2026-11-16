@@ -126,6 +126,10 @@
         <span class="nav-icon">👤</span>
         <span class="nav-label">Clientes</span>
       </button>
+      <button class="nav-item" data-view="clube">
+        <span class="nav-icon">🎟️</span>
+        <span class="nav-label">Clube</span>
+      </button>
       <button class="nav-item" data-view="equipe">
         <span class="nav-icon">🤝</span>
         <span class="nav-label">Equipe</span>
@@ -320,6 +324,24 @@
         </div>
         <div id="lista-equipe" class="tabela-cards">
           <div class="vazio-msg">Carregando equipe...</div>
+        </div>
+      </section>
+
+      <!-- ============ VIEW: CLUBE ============ -->
+      <section class="view" id="view-clube">
+        <div class="view-header">
+          <div>
+            <h1 class="view-titulo">Clube</h1>
+            <p class="view-sub">Planos mensais com controle de uso</p>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button id="btn-clube-planos" class="btn-acao-secundario">Planos</button>
+            <button id="btn-clube-assinante" class="btn-acao">+ Novo assinante</button>
+          </div>
+        </div>
+        <div class="kpis-grid" id="clube-kpis" style="margin-bottom:16px;"></div>
+        <div id="lista-clube" class="tabela-cards">
+          <div class="vazio-msg">Carregando o clube...</div>
         </div>
       </section>
 

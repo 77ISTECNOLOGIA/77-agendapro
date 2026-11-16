@@ -33,6 +33,7 @@ test('tela do cliente: funções do Pix (telefone, data, mensagem do WhatsApp, r
       valor: 37.5, agendamento: { dataChave: '2026-11-09', horario: '10:00', servicos: [{ nome: 'Corte' }, { nome: 'Barba' }] }
     }, cliente: { nome: 'Maria Souza' } },
     formatarMoeda: (v) => 'R$ ' + v.toFixed(2).replace('.', ','),
+    planoCobre: () => false, servicosEscolhidos: () => [], dataParaChave: () => '',      // sem plano de clube neste teste
     Date, String, encodeURIComponent
   });
   ['telefoneParaWhatsapp', 'textoDataHora', 'mensagemWhatsSinal', 'sinalDoProfissional', 'rotuloConfirmar'].forEach((f) => vm.runInContext(extrair(app, f), ctx));
