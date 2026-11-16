@@ -98,9 +98,36 @@ async function montarResposta(slug, querOcupados) {
   };
 }
 
+// Diretório do AgendaPro (tela inicial, sem o nome do estabelecimento): só quem escolheu aparecer (`diretorio: true`) e está aceitando
+// agendamentos. Devolve APENAS o que é público (nome, tipo, bairro, cidade, UF, link); a logo vai por ?logo=1. Guardado 2 min em
+// memória (e no CDN): uma leitura por estabelecimento a cada janela, não por visitante.
+const TTL_DIRETORIO_MS = 120000;
+async function listarDiretorio() {
+  const snap = await db().collection('barbearias').where('diretorio', '==', true).limit(500).get();
+  return snap.docs.map((d) => ({ id: d.id, info: d.data() }))
+    .filter(({ info }) => situacaoNegocio(info).aceita)
+    .map(({ id, info }) => {
+      const e = info.enderecoDetalhe || {};
+      return {
+        slug: id, nome: String(info.nome || ''), tipo: info.tipoNegocio || 'barbearia',
+        bairro: String(e.bairro || info.bairro || ''), cidade: String(e.cidade || info.cidade || ''), uf: String(e.uf || '').toUpperCase().slice(0, 2),
+        temLogo: fotoServicoValida(info.logo)
+      };
+    })
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+
 module.exports = async function handler(req, res) {
   if (req.method !== 'GET') return responder(res, 405, { erro: 'Método não permitido' });
   if (!dentroDoLimite(req, 'negocio', 90, 60000)) return responder(res, 429, { erro: 'Muitas requisições. Aguarde um instante.' });
+
+  if (String((req.query && req.query.buscar) || '') === '1') {
+    try {
+      const lugares = await comCache('diretorio', TTL_DIRETORIO_MS, listarDiretorio);
+      res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=120');
+      return res.status(200).json({ lugares });
+    } catch (err) { return tratarErro(res, err, 'negocio-buscar'); }
+  }
 
   const slug = String((req.query && req.query.slug) || '').toLowerCase();
   if (!slugValido(slug)) return responder(res, 400, { erro: 'Link inválido' });
@@ -120,6 +147,16 @@ module.exports = async function handler(req, res) {
       });
       res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=300');
       return res.status(200).json(pacote);
+    }
+
+    // Só a logo (cartões da tela inicial do AgendaPro): leve, sem fotos de serviços nem profissionais
+    if (String((req.query && req.query.logo) || '') === '1') {
+      const logo = await comCache('logo:' + slug, 300000, async () => {
+        const d = (await db().collection('barbearias').doc(slug).get()).data() || {};
+        return fotoServicoValida(d.logo) ? d.logo : null;
+      });
+      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=300');
+      return res.status(200).json({ logo });
     }
 
     // Manifesto do app instalável DESTE negócio (nome e link próprios): o cliente instala o negócio, não o painel do dono.

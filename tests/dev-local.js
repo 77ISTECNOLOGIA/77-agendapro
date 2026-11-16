@@ -15,11 +15,14 @@ const { fake } = montarAmbiente();
 const RAIZ = path.join(__dirname, '..');
 const PORTA = Number(process.env.PORT) || 3000;
 
-semearNegocio(fake, 'barbearia-do-joao', { nome: 'Barbearia do João' });
+semearNegocio(fake, 'barbearia-do-joao', { nome: 'Barbearia do João', diretorio: true, enderecoDetalhe: { bairro: 'Mangueira', cidade: 'Rio de Janeiro', uf: 'RJ' } });
 fake.seed('barbearias/barbearia-do-joao/profissionais/prof2', { nome: 'Carlos Lima', especialidade: 'Barbeiro', ativo: true, comissao: 35 });
 fake.seed('barbearias/barbearia-do-joao/servicos/srv3', { nome: 'Corte + Barba', duracaoMin: 60, preco: 65, emoji: '💈', ativo: true, ordem: 3 });
 fake.seed('barbearias/barbearia-do-joao/servicos/srv1', { ...fake.get('barbearias/barbearia-do-joao/servicos/srv1'), precosProfissional: { prof2: { preco: 55, duracaoMin: 45 } } });   // Carlos cobra mais e demora mais no Corte
-semearNegocio(fake, 'barbearia-solo', { nome: 'Barbearia Solo' });   // um só profissional: o link pula a escolha do profissional
+semearNegocio(fake, 'barbearia-solo', { nome: 'Barbearia Solo' });
+// tela inicial do AgendaPro (busca): estabelecimentos que escolheram aparecer
+semearNegocio(fake, 'salao-da-maria', { nome: 'Salão da Maria', tipoNegocio: 'salao', diretorio: true, enderecoDetalhe: { bairro: 'Tijuca', cidade: 'Rio de Janeiro', uf: 'RJ' } });
+semearNegocio(fake, 'studio-beleza-sp', { nome: 'Studio Beleza Pura', tipoNegocio: 'estetica', diretorio: true, enderecoDetalhe: { bairro: 'Pinheiros', cidade: 'São Paulo', uf: 'SP' } });   // um só profissional: o link pula a escolha do profissional
 // ---- Painéis (admin/convite) com SDK de mentira (tests/fake-sdk): logins de teste, senha "senha123"
 //   dono1@teste.com  → DONO (conta antiga, ainda não respondeu "tenho equipe?")
 //   socio1@teste.com → SÓCIO (atende como Carlos, prof2)       func1@teste.com → FUNCIONÁRIO (atende como João, prof1)

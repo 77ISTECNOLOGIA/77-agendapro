@@ -9,6 +9,7 @@ import { aplicarTema } from './vocabulario.js';
 import { toast } from './toast.js';
 import { iniciarInstalacao, mostrarConvite } from './instalar.js';
 import { mostrarCartaoAvisos } from './avisos-cliente.js';
+import { registrarLugar } from './lugares.js';
 import { escapeHtml, profissionalRealizaServico, fotoServicoValida, urlMapa, urlAppleMaps, ehAppleMobile, pausaDoDia, servicoParaProfissional } from './utils.js';
 
 // ========================================
@@ -123,8 +124,9 @@ async function inicializar() {
 
   state.slug = slugQuery || slugPath || null;
 
-  if (!state.slug) {
-    mostrarErroBarbearia();
+  if (!state.slug) {                                    // endereço sem o nome do estabelecimento: tela inicial do AgendaPro (busca e Meus lugares)
+    $('#loading').classList.add('hidden');
+    try { (await import('./home.js')).iniciarHome(); } catch (err) { console.error('Erro na tela inicial:', err); mostrarErroBarbearia(); }
     return;
   }
 
@@ -148,6 +150,7 @@ async function inicializar() {
       return;
     }
 
+    registrarLugar({ slug: state.slug, nome: state.barbearia.nome, tipo: state.barbearia.tipoNegocio });   // entra em "Meus lugares" deste aparelho
     renderizarHeader();
     inicializarEventos();
     mostrarApp();

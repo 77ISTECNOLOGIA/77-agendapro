@@ -76,7 +76,7 @@ module.exports = async function handler(req, res) {
       else if (require('./_lib/negocio').fotoServicoValida(b.logo) && b.logo.length <= 90000) { mudancas.logo = b.logo; resposta.logo = b.logo; }
       else throw new ErroNegocio(400, 'Logo inválido: use uma imagem JPEG pequena (o painel prepara isso sozinho).');
     }
-    for (const campo of ['retornoAutomatico', 'resumoSemanal']) {                  // liga/desliga (padrão: ligado)
+    for (const campo of ['retornoAutomatico', 'resumoSemanal', 'diretorio']) {                  // liga/desliga (padrão: ligado)
       if (b[campo] !== undefined) {
         if (typeof b[campo] !== 'boolean') throw new ErroNegocio(400, 'Valor inválido.');
         mudancas[campo] = b[campo]; resposta[campo] = b[campo];

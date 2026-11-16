@@ -21,6 +21,7 @@
   <link rel="modulepreload" href="js/utils.js">
   <link rel="modulepreload" href="js/toast.js">
   <link rel="modulepreload" href="js/instalar.js">
+  <link rel="modulepreload" href="js/lugares.js">
   <link rel="modulepreload" href="js/avisos-cliente.js">
   <link rel="modulepreload" href="js/vocabulario.js">
 
@@ -46,6 +47,36 @@
       <img class="loading-logo-img" src="/img/logo-77is.png" alt="77 IS" width="110" height="81">
       <div class="loading-text">Carregando...</div>
     </div>
+  </div>
+
+  <!-- ============ TELA INICIAL DO AGENDAPRO (endereço sem o nome do estabelecimento) ============ -->
+  <div id="home" class="hidden app-container">
+    <header class="app-header">
+      <div class="header-content">
+        <img class="header-logo" src="/img/logo-77is.png" alt="77 IS" width="46" height="34">
+        <div class="header-info">
+          <div class="barbearia-nome">AgendaPro</div>
+          <div class="barbearia-end">Encontre onde agendar</div>
+        </div>
+      </div>
+    </header>
+    <main class="home-corpo">
+      <input type="search" id="home-q" class="input" placeholder="Buscar por nome, bairro ou cidade" autocomplete="off" aria-label="Buscar estabelecimento">
+      <div class="home-filtros">
+        <select id="home-uf" class="input" aria-label="Estado"><option value="">Todos os estados</option></select>
+        <div id="home-tipos" class="home-chips"></div>
+      </div>
+      <section id="home-meus" class="hidden">
+        <h2 class="home-h">Meus lugares</h2>
+        <div id="home-meus-lista"></div>
+      </section>
+      <section>
+        <h2 class="home-h" id="home-titulo">Onde agendar</h2>
+        <div id="home-lista"></div>
+        <div id="home-vazio" class="horario-placeholder hidden"></div>
+      </section>
+      <p class="home-rodape">Sistema de agendamento criado por <strong>77 IS Tecnologia &amp; Inteligência</strong></p>
+    </main>
   </div>
 
   <!-- ============ ERRO: BARBEARIA NÃO ENCONTRADA ============ -->

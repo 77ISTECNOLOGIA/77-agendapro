@@ -3381,6 +3381,7 @@ function preencherRegrasAgendamento() {
   $('#lembrete-cliente-min').value = String(minutosLembrete(state.barbearia));
   $('#retorno-automatico').checked = state.barbearia.retornoAutomatico !== false;
   $('#resumo-semanal').checked = state.barbearia.resumoSemanal !== false;
+  $('#diretorio-ativo').checked = state.barbearia.diretorio === true;       // aparecer na busca do AgendaPro: só com o aval do dono
   $('#nome-icone').value = state.barbearia.nomeIcone || '';
   // Chave Pix do negócio: só o administrador pleno altera (os demais gerentes usam o Pix próprio, em Meu perfil)
   const soAdmin = !(state.papel.verTodos && state.papel.gerirNegocio);
@@ -3411,6 +3412,7 @@ async function salvarRegrasAgendamento() {
         lembreteClienteMin: Number($('#lembrete-cliente-min').value),
         retornoAutomatico: $('#retorno-automatico').checked,
         resumoSemanal: $('#resumo-semanal').checked,
+        diretorio: $('#diretorio-ativo').checked,
         nomeIcone: $('#nome-icone').value.trim(),
         sinal: {
           ativo: $('#sinal-ativo').checked,

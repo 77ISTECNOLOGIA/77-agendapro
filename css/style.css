@@ -919,3 +919,21 @@ input { font-family: inherit; }
 .prof-foto { overflow: hidden; }
 .prof-foto img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: inherit; }
 body.cliente-77 .header-logo.logo-negocio { width: 38px; height: 38px; object-fit: cover; border-radius: 10px; filter: none; background: #fff; }
+
+/* Tela inicial do AgendaPro (js/home.js) */
+.home-corpo { padding: 16px 16px 40px; max-width: 560px; margin: 0 auto; }
+.home-filtros { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+.home-filtros select.input { width: auto; flex: 0 0 auto; }
+.home-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.home-chip { border: 1px solid #33334a; background: transparent; color: #cfd0dc; border-radius: 20px; padding: 6px 12px; font-size: 12px; cursor: pointer; }
+.home-chip.ativo { background: #0077FF; border-color: #0077FF; color: #fff; }
+.home-h { font-size: 13px; font-weight: 700; letter-spacing: .02em; margin: 22px 0 8px; color: #fff; }
+.lugar-card { display: flex; align-items: center; gap: 12px; padding: 12px; margin-bottom: 8px; background: #14141c; border: 1px solid #262636; border-radius: 12px; color: #fff; text-decoration: none; }
+.lugar-logo { flex: 0 0 44px; width: 44px; height: 44px; border-radius: 10px; background: #1d2a44; color: #6db3ff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; overflow: hidden; }
+.lugar-logo img { width: 100%; height: 100%; object-fit: contain; background: #fff; }
+.lugar-info { flex: 1; min-width: 0; }
+.lugar-nome { font-weight: 700; font-size: 14px; }
+.lugar-sub { margin-top: 2px; font-size: 12px; color: #9a9ab0; }
+.lugar-seta { color: #6a6a80; font-size: 20px; }
+.lugar-x { border: 0; background: transparent; color: #8a8a98; font-size: 22px; line-height: 1; padding: 4px 8px; cursor: pointer; }
+.home-rodape { margin-top: 28px; text-align: center; font-size: 11px; color: #737373; }
